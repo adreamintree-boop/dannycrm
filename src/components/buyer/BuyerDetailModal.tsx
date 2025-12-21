@@ -84,7 +84,7 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] p-0 overflow-hidden bg-background relative">
+      <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] max-h-[90vh] p-0 flex flex-col bg-background relative overflow-hidden">
         <VisuallyHidden>
           <DialogTitle>Buyer Details - {buyer.name}</DialogTitle>
         </VisuallyHidden>
@@ -196,7 +196,7 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="flex-1 overflow-y-auto">
           {activeTab === 'activity' ? (
             <ActivityTab buyer={buyer} onOpenDrawer={handleOpenDrawer} />
           ) : (
