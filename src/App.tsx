@@ -7,8 +7,12 @@ import MainLayout from "./components/layout/MainLayout";
 import BuyerDetail from "./pages/BuyerDetail";
 import BLSearch from "./pages/BLSearch";
 import CompanyAggregation from "./pages/CompanyAggregation";
+import Auth from "./pages/Auth";
+import Onboarding from "./pages/Onboarding";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -18,19 +22,42 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppProvider>
-          <Routes>
-            <Route path="/*" element={<MainLayout />} />
-            <Route path="/buyers/:buyerId" element={<BuyerDetail />} />
-            <Route path="/bl-search" element={
-              <div className="min-h-screen flex flex-col bg-background">
-                <TopHeader />
-                <BLSearch />
-              </div>
-            } />
-            <Route path="/company-aggregation" element={<CompanyAggregation />} />
-          </Routes>
-        </AppProvider>
+        <AuthProvider>
+          <AppProvider>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/auth" element={<Auth />} />
+              
+              {/* Onboarding route */}
+              <Route path="/onboarding" element={<Onboarding />} />
+              
+              {/* Protected routes */}
+              <Route path="/*" element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              } />
+              <Route path="/buyers/:buyerId" element={
+                <ProtectedRoute>
+                  <BuyerDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/bl-search" element={
+                <ProtectedRoute>
+                  <div className="min-h-screen flex flex-col bg-background">
+                    <TopHeader />
+                    <BLSearch />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/company-aggregation" element={
+                <ProtectedRoute>
+                  <CompanyAggregation />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </AppProvider>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
