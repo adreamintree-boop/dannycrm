@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, MapPin, ExternalLink } from 'lucide-react';
+import { X, MapPin, ExternalLink, Paperclip, Calendar } from 'lucide-react';
 import { Buyer, Activity, ActivityType } from '@/data/mockData';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { useApp } from '@/context/AppContext';
 
 interface ActivityDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   buyer: Buyer;
   activities: Activity[];
-  mode: 'detail' | 'collection';
+  mode: 'detail' | 'collection' | 'create';
   selectedActivity: Activity | null;
   onSelectActivity: (activity: Activity) => void;
+  prefilledDate?: Date | null;
 }
 
 const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
@@ -23,13 +27,41 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   mode,
   selectedActivity,
   onSelectActivity,
+  prefilledDate,
 }) => {
+  const { addActivity, activeProjectId } = useApp();
+  
   const [filters, setFilters] = useState<Record<ActivityType, boolean>>({
     'pre-sales': true,
     'inquiry': true,
     'rfq': true,
     'quotation': true,
   });
+
+  // Create mode form state
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    date: '',
+    stage: 'pre-sales' as ActivityType,
+    content: '',
+    attachments: [] as File[],
+  });
+
+  // Reset form when drawer opens in create mode
+  useEffect(() => {
+    if (isOpen && mode === 'create') {
+      const dateStr = prefilledDate 
+        ? `${prefilledDate.getFullYear()}-${String(prefilledDate.getMonth() + 1).padStart(2, '0')}-${String(prefilledDate.getDate()).padStart(2, '0')}`
+        : new Date().toISOString().split('T')[0];
+      setCreateForm({
+        title: '',
+        date: dateStr,
+        stage: 'pre-sales',
+        content: '',
+        attachments: [],
+      });
+    }
+  }, [isOpen, mode, prefilledDate]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -67,6 +99,28 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
     'https://via.placeholder.com/150x120?text=Product+3',
   ];
 
+  const handleCreateSubmit = () => {
+    if (!createForm.title.trim()) return;
+
+    addActivity({
+      projectId: activeProjectId,
+      buyerId: buyer.id,
+      type: createForm.stage,
+      title: createForm.title,
+      note: createForm.content,
+      createdAt: createForm.date,
+      author: '관리자',
+    });
+
+    onClose();
+  };
+
+  const getDrawerTitle = () => {
+    if (mode === 'create') return '영업활동일지 등록';
+    if (mode === 'collection') return buyer.name;
+    return null;
+  };
+
   return (
     <>
       {/* Overlay - covers entire buyer detail screen */}
@@ -83,14 +137,16 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{ 
-          width: 'min(1400px, 80%)',
-          minWidth: '1100px',
+          width: mode === 'create' ? 'min(900px, 70%)' : 'min(1400px, 80%)',
+          minWidth: mode === 'create' ? '700px' : '1100px',
         }}
       >
         {/* Drawer Header */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {mode === 'detail' ? (
+            {mode === 'create' ? (
+              <span className="font-bold text-lg">{getDrawerTitle()}</span>
+            ) : mode === 'detail' ? (
               <>
                 <span className="text-sm text-slate-300">고객사</span>
                 <span className="font-medium">에이팜건강</span>
@@ -111,7 +167,14 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
 
         {/* Drawer Body */}
         <div className="h-[calc(100%-60px)] overflow-hidden">
-          {mode === 'detail' ? (
+          {mode === 'create' ? (
+            <CreateView
+              buyer={buyer}
+              form={createForm}
+              setForm={setCreateForm}
+              onSubmit={handleCreateSubmit}
+            />
+          ) : mode === 'detail' ? (
             <DetailView
               buyer={buyer}
               activities={sortedActivities}
@@ -138,6 +201,148 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
   );
 };
 
+// Create View Component
+interface CreateViewProps {
+  buyer: Buyer;
+  form: {
+    title: string;
+    date: string;
+    stage: ActivityType;
+    content: string;
+    attachments: File[];
+  };
+  setForm: React.Dispatch<React.SetStateAction<{
+    title: string;
+    date: string;
+    stage: ActivityType;
+    content: string;
+    attachments: File[];
+  }>>;
+  onSubmit: () => void;
+}
+
+const CreateView: React.FC<CreateViewProps> = ({ buyer, form, setForm, onSubmit }) => {
+  const stages: { key: ActivityType; label: string; desc: string }[] = [
+    { key: 'pre-sales', label: 'Pre-sales', desc: '사전 영업 활동' },
+    { key: 'inquiry', label: 'Inquiry', desc: '문의 접수' },
+    { key: 'rfq', label: 'RFQ', desc: '견적 요청' },
+    { key: 'quotation', label: 'Quotation', desc: '견적 제출' },
+  ];
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    return `${year}.${month}.${day}`;
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      <ScrollArea className="flex-1">
+        <div className="p-6">
+          {/* Two Column Layout */}
+          <div className="grid grid-cols-2 gap-8">
+            {/* Left Column */}
+            <div className="space-y-6">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium mb-2">활동제목</label>
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="활동 제목을 입력하세요"
+                  className="w-full"
+                />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium mb-2">활동일자</label>
+                <div className="relative">
+                  <Input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    className="w-full"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  선택된 날짜: {formatDate(form.date)}
+                </p>
+              </div>
+
+              {/* Stage Selection */}
+              <div>
+                <label className="block text-sm font-medium mb-2">활동단계</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {stages.map((stage) => (
+                    <button
+                      key={stage.key}
+                      onClick={() => setForm({ ...form, stage: stage.key })}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        form.stage === stage.key
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="font-medium text-sm">{stage.label}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{stage.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* File Upload */}
+              <div>
+                <label className="block text-sm font-medium mb-2">첨부파일</label>
+                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer">
+                  <Paperclip className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">파일을 드래그하거나 클릭하여 업로드</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {form.attachments.length}개 / 5개
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="flex flex-col h-full">
+              <label className="block text-sm font-medium mb-2">상세내용</label>
+              {/* Toolbar placeholder */}
+              <div className="flex items-center gap-1 p-2 border border-border rounded-t-lg bg-muted/30">
+                <button className="p-1.5 hover:bg-muted rounded text-sm font-bold">B</button>
+                <button className="p-1.5 hover:bg-muted rounded text-sm italic">I</button>
+                <button className="p-1.5 hover:bg-muted rounded text-sm underline">U</button>
+                <div className="w-px h-4 bg-border mx-1" />
+                <button className="p-1.5 hover:bg-muted rounded text-xs">목록</button>
+                <button className="p-1.5 hover:bg-muted rounded text-xs">링크</button>
+              </div>
+              <Textarea
+                value={form.content}
+                onChange={(e) => setForm({ ...form, content: e.target.value })}
+                placeholder="상세 내용을 입력하세요..."
+                className="flex-1 min-h-[300px] rounded-t-none border-t-0 resize-none"
+              />
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+
+      {/* Footer */}
+      <div className="border-t border-border p-4 flex justify-end">
+        <Button 
+          onClick={onSubmit}
+          className="bg-primary hover:bg-primary/90 px-8"
+          disabled={!form.title.trim()}
+        >
+          등록
+        </Button>
+      </div>
+    </div>
+  );
+};
 interface DetailViewProps {
   buyer: Buyer;
   activities: Activity[];
