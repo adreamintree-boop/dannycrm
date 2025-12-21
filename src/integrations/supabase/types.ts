@@ -291,6 +291,7 @@ export type Database = {
           from_email: string
           from_name: string | null
           id: string
+          is_logged_to_crm: boolean
           is_read: boolean
           is_starred: boolean
           mailbox: string
@@ -309,6 +310,7 @@ export type Database = {
           from_email: string
           from_name?: string | null
           id?: string
+          is_logged_to_crm?: boolean
           is_read?: boolean
           is_starred?: boolean
           mailbox?: string
@@ -327,6 +329,7 @@ export type Database = {
           from_email?: string
           from_name?: string | null
           id?: string
+          is_logged_to_crm?: boolean
           is_read?: boolean
           is_starred?: boolean
           mailbox?: string
@@ -444,6 +447,70 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      sales_activity_logs: {
+        Row: {
+          buyer_id: string | null
+          content: string | null
+          created_at: string
+          created_by: string
+          direction: string
+          email_message_id: string | null
+          id: string
+          occurred_at: string
+          project_id: string | null
+          source: string
+          title: string
+        }
+        Insert: {
+          buyer_id?: string | null
+          content?: string | null
+          created_at?: string
+          created_by: string
+          direction: string
+          email_message_id?: string | null
+          id?: string
+          occurred_at?: string
+          project_id?: string | null
+          source?: string
+          title: string
+        }
+        Update: {
+          buyer_id?: string | null
+          content?: string | null
+          created_at?: string
+          created_by?: string
+          direction?: string
+          email_message_id?: string | null
+          id?: string
+          occurred_at?: string
+          project_id?: string | null
+          source?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_activity_logs_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_buyers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_activity_logs_email_message_id_fkey"
+            columns: ["email_message_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_activity_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_credits: {
         Row: {
