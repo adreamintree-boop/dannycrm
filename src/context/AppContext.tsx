@@ -4,17 +4,22 @@ import {
   mockBuyers, 
   mockMoveHistory, 
   mockDocuments,
+  mockActivities,
   Project,
   Buyer,
   MoveHistoryItem,
   Document,
-  BuyerStatus
+  Activity,
+  BuyerStatus,
+  ActivityType,
+  BuyerContact
 } from '@/data/mockData';
 
 interface AppState {
   projects: Project[];
   activeProjectId: string;
   buyers: Buyer[];
+  activities: Activity[];
   moveHistory: MoveHistoryItem[];
   documents: Document[];
   activeTab: 'dashboard' | 'funnel' | 'history' | 'databoard';
@@ -27,9 +32,13 @@ interface AppContextType extends AppState {
   deleteProject: (id: string) => void;
   updateProject: (id: string, name: string) => void;
   addBuyer: (buyer: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => void;
+  updateBuyer: (buyerId: string, updates: Partial<Buyer>) => void;
   updateBuyerStatus: (buyerId: string, status: BuyerStatus) => void;
   toggleBookmark: (buyerId: string) => void;
   deleteBuyer: (buyerId: string) => void;
+  addActivity: (activity: Omit<Activity, 'id'>) => void;
+  deleteActivity: (activityId: string) => void;
+  getBuyerActivities: (buyerId: string) => Activity[];
   addDocument: (doc: Omit<Document, 'id' | 'createdAt'>) => void;
   deleteDocument: (docId: string) => void;
   getProjectBuyers: () => Buyer[];
@@ -43,6 +52,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [projects, setProjects] = useState<Project[]>(mockProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(mockProjects[0]?.id || '');
   const [buyers, setBuyers] = useState<Buyer[]>(mockBuyers);
+  const [activities, setActivities] = useState<Activity[]>(mockActivities);
   const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>(mockMoveHistory);
   const [documents, setDocuments] = useState<Document[]>(mockDocuments);
   const [activeTab, setActiveTab] = useState<AppState['activeTab']>('dashboard');
@@ -69,6 +79,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setProjects(projects.map(p => p.id === id ? { ...p, name } : p));
   };
 
+  const createEmptyContact = (id: string): BuyerContact => ({
+    id,
+    role: '',
+    name: '',
+    title: '',
+    phone: '',
+    mobile: '',
+    email: '',
+    twitterUrl: '',
+    facebookUrl: '',
+    linkedinUrl: '',
+    instagramUrl: '',
+  });
+
   const addBuyer = (buyerData: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => {
     const newBuyer: Buyer = {
       ...buyerData,
@@ -90,10 +114,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setMoveHistory([newHistoryItem, ...moveHistory]);
   };
 
+  const updateBuyer = (buyerId: string, updates: Partial<Buyer>) => {
+    setBuyers(buyers.map(b => b.id === buyerId ? { ...b, ...updates } : b));
+  };
+
   const updateBuyerStatus = (buyerId: string, status: BuyerStatus) => {
     const buyer = buyers.find(b => b.id === buyerId);
     if (buyer && buyer.status !== status) {
-      setBuyers(buyers.map(b => b.id === buyerId ? { ...b, status } : b));
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+      const statusDateField = `${status}Date` as keyof Buyer;
+      
+      setBuyers(buyers.map(b => b.id === buyerId ? { 
+        ...b, 
+        status,
+        [statusDateField]: today.slice(2) // Format: 25.12.21
+      } : b));
       
       const statusNames: Record<BuyerStatus, string> = {
         list: 'level1 List',
@@ -122,6 +157,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBuyers(buyers.filter(b => b.id !== buyerId));
   };
 
+  const addActivity = (activityData: Omit<Activity, 'id'>) => {
+    const newActivity: Activity = {
+      ...activityData,
+      id: String(Date.now()),
+    };
+    setActivities([newActivity, ...activities]);
+    
+    // Update buyer activity count
+    setBuyers(buyers.map(b => 
+      b.id === activityData.buyerId 
+        ? { ...b, activityCount: b.activityCount + 1 }
+        : b
+    ));
+
+    // Add to move history
+    const buyer = buyers.find(b => b.id === activityData.buyerId);
+    if (buyer) {
+      const newHistoryItem: MoveHistoryItem = {
+        id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
+        projectId: activityData.projectId,
+        category: 'activity',
+        description: `${buyer.name} 바이어 기업의 영업활동일지 등록 : ${activityData.title}`,
+        author: activityData.author,
+        date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
+      };
+      setMoveHistory([newHistoryItem, ...moveHistory]);
+    }
+  };
+
+  const deleteActivity = (activityId: string) => {
+    const activity = activities.find(a => a.id === activityId);
+    if (activity) {
+      setActivities(activities.filter(a => a.id !== activityId));
+      // Update buyer activity count
+      setBuyers(buyers.map(b => 
+        b.id === activity.buyerId 
+          ? { ...b, activityCount: Math.max(0, b.activityCount - 1) }
+          : b
+      ));
+    }
+  };
+
+  const getBuyerActivities = (buyerId: string) => 
+    activities.filter(a => a.buyerId === buyerId).sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
   const addDocument = (docData: Omit<Document, 'id' | 'createdAt'>) => {
     const newDoc: Document = {
       ...docData,
@@ -144,6 +226,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       projects,
       activeProjectId,
       buyers,
+      activities,
       moveHistory,
       documents,
       activeTab,
@@ -153,9 +236,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deleteProject,
       updateProject,
       addBuyer,
+      updateBuyer,
       updateBuyerStatus,
       toggleBookmark,
       deleteBuyer,
+      addActivity,
+      deleteActivity,
+      getBuyerActivities,
       addDocument,
       deleteDocument,
       getProjectBuyers,

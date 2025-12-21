@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useApp } from '@/context/AppContext';
-import { getFlagEmoji, countries, BuyerStatus } from '@/data/mockData';
+import { getFlagEmoji, countries, BuyerStatus, Buyer } from '@/data/mockData';
 import {
   Select,
   SelectContent,
@@ -12,10 +12,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import BuyerDetailModal from '@/components/buyer/BuyerDetailModal';
 
 const CustomerFunnel: React.FC = () => {
-  const { getProjectBuyers, addBuyer, updateBuyerStatus, toggleBookmark, deleteBuyer, activeProjectId } = useApp();
-  const buyers = getProjectBuyers();
+  const { getProjectBuyers, addBuyer, updateBuyerStatus, toggleBookmark, deleteBuyer, activeProjectId, buyers } = useApp();
+  const projectBuyers = getProjectBuyers();
+
+  const [activeFormTab, setActiveFormTab] = useState<'direct' | 'excel'>('direct');
+  const [showBookmarked, setShowBookmarked] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [activeFormTab, setActiveFormTab] = useState<'direct' | 'excel'>('direct');
   const [showBookmarked, setShowBookmarked] = useState(false);
@@ -37,12 +45,28 @@ const CustomerFunnel: React.FC = () => {
     { key: 'client', label: 'Client', level: 'level 4', color: 'bg-status-client' },
   ];
 
+  const createEmptyContact = (id: string) => ({
+    id,
+    role: '',
+    name: '',
+    title: '',
+    phone: '',
+    mobile: '',
+    email: '',
+    twitterUrl: '',
+    facebookUrl: '',
+    linkedinUrl: '',
+    instagramUrl: '',
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.company.trim() || !formData.country) return;
 
     const selectedCountry = countries.find(c => c.code === formData.country);
     if (!selectedCountry) return;
+
+    const today = new Date().toISOString().slice(2, 10).replace(/-/g, '.');
 
     addBuyer({
       projectId: activeProjectId,
@@ -54,6 +78,16 @@ const CustomerFunnel: React.FC = () => {
       websiteUrl: formData.websiteUrl,
       address: formData.address,
       region: selectedCountry.region,
+      phone: '',
+      email: '',
+      revenue: '',
+      revenueCurrency: 'USD',
+      mainProducts: '',
+      facebookUrl: '',
+      linkedinUrl: '',
+      youtubeUrl: '',
+      contacts: [createEmptyContact('1'), createEmptyContact('2'), createEmptyContact('3')],
+      listDate: today,
     });
 
     setFormData({ company: '', country: '', address: '', websiteUrl: '' });
