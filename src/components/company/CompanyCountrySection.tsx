@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Card } from '@/components/ui/card';
 import { BLRecord } from '@/data/blMockData';
 
 interface CompanyCountrySectionProps {
@@ -8,10 +7,37 @@ interface CompanyCountrySectionProps {
   type: 'origin' | 'destination';
 }
 
-const COLORS = [
+const COUNTRY_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
-  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+  '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#84cc16'
 ];
+
+// Simplified world map coordinates for countries
+const COUNTRY_POSITIONS: Record<string, { x: number; y: number }> = {
+  'China': { x: 75, y: 40 },
+  'USA': { x: 20, y: 35 },
+  'United States': { x: 20, y: 35 },
+  'Japan': { x: 85, y: 38 },
+  'Korea': { x: 80, y: 38 },
+  'South Korea': { x: 80, y: 38 },
+  'Germany': { x: 50, y: 32 },
+  'Vietnam': { x: 76, y: 52 },
+  'India': { x: 68, y: 48 },
+  'Thailand': { x: 74, y: 52 },
+  'Taiwan': { x: 80, y: 45 },
+  'Indonesia': { x: 78, y: 62 },
+  'Malaysia': { x: 75, y: 58 },
+  'Brazil': { x: 30, y: 65 },
+  'Mexico': { x: 18, y: 45 },
+  'Canada': { x: 22, y: 28 },
+  'UK': { x: 47, y: 30 },
+  'France': { x: 48, y: 34 },
+  'Italy': { x: 52, y: 36 },
+  'Netherlands': { x: 49, y: 31 },
+  'Australia': { x: 85, y: 72 },
+  'Singapore': { x: 76, y: 58 },
+  'Philippines': { x: 82, y: 52 },
+};
 
 const CompanyCountrySection: React.FC<CompanyCountrySectionProps> = ({ title, data, type }) => {
   const countryStats = useMemo(() => {
@@ -35,81 +61,105 @@ const CompanyCountrySection: React.FC<CompanyCountrySectionProps> = ({ title, da
   }, [data, type]);
 
   const totalCount = countryStats.reduce((sum, s) => sum + s.count, 0);
+  const maxCount = Math.max(...countryStats.map(s => s.count), 1);
 
   return (
-    <Card className="p-6 bg-card border border-border">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">{title}</h3>
-        <span className="text-xs text-muted-foreground">지도 보기</span>
-      </div>
+    <div className="bg-white rounded border border-gray-200 p-4">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3">{title}</h3>
 
-      {/* Simple map placeholder with country markers */}
-      <div className="relative h-[200px] bg-muted/20 rounded-lg mb-4 overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <svg viewBox="0 0 400 200" className="w-full h-full opacity-30">
-            {/* Simplified world map outline */}
+      <div className="flex gap-4">
+        {/* Simple Map Visualization */}
+        <div className="w-1/2 relative h-[200px] bg-gray-50 rounded overflow-hidden">
+          {/* World map outline (simplified) */}
+          <svg viewBox="0 0 100 80" className="w-full h-full">
+            {/* Continents simplified paths */}
             <path 
-              d="M50,100 Q100,50 200,60 Q300,70 350,100 Q300,130 200,140 Q100,150 50,100"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-              className="text-muted-foreground"
+              d="M10,25 Q15,20 25,22 Q35,18 40,25 L38,40 Q30,45 20,42 Q12,38 10,25 Z"
+              fill="#e5e7eb"
+              className="opacity-60"
             />
+            <path 
+              d="M25,45 Q30,42 35,50 Q38,62 32,70 Q25,72 20,65 Q18,55 25,45 Z"
+              fill="#e5e7eb"
+              className="opacity-60"
+            />
+            <path 
+              d="M42,25 Q50,20 58,25 Q55,40 48,38 Q42,35 42,25 Z"
+              fill="#e5e7eb"
+              className="opacity-60"
+            />
+            <path 
+              d="M60,30 Q75,25 90,35 Q88,55 80,60 Q70,62 65,50 Q60,40 60,30 Z"
+              fill="#e5e7eb"
+              className="opacity-60"
+            />
+            <path 
+              d="M78,65 Q88,60 95,70 Q90,78 82,76 Q76,72 78,65 Z"
+              fill="#e5e7eb"
+              className="opacity-60"
+            />
+            
+            {/* Country markers */}
+            {countryStats.slice(0, 5).map((stat, index) => {
+              const pos = COUNTRY_POSITIONS[stat.country] || { x: 50 + index * 8, y: 40 };
+              const size = Math.max(3, Math.min(8, (stat.count / maxCount) * 8));
+              
+              return (
+                <g key={stat.country}>
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={size}
+                    fill={COUNTRY_COLORS[index]}
+                    opacity={0.7}
+                    className="transition-all"
+                  />
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={size + 2}
+                    fill={COUNTRY_COLORS[index]}
+                    opacity={0.2}
+                  />
+                </g>
+              );
+            })}
           </svg>
         </div>
-        
-        {/* Country markers */}
-        {countryStats.slice(0, 5).map((stat, index) => {
-          // Random positions for demo
-          const positions = [
-            { x: 30, y: 40 },
-            { x: 60, y: 30 },
-            { x: 45, y: 60 },
-            { x: 75, y: 45 },
-            { x: 50, y: 50 }
-          ];
-          const pos = positions[index];
-          
-          return (
-            <div
-              key={stat.country}
-              className="absolute w-3 h-3 rounded-full bg-primary animate-pulse"
-              style={{ 
-                left: `${pos.x}%`, 
-                top: `${pos.y}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-              title={stat.country}
-            />
-          );
-        })}
-      </div>
 
-      {/* Country list */}
-      <div className="space-y-2 max-h-[200px] overflow-y-auto">
-        {countryStats.map((stat, index) => (
-          <div 
-            key={stat.country} 
-            className="flex items-center justify-between text-sm py-1"
-          >
-            <div className="flex items-center gap-2">
+        {/* Country List */}
+        <div className="w-1/2 space-y-1.5 max-h-[200px] overflow-y-auto scrollbar-thin">
+          {countryStats.map((stat, index) => {
+            const percentage = ((stat.count / totalCount) * 100).toFixed(1);
+            
+            return (
               <div 
-                className="w-2 h-2 rounded-full" 
-                style={{ backgroundColor: COLORS[index % COLORS.length] }}
-              />
-              <span className="text-foreground">{stat.country}</span>
-            </div>
-            <span className="text-muted-foreground font-medium">{stat.count}</span>
-          </div>
-        ))}
-        
-        {countryStats.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            데이터 없음
-          </p>
-        )}
+                key={stat.country} 
+                className="flex items-center justify-between text-xs py-1 hover:bg-gray-50 px-1 rounded"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div 
+                    className="w-2 h-2 rounded-full flex-shrink-0" 
+                    style={{ backgroundColor: COUNTRY_COLORS[index % COUNTRY_COLORS.length] }}
+                  />
+                  <span className="text-gray-700 truncate">{stat.country}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-gray-500">{percentage}%</span>
+                  <span className="font-medium text-gray-900 w-8 text-right">{stat.count}</span>
+                </div>
+              </div>
+            );
+          })}
+          
+          {countryStats.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-4">
+              데이터 없음
+            </p>
+          )}
+        </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

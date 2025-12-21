@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BLRecord } from '@/data/blMockData';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface CompanyPortsChartProps {
   data: BLRecord[];
@@ -10,18 +9,16 @@ interface CompanyPortsChartProps {
 
 const COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
-  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+  '#ec4899', '#06b6d4', '#f97316'
 ];
 
 const CompanyPortsChart: React.FC<CompanyPortsChartProps> = ({ data }) => {
   const [portType, setPortType] = useState<'loading' | 'discharge'>('loading');
 
-  // Since we don't have port data in the mock, we'll use destination country as proxy
   const portStats = useMemo(() => {
     const stats: Record<string, number> = {};
     
     data.forEach(record => {
-      // Use destination or origin country as port proxy
       const port = portType === 'loading' 
         ? (record.originCountry || 'UNKNOWN')
         : (record.destinationCountry || 'UNKNOWN');
@@ -35,91 +32,96 @@ const CompanyPortsChart: React.FC<CompanyPortsChartProps> = ({ data }) => {
     return Object.entries(stats)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+      .slice(0, 6);
   }, [data, portType]);
 
   const totalCount = portStats.reduce((sum, s) => sum + s.value, 0);
 
-  return (
-    <Card className="p-6 bg-card border border-border">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">
-          {portType === 'loading' ? '상위 로딩 포트' : '최고 배출 포트'}
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">정렬 기준</span>
-          <Select value={portType} onValueChange={(v) => setPortType(v as 'loading' | 'discharge')}>
-            <SelectTrigger className="w-[80px] h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="loading">로딩</SelectItem>
-              <SelectItem value="discharge">배출</SelectItem>
-            </SelectContent>
-          </Select>
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white border border-gray-200 rounded shadow-lg px-2 py-1 text-xs">
+          <span className="font-medium">{data.name}</span>: {data.value}건
         </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="bg-white rounded border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">
+          {portType === 'loading' ? '상위 선적항' : '상위 양하항'}
+        </h3>
+        <Select value={portType} onValueChange={(v) => setPortType(v as 'loading' | 'discharge')}>
+          <SelectTrigger className="w-[65px] h-6 text-[10px] border-gray-200">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="loading" className="text-xs">선적</SelectItem>
+            <SelectItem value="discharge" className="text-xs">양하</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex gap-3">
         {/* Donut Chart */}
-        <div className="w-1/2 h-[250px]">
+        <div className="w-[120px] h-[120px] flex-shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={portStats}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
+                innerRadius={30}
+                outerRadius={50}
                 paddingAngle={2}
                 dataKey="value"
-                label={({ name }) => name.length > 10 ? name.substring(0, 10) + '...' : name}
-                labelLine={true}
               >
                 {portStats.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip 
-                formatter={(value: number) => [value, '건수']}
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px'
-                }}
-              />
+              <Tooltip content={<CustomTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
         {/* Legend list */}
-        <div className="w-1/2 space-y-2 max-h-[250px] overflow-y-auto">
-          {portStats.map((stat, index) => (
-            <div 
-              key={stat.name} 
-              className="flex items-center justify-between text-sm py-1"
-            >
-              <div className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-sm" 
-                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                />
-                <span className="text-foreground truncate max-w-[120px]" title={stat.name}>
-                  {stat.name}
+        <div className="flex-1 space-y-1 overflow-y-auto max-h-[120px] scrollbar-thin">
+          {portStats.map((stat, index) => {
+            const percentage = ((stat.value / totalCount) * 100).toFixed(1);
+            return (
+              <div 
+                key={stat.name} 
+                className="flex items-center justify-between text-xs py-0.5"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div 
+                    className="w-2 h-2 rounded-sm flex-shrink-0" 
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  />
+                  <span className="text-gray-700 truncate text-[11px]">
+                    {stat.name}
+                  </span>
+                </div>
+                <span className="text-gray-500 flex-shrink-0 text-[11px]">
+                  {stat.value} ({percentage}%)
                 </span>
               </div>
-              <span className="text-muted-foreground font-medium">{stat.value}</span>
-            </div>
-          ))}
+            );
+          })}
           
           {portStats.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">
+            <p className="text-xs text-gray-400 text-center py-4">
               데이터 없음
             </p>
           )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
 
