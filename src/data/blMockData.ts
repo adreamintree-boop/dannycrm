@@ -353,7 +353,84 @@ export interface SearchFilter {
   value: string;
 }
 
-// Search function - isolated for easy replacement with API call later
+// Search category type (matches the UI tabs)
+export type SearchCategoryType = 'product' | 'hscode' | 'importer' | 'exporter' | 'bl';
+
+// Field-specific search function - matches keyword ONLY to the selected category field
+export function searchBLDataByCategory(
+  keyword: string, 
+  category: SearchCategoryType, 
+  additionalFilters: SearchFilter[] = []
+): BLRecord[] {
+  const searchValue = keyword.toLowerCase().trim();
+  
+  // If no keyword and no additional filters, return empty
+  if (!searchValue && additionalFilters.every(f => !f.value.trim())) {
+    return [];
+  }
+
+  return mockBLData.filter(record => {
+    // First, apply the main keyword search based on category
+    if (searchValue) {
+      let categoryMatch = false;
+      
+      switch (category) {
+        case 'product':
+          // Search ONLY in product description
+          categoryMatch = record.productName.toLowerCase().includes(searchValue);
+          break;
+        case 'hscode':
+          // Search ONLY in HS code (partial match allowed)
+          categoryMatch = record.hsCode.toLowerCase().includes(searchValue);
+          break;
+        case 'importer':
+          // Search ONLY in importer name
+          categoryMatch = record.importer.toLowerCase().includes(searchValue);
+          break;
+        case 'exporter':
+          // Search ONLY in exporter name
+          categoryMatch = record.exporter.toLowerCase().includes(searchValue);
+          break;
+        case 'bl':
+          // B/L category: search across all main fields (legacy behavior)
+          categoryMatch = 
+            record.productName.toLowerCase().includes(searchValue) ||
+            record.hsCode.toLowerCase().includes(searchValue) ||
+            record.importer.toLowerCase().includes(searchValue) ||
+            record.exporter.toLowerCase().includes(searchValue);
+          break;
+        default:
+          categoryMatch = true;
+      }
+      
+      // If the main keyword doesn't match the category field, exclude this record
+      if (!categoryMatch) {
+        return false;
+      }
+    }
+    
+    // Then, apply additional filters from the filter panel (AND logic)
+    return additionalFilters.every(filter => {
+      const filterValue = filter.value.toLowerCase().trim();
+      if (!filterValue) return true; // Empty filter is ignored
+
+      switch (filter.type) {
+        case 'productName':
+          return record.productName.toLowerCase().includes(filterValue);
+        case 'hsCode':
+          return record.hsCode.toLowerCase().includes(filterValue);
+        case 'importer':
+          return record.importer.toLowerCase().includes(filterValue);
+        case 'exporter':
+          return record.exporter.toLowerCase().includes(filterValue);
+        default:
+          return true;
+      }
+    });
+  });
+}
+
+// Legacy search function - kept for backward compatibility
 export function searchBLData(filters: SearchFilter[]): BLRecord[] {
   // If no filters, return empty (validation should prevent this)
   if (filters.length === 0 || filters.every(f => !f.value.trim())) {

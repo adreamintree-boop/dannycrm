@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { subMonths } from 'date-fns';
-import BLSearchStrip from '@/components/bl-search/BLSearchStrip';
+import BLSearchStrip, { SearchCategory } from '@/components/bl-search/BLSearchStrip';
 import BLRecentSearches from '@/components/bl-search/BLRecentSearches';
 import BLDataUpdates from '@/components/bl-search/BLDataUpdates';
 import BLResultsTable from '@/components/bl-search/BLResultsTable';
@@ -26,17 +26,25 @@ const BLSearch: React.FC = () => {
     sortOrder,
     toggleSortOrder,
     setMainKeyword,
-    setDateRange
+    setDateRange,
+    setSearchCategory
   } = useBLSearch();
 
   // Search strip state (independent from filter panel)
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 12));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [searchCategory, setSearchCategoryState] = useState<SearchCategory>('bl');
+
+  const handleSearchCategoryChange = (category: SearchCategory) => {
+    setSearchCategoryState(category);
+    setSearchCategory(category);
+  };
 
   const handleSearch = () => {
-    // Pass main keyword and date range to search hook - DO NOT modify filters
+    // Pass main keyword, category, and date range to search hook - DO NOT modify filters
     setMainKeyword(searchKeyword);
+    setSearchCategory(searchCategory);
     setDateRange(startDate, endDate);
     search();
   };
@@ -68,6 +76,8 @@ const BLSearch: React.FC = () => {
           onSearch={handleSearch}
           onImport={handleImport}
           isLoading={isLoading}
+          searchCategory={searchCategory}
+          onSearchCategoryChange={handleSearchCategoryChange}
         />
 
         {/* Content Area */}

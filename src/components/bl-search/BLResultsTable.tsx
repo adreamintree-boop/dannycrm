@@ -119,7 +119,10 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
         <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
         <h3 className="text-lg font-medium text-foreground mb-2">검색 결과 없음</h3>
         <p className="text-muted-foreground">
-          조건에 맞는 데이터가 없습니다. 필터를 조정해 보세요.
+          선택한 검색 조건에 맞는 데이터가 없습니다.
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          검색어가 선택한 필드(제품/수입자/수출자/HS코드)에만 적용됩니다.
         </p>
       </div>
     );
