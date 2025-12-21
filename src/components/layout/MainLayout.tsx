@@ -2,7 +2,7 @@ import React from 'react';
 import TopHeader from './TopHeader';
 import Sidebar from './Sidebar';
 import TabNav from './TabNav';
-import { AppProvider, useApp } from '@/context/AppContext';
+import { useApp } from '@/context/AppContext';
 import Dashboard from '@/pages/Dashboard';
 import CustomerFunnel from '@/pages/CustomerFunnel';
 import MoveHistory from '@/pages/MoveHistory';
@@ -23,20 +23,18 @@ const MainContent: React.FC = () => {
 
 const MainLayout: React.FC = () => {
   return (
-    <AppProvider>
-      <div className="min-h-screen flex flex-col bg-background">
-        <TopHeader />
-        <div className="flex flex-1">
-          <Sidebar />
-          <div className="flex-1 flex flex-col min-w-0">
-            <TabNav />
-            <main className="flex-1 overflow-auto p-6">
-              <MainContent />
-            </main>
-          </div>
+    <div className="min-h-screen flex flex-col bg-background">
+      <TopHeader />
+      <div className="flex flex-1">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TabNav />
+          <main className="flex-1 overflow-auto p-6">
+            <MainContent />
+          </main>
         </div>
       </div>
-    </AppProvider>
+    </div>
   );
 };
 
