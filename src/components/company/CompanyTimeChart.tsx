@@ -1,8 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { BLRecord } from '@/data/blMockData';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { 
+  ComposedChart, 
+  Line, 
+  Area,
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend 
+} from 'recharts';
 import { format, parseISO } from 'date-fns';
 
 interface CompanyTimeChartProps {
@@ -15,7 +24,6 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
   const [showWeight, setShowWeight] = useState(false);
   const [showQuantity, setShowQuantity] = useState(false);
 
-  // Group data by month
   const chartData = useMemo(() => {
     const monthlyData: Record<string, { 
       month: string; 
@@ -26,7 +34,7 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
     }> = {};
 
     data.forEach(record => {
-      const monthKey = record.date.substring(0, 7); // YYYY-MM
+      const monthKey = record.date.substring(0, 7);
       
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = {
@@ -41,7 +49,6 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
       monthlyData[monthKey].shipments += 1;
       monthlyData[monthKey].value += record.valueUSD || 0;
 
-      // Parse weight
       if (record.weight && record.weight !== '-') {
         const match = record.weight.match(/[\d,]+/);
         if (match) {
@@ -49,7 +56,6 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
         }
       }
 
-      // Parse quantity
       if (record.quantity && record.quantity !== '-') {
         const match = record.quantity.match(/[\d,]+/);
         if (match) {
@@ -63,93 +69,128 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
 
   const formatMonth = (monthStr: string) => {
     try {
-      return format(parseISO(monthStr + '-01'), 'yyyy-MM');
+      return format(parseISO(monthStr + '-01'), 'yy.MM');
     } catch {
       return monthStr;
     }
   };
 
+  const formatValue = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+    return value.toString();
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white border border-gray-200 rounded shadow-lg p-3 text-xs">
+          <p className="font-medium text-gray-900 mb-2">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center justify-between gap-4">
+              <span style={{ color: entry.color }}>{entry.name}</span>
+              <span className="font-medium text-gray-700">
+                {entry.value.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <Card className="p-6 bg-card border border-border">
+    <div className="bg-white rounded border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">월간 거래 인포그래픽</h3>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-gray-900">월간 거래 추이</h3>
+        <div className="flex items-center gap-5">
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox 
-              id="shipments" 
               checked={showShipments} 
               onCheckedChange={(checked) => setShowShipments(checked as boolean)}
+              className="h-3.5 w-3.5"
             />
-            <label htmlFor="shipments" className="text-sm text-muted-foreground cursor-pointer">배송</label>
-          </div>
-          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-600">배송</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox 
-              id="value" 
               checked={showValue} 
               onCheckedChange={(checked) => setShowValue(checked as boolean)}
+              className="h-3.5 w-3.5"
             />
-            <label htmlFor="value" className="text-sm text-muted-foreground cursor-pointer">가치</label>
-          </div>
-          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-600">가치</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox 
-              id="weight" 
               checked={showWeight} 
               onCheckedChange={(checked) => setShowWeight(checked as boolean)}
+              className="h-3.5 w-3.5"
             />
-            <label htmlFor="weight" className="text-sm text-muted-foreground cursor-pointer">무게</label>
-          </div>
-          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-600">무게</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox 
-              id="quantity" 
               checked={showQuantity} 
               onCheckedChange={(checked) => setShowQuantity(checked as boolean)}
+              className="h-3.5 w-3.5"
             />
-            <label htmlFor="quantity" className="text-sm text-muted-foreground cursor-pointer">수량</label>
-          </div>
+            <span className="text-[11px] text-gray-600">수량</span>
+          </label>
         </div>
       </div>
 
-      <div className="h-[300px]">
+      <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis 
               dataKey="month" 
               tickFormatter={formatMonth}
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
+              axisLine={{ stroke: '#e5e7eb' }}
+              tickLine={false}
             />
             <YAxis 
               yAxisId="left"
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-              tickFormatter={(value) => value.toLocaleString()}
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
+              tickFormatter={formatValue}
+              axisLine={false}
+              tickLine={false}
+              width={50}
             />
             <YAxis 
               yAxisId="right" 
               orientation="right"
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
+              axisLine={false}
+              tickLine={false}
+              width={40}
             />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-              formatter={(value: number, name: string) => [
-                value.toLocaleString('en-US', { maximumFractionDigits: 2 }),
-                name
-              ]}
+            <Tooltip content={<CustomTooltip />} />
+            <Legend 
+              wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+              iconType="circle"
+              iconSize={8}
             />
-            <Legend />
             {showValue && (
-              <Line 
-                yAxisId="left"
-                type="monotone" 
-                dataKey="value" 
-                name="가치 (US$)"
-                stroke="#3b82f6" 
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', strokeWidth: 2 }}
-              />
+              <>
+                <Area 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="value" 
+                  name="가치 (US$)"
+                  fill="url(#valueGradient)"
+                  stroke="#3b82f6" 
+                  strokeWidth={2}
+                />
+              </>
             )}
             {showShipments && (
               <Line 
@@ -159,7 +200,7 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
                 name="배송"
                 stroke="#f59e0b" 
                 strokeWidth={2}
-                dot={{ fill: '#f59e0b', strokeWidth: 2 }}
+                dot={{ fill: '#f59e0b', strokeWidth: 0, r: 3 }}
               />
             )}
             {showWeight && (
@@ -170,7 +211,7 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
                 name="무게 (KG)"
                 stroke="#10b981" 
                 strokeWidth={2}
-                dot={{ fill: '#10b981', strokeWidth: 2 }}
+                dot={{ fill: '#10b981', strokeWidth: 0, r: 3 }}
               />
             )}
             {showQuantity && (
@@ -181,13 +222,13 @@ const CompanyTimeChart: React.FC<CompanyTimeChartProps> = ({ data }) => {
                 name="수량"
                 stroke="#8b5cf6" 
                 strokeWidth={2}
-                dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
+                dot={{ fill: '#8b5cf6', strokeWidth: 0, r: 3 }}
               />
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
-    </Card>
+    </div>
   );
 };
 

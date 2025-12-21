@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockBLData, BLRecord } from '@/data/blMockData';
@@ -9,6 +9,7 @@ import CompanyTimeChart from '@/components/company/CompanyTimeChart';
 import CompanyCountrySection from '@/components/company/CompanyCountrySection';
 import CompanyHSCodeChart from '@/components/company/CompanyHSCodeChart';
 import CompanyPortsChart from '@/components/company/CompanyPortsChart';
+import CompanyRegionalBreakdown from '@/components/company/CompanyRegionalBreakdown';
 import TopHeader from '@/components/layout/TopHeader';
 
 interface SearchContext {
@@ -25,7 +26,6 @@ const CompanyAggregation: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
-  // Get search context from location state or URL params
   const searchContext: SearchContext = useMemo(() => {
     const state = location.state as SearchContext | null;
     if (state) return state;
@@ -40,18 +40,15 @@ const CompanyAggregation: React.FC = () => {
     };
   }, [location.state, searchParams]);
 
-  // Filter data for the selected company with the same search conditions
   const filteredData = useMemo(() => {
     let data = mockBLData;
 
-    // Filter by company
     if (searchContext.companyType === 'importer') {
       data = data.filter(r => r.importer === searchContext.companyName);
     } else {
       data = data.filter(r => r.exporter === searchContext.companyName);
     }
 
-    // Apply date range filter
     if (searchContext.startDate) {
       data = data.filter(r => r.date >= searchContext.startDate);
     }
@@ -59,7 +56,6 @@ const CompanyAggregation: React.FC = () => {
       data = data.filter(r => r.date <= searchContext.endDate);
     }
 
-    // Apply main keyword filter
     if (searchContext.mainKeyword) {
       const keyword = searchContext.mainKeyword.toLowerCase();
       data = data.filter(r => 
@@ -68,7 +64,6 @@ const CompanyAggregation: React.FC = () => {
       );
     }
 
-    // Apply additional filters
     searchContext.filters.forEach(filter => {
       const value = filter.value.toLowerCase();
       if (!value) return;
@@ -92,26 +87,23 @@ const CompanyAggregation: React.FC = () => {
     return data;
   }, [searchContext]);
 
-  // Calculate KPIs
   const kpis = useMemo(() => {
     const totalShipments = filteredData.length;
     const totalValue = filteredData.reduce((sum, r) => sum + (r.valueUSD || 0), 0);
     
-    // Parse weight values
     const totalWeight = filteredData.reduce((sum, r) => {
       if (!r.weight || r.weight === '-') return sum;
       const match = r.weight.match(/[\d,]+/);
       return sum + (match ? parseFloat(match[0].replace(/,/g, '')) : 0);
     }, 0);
     
-    // Parse quantity values
     const totalQuantity = filteredData.reduce((sum, r) => {
       if (!r.quantity || r.quantity === '-') return sum;
       const match = r.quantity.match(/[\d,]+/);
       return sum + (match ? parseFloat(match[0].replace(/,/g, '')) : 0);
     }, 0);
 
-    const avgValuePerShipment = totalShipments > 0 ? totalValue / totalShipments : 0;
+    const avgValuePerShipment = totalQuantity > 0 ? totalValue / totalQuantity : 0;
     const avgPricePerKg = totalWeight > 0 ? totalValue / totalWeight : 0;
 
     return {
@@ -136,60 +128,71 @@ const CompanyAggregation: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-[#f8f9fa]">
       <TopHeader />
       
       <div className="flex-1 overflow-auto">
-        {/* Breadcrumb & Header */}
-        <div className="border-b border-border bg-card">
-          <div className="px-6 py-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleBack}
-              className="gap-2 text-muted-foreground hover:text-foreground mb-3"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              B/L Search
-            </Button>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-foreground">
+        {/* Compact Header */}
+        <div className="bg-white border-b border-border">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleBack}
+                  className="gap-1 text-muted-foreground hover:text-foreground h-8 px-2"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="text-sm">B/L Search</span>
+                </Button>
+                
+                <div className="h-5 w-px bg-border" />
+                
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  <h1 className="text-base font-semibold text-foreground">
                     {searchContext.companyName || 'Unknown Company'}
                   </h1>
-                  <p className="text-sm text-muted-foreground">기업 글로벌 무역</p>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs h-5 ${
+                      searchContext.companyType === 'importer' 
+                        ? 'border-blue-300 bg-blue-50 text-blue-700' 
+                        : 'border-green-300 bg-green-50 text-green-700'
+                    }`}
+                  >
+                    {searchContext.companyType === 'importer' ? '수입자' : '수출자'}
+                  </Badge>
                 </div>
               </div>
               
-              <Badge variant={searchContext.companyType === 'importer' ? 'default' : 'secondary'}>
-                {searchContext.companyType === 'importer' ? '임포터' : '내보내기'}
-              </Badge>
-            </div>
-            
-            <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
-              <span>📅 {formatDateRange()}</span>
-              <span className="text-xs">데이터 업데이트: {new Date().toLocaleString('ko-KR')}</span>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  <span>{formatDateRange()}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Database className="w-3 h-3" />
+                  <span>{filteredData.length}건</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="p-6 space-y-6">
-          {/* KPI Cards */}
+        {/* Main Content - Data Dense Layout */}
+        <div className="p-4 space-y-4">
+          {/* KPI Cards Row */}
           <CompanyKPICards kpis={kpis} />
 
           {/* Time Series Chart */}
           <CompanyTimeChart data={filteredData} />
 
-          {/* Country Analysis */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Geographic Analysis - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <CompanyCountrySection 
-              title="상위 수출국" 
+              title="상위 원산지 국가" 
               data={filteredData} 
               type="origin" 
             />
@@ -200,10 +203,11 @@ const CompanyAggregation: React.FC = () => {
             />
           </div>
 
-          {/* HS Codes & Ports */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Distribution Analysis - Three Column */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <CompanyHSCodeChart data={filteredData} />
             <CompanyPortsChart data={filteredData} />
+            <CompanyRegionalBreakdown data={filteredData} />
           </div>
         </div>
       </div>
