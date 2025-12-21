@@ -1,6 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2, Calendar, Database } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Database, Plus, Check } from 'lucide-react';
+import { useApp } from '@/context/AppContext';
+import { toast } from '@/hooks/use-toast';
+import { countries } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockBLData, BLRecord } from '@/data/blMockData';
@@ -25,6 +28,8 @@ const CompanyAggregation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { buyers, addBuyer, activeProjectId } = useApp();
+  const [isAdding, setIsAdding] = useState(false);
 
   const searchContext: SearchContext = useMemo(() => {
     const state = location.state as SearchContext | null;
@@ -116,6 +121,14 @@ const CompanyAggregation: React.FC = () => {
     };
   }, [filteredData]);
 
+  // Check if company already exists in CRM
+  const existingBuyer = useMemo(() => {
+    return buyers.find(b => 
+      b.name.toLowerCase() === searchContext.companyName.toLowerCase() &&
+      b.projectId === activeProjectId
+    );
+  }, [buyers, searchContext.companyName, activeProjectId]);
+
   const handleBack = () => {
     navigate('/bl-search');
   };
@@ -126,6 +139,86 @@ const CompanyAggregation: React.FC = () => {
     }
     return '전체 기간';
   };
+
+  const handleAddToList = () => {
+    if (existingBuyer || isAdding) return;
+    
+    setIsAdding(true);
+    
+    // Determine country from filtered data
+    const topCountry = filteredData.length > 0 
+      ? (searchContext.companyType === 'importer' 
+          ? filteredData[0].destinationCountry 
+          : filteredData[0].originCountry)
+      : '';
+    
+    const countryData = countries.find(c => 
+      c.name === topCountry || c.code === topCountry
+    ) || { code: 'US', name: topCountry || 'Unknown', region: 'america' as const };
+
+    const today = new Date().toISOString().slice(2, 10).replace(/-/g, '.');
+
+    addBuyer({
+      projectId: activeProjectId,
+      name: searchContext.companyName,
+      country: countryData.name,
+      countryCode: countryData.code,
+      status: 'list',
+      bookmarked: false,
+      websiteUrl: '',
+      address: '',
+      region: countryData.region,
+      phone: '',
+      email: '',
+      revenue: kpis.totalValue > 0 ? `$${(kpis.totalValue / 1000000).toFixed(1)}M` : '',
+      revenueCurrency: 'USD',
+      mainProducts: searchContext.mainKeyword || '',
+      facebookUrl: '',
+      linkedinUrl: '',
+      youtubeUrl: '',
+      contacts: [
+        { id: '1', role: '', name: '', title: '', phone: '', mobile: '', email: '', twitterUrl: '', facebookUrl: '', linkedinUrl: '', instagramUrl: '' },
+        { id: '2', role: '', name: '', title: '', phone: '', mobile: '', email: '', twitterUrl: '', facebookUrl: '', linkedinUrl: '', instagramUrl: '' },
+        { id: '3', role: '', name: '', title: '', phone: '', mobile: '', email: '', twitterUrl: '', facebookUrl: '', linkedinUrl: '', instagramUrl: '' },
+      ],
+      listDate: today,
+    });
+
+    toast({
+      title: "CRM에 추가됨",
+      description: `${searchContext.companyName}이(가) List에 추가되었습니다.`,
+    });
+  };
+
+  const getButtonState = () => {
+    if (existingBuyer) {
+      const statusLabels: Record<string, string> = {
+        list: 'List',
+        lead: 'Lead', 
+        target: 'Target',
+        client: 'Client'
+      };
+      return {
+        label: `Already in CRM (${statusLabels[existingBuyer.status]})`,
+        disabled: true,
+        icon: Check
+      };
+    }
+    if (isAdding) {
+      return {
+        label: 'Added to List ✓',
+        disabled: true,
+        icon: Check
+      };
+    }
+    return {
+      label: 'Add to List',
+      disabled: false,
+      icon: Plus
+    };
+  };
+
+  const buttonState = getButtonState();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8f9fa]">
@@ -164,6 +257,21 @@ const CompanyAggregation: React.FC = () => {
                   >
                     {searchContext.companyType === 'importer' ? '수입자' : '수출자'}
                   </Badge>
+                  
+                  <Button
+                    variant={buttonState.disabled ? "outline" : "secondary"}
+                    size="sm"
+                    onClick={handleAddToList}
+                    disabled={buttonState.disabled}
+                    className={`h-7 text-xs gap-1 ml-2 ${
+                      buttonState.disabled 
+                        ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                        : 'hover:bg-primary hover:text-primary-foreground'
+                    }`}
+                  >
+                    <buttonState.icon className="w-3 h-3" />
+                    {buttonState.label}
+                  </Button>
                 </div>
               </div>
               
