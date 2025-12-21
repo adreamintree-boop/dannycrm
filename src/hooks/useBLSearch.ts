@@ -19,7 +19,7 @@ interface UseBLSearchReturn {
   results: BLRecord[];
   isLoading: boolean;
   hasSearched: boolean;
-  search: (onCreditCheck?: (resultCount: number, searchMeta: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>) => void;
+  search: () => void;
   validationError: string | null;
   
   // Pagination
@@ -127,10 +127,8 @@ export function useBLSearch(): UseBLSearchReturn {
     mainKeywordRef.current = '';
   }, []);
 
-  // Search function with field-specific matching and credit callback
-  const search = useCallback(async (
-    onCreditCheck?: (resultCount: number, searchMeta: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
-  ) => {
+  // Search function with field-specific matching (credits are now handled per-page)
+  const search = useCallback(async () => {
     const mainKeyword = mainKeywordRef.current.trim();
     const category = searchCategoryRef.current;
     const hasValidFilter = filters.some(f => f.value.trim() !== '');
@@ -162,26 +160,6 @@ export function useBLSearch(): UseBLSearchReturn {
         if (end && recordDate > end) return false;
         return true;
       });
-    }
-
-    // If credit check callback provided, check credits before returning results
-    if (onCreditCheck && searchResults.length > 0) {
-      const searchMeta = {
-        keyword: mainKeyword,
-        category,
-        filters: panelFilters.map(f => ({ type: f.type, value: f.value })),
-        dateRange: { start: start?.toISOString(), end: end?.toISOString() },
-        result_count: searchResults.length,
-      };
-
-      const creditResult = await onCreditCheck(searchResults.length, searchMeta);
-      
-      if (!creditResult.success) {
-        setIsLoading(false);
-        setValidationError(creditResult.error || '크레딧이 부족합니다.');
-        setResults([]);
-        return;
-      }
     }
     
     // Sort by date

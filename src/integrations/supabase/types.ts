@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      bl_search_charged_rows: {
+        Row: {
+          charged_at: string
+          id: string
+          row_fingerprint: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          charged_at?: string
+          id?: string
+          row_fingerprint: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          charged_at?: string
+          id?: string
+          row_fingerprint?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_search_charged_rows_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "bl_search_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bl_search_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          search_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          search_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          search_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       company_products: {
         Row: {
           created_at: string
@@ -278,6 +334,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      charge_bl_search_page: {
+        Args: {
+          p_meta?: Json
+          p_page_number: number
+          p_request_id: string
+          p_row_fingerprints: string[]
+          p_search_key: string
+          p_user_id: string
+        }
+        Returns: {
+          charged_count: number
+          error_message: string
+          new_balance: number
+          success: boolean
+        }[]
+      }
+      cleanup_old_bl_sessions: { Args: never; Returns: undefined }
       deduct_credits: {
         Args: {
           p_action_type: Database["public"]["Enums"]["credit_action_type"]
