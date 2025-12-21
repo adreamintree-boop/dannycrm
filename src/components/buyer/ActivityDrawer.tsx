@@ -135,11 +135,10 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
       <div 
         className={`absolute top-0 right-0 h-full bg-background shadow-2xl z-20 transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
+        } ${mode === 'create' 
+          ? 'w-full lg:w-[60vw] xl:w-[70vw] lg:min-w-[860px] xl:min-w-[900px] lg:max-w-[1200px]' 
+          : 'w-full lg:w-[80vw] lg:min-w-[1100px] lg:max-w-[1400px]'
         }`}
-        style={{ 
-          width: mode === 'create' ? 'min(900px, 70%)' : 'min(1400px, 80%)',
-          minWidth: mode === 'create' ? '700px' : '1100px',
-        }}
       >
         {/* Drawer Header */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-4 flex items-center justify-between">
