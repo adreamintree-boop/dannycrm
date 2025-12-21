@@ -10,6 +10,7 @@ interface BLResultsTableProps {
   results: BLRecord[];
   paginatedResults: BLRecord[];
   filters: SearchFilter[];
+  mainKeyword?: string;
   isLoading: boolean;
   hasSearched: boolean;
   currentPage: number;
@@ -23,6 +24,7 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
   results,
   paginatedResults,
   filters,
+  mainKeyword = '',
   isLoading,
   hasSearched,
   currentPage,
@@ -31,13 +33,17 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
   sortOrder,
   onToggleSortOrder
 }) => {
-  // Get search terms for highlighting from productName filters
-  const searchTerms = filters
-    .filter(f => f.type === 'productName' && f.value.trim())
-    .map(f => f.value.trim());
+  // Collect search terms for highlighting from filters AND mainKeyword
+  const searchTerms = [
+    ...filters
+      .filter(f => (f.type === 'productName' || f.type === 'hsCode') && f.value.trim())
+      .map(f => f.value.trim()),
+    ...(mainKeyword.trim() ? [mainKeyword.trim()] : [])
+  ];
 
   // Render highlighted text
   const renderHighlightedText = (text: string) => {
+    if (!text || text === '-') return <span>-</span>;
     const segments = highlightMatch(text, searchTerms);
     return (
       <span>
@@ -52,6 +58,23 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
         ))}
       </span>
     );
+  };
+
+  // Format value with fallback for missing data
+  const formatValue = (value: string | number | undefined | null): string => {
+    if (value === undefined || value === null || value === '') return '-';
+    return String(value);
+  };
+
+  // Format USD value with thousands separator
+  const formatUSD = (value: number | undefined | null): string => {
+    if (value === undefined || value === null) return '-';
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Calculate row number based on pagination
+  const getRowNumber = (index: number): number => {
+    return (currentPage - 1) * 10 + index + 1;
   };
 
   // Loading state
@@ -109,21 +132,24 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
       <div className="flex items-center justify-between">
         <div className="text-foreground">
           <span className="font-semibold text-primary">{results.length.toLocaleString()}</span>
-          <span className="text-muted-foreground ml-1">건의 결과</span>
+          <span className="text-muted-foreground ml-1">발견된 레코드</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleSortOrder}
-          className="gap-1 text-muted-foreground"
-        >
-          시간
-          {sortOrder === 'desc' ? (
-            <ArrowDown className="w-3 h-3" />
-          ) : (
-            <ArrowUp className="w-3 h-3" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">정렬 기준</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onToggleSortOrder}
+            className="gap-1"
+          >
+            날짜
+            {sortOrder === 'desc' ? (
+              <ArrowDown className="w-3 h-3" />
+            ) : (
+              <ArrowUp className="w-3 h-3" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Results table */}
@@ -132,32 +158,65 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="min-w-[120px] text-xs font-semibold">시간</TableHead>
-                <TableHead className="min-w-[150px] text-xs font-semibold">임포터</TableHead>
-                <TableHead className="min-w-[150px] text-xs font-semibold">내보내기</TableHead>
+                <TableHead className="w-[50px] text-xs font-semibold sticky left-0 bg-muted/30">No.</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold">날짜</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold">출처 국가</TableHead>
+                <TableHead className="min-w-[160px] text-xs font-semibold">수입자</TableHead>
+                <TableHead className="min-w-[160px] text-xs font-semibold">수출자</TableHead>
                 <TableHead className="min-w-[100px] text-xs font-semibold">HS 코드</TableHead>
-                <TableHead className="min-w-[200px] text-xs font-semibold">제품 설명</TableHead>
-                <TableHead className="min-w-[80px] text-xs font-semibold">국가</TableHead>
-                <TableHead className="min-w-[80px] text-xs font-semibold text-center">세부정보</TableHead>
+                <TableHead className="min-w-[220px] text-xs font-semibold">제품 설명</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold">수량</TableHead>
+                <TableHead className="min-w-[90px] text-xs font-semibold">무게</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold text-right">가치 (US$)</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold">원산지 국가</TableHead>
+                <TableHead className="min-w-[100px] text-xs font-semibold">목적지 국가</TableHead>
+                <TableHead className="min-w-[90px] text-xs font-semibold text-center">세부 정보</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedResults.map((record) => (
+              {paginatedResults.map((record, index) => (
                 <TableRow key={record.id} className="hover:bg-muted/20">
-                  <TableCell className="text-sm">{record.date}</TableCell>
-                  <TableCell className="text-sm text-primary font-medium truncate max-w-[180px]" title={record.importer}>
-                    {record.importer}
+                  {/* No. */}
+                  <TableCell className="text-sm font-medium text-muted-foreground sticky left-0 bg-card">
+                    {getRowNumber(index)}
                   </TableCell>
-                  <TableCell className="text-sm truncate max-w-[180px]" title={record.exporter}>
-                    {record.exporter || '-'}
+                  {/* 날짜 */}
+                  <TableCell className="text-sm">{formatValue(record.date)}</TableCell>
+                  {/* 출처 국가 */}
+                  <TableCell className="text-sm">{formatValue(record.originCountry)}</TableCell>
+                  {/* 수입자 */}
+                  <TableCell className="text-sm">
+                    <span className="text-primary hover:underline cursor-pointer font-medium">
+                      {formatValue(record.importer)}
+                    </span>
                   </TableCell>
-                  <TableCell className="text-sm">{record.hsCode}</TableCell>
-                  <TableCell className="text-sm max-w-[220px]">
-                    <div className="truncate" title={record.productName}>
+                  {/* 수출자 */}
+                  <TableCell className="text-sm">
+                    <span className="text-primary hover:underline cursor-pointer font-medium">
+                      {formatValue(record.exporter)}
+                    </span>
+                  </TableCell>
+                  {/* HS 코드 */}
+                  <TableCell className="text-sm">{formatValue(record.hsCode)}</TableCell>
+                  {/* 제품 설명 */}
+                  <TableCell className="text-sm max-w-[300px]">
+                    <div className="whitespace-normal break-words">
                       {renderHighlightedText(record.productName)}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{record.originCountry}</TableCell>
+                  {/* 수량 */}
+                  <TableCell className="text-sm">{formatValue(record.quantity)}</TableCell>
+                  {/* 무게 */}
+                  <TableCell className="text-sm">{formatValue(record.weight)}</TableCell>
+                  {/* 가치 (US$) */}
+                  <TableCell className="text-sm text-right font-medium">
+                    {record.valueUSD ? formatUSD(record.valueUSD) : '-'}
+                  </TableCell>
+                  {/* 원산지 국가 */}
+                  <TableCell className="text-sm">{formatValue(record.originCountry)}</TableCell>
+                  {/* 목적지 국가 */}
+                  <TableCell className="text-sm">{formatValue(record.destinationCountry)}</TableCell>
+                  {/* 세부 정보 */}
                   <TableCell className="text-center">
                     <Sheet>
                       <SheetTrigger asChild>
@@ -174,44 +233,44 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
                               <span className="text-muted-foreground">날짜</span>
-                              <p className="font-medium">{record.date}</p>
+                              <p className="font-medium">{formatValue(record.date)}</p>
                             </div>
                             <div>
                               <span className="text-muted-foreground">HS 코드</span>
-                              <p className="font-medium">{record.hsCode}</p>
+                              <p className="font-medium">{formatValue(record.hsCode)}</p>
                             </div>
                             <div>
-                              <span className="text-muted-foreground">임포터</span>
-                              <p className="font-medium">{record.importer}</p>
+                              <span className="text-muted-foreground">수입자</span>
+                              <p className="font-medium">{formatValue(record.importer)}</p>
                             </div>
                             <div>
-                              <span className="text-muted-foreground">내보내기</span>
-                              <p className="font-medium">{record.exporter || '-'}</p>
+                              <span className="text-muted-foreground">수출자</span>
+                              <p className="font-medium">{formatValue(record.exporter)}</p>
                             </div>
                             <div>
                               <span className="text-muted-foreground">수량</span>
-                              <p className="font-medium">{record.quantity}</p>
+                              <p className="font-medium">{formatValue(record.quantity)}</p>
                             </div>
                             <div>
                               <span className="text-muted-foreground">무게</span>
-                              <p className="font-medium">{record.weight}</p>
+                              <p className="font-medium">{formatValue(record.weight)}</p>
                             </div>
                             <div>
                               <span className="text-muted-foreground">가치 (USD)</span>
-                              <p className="font-medium">${record.valueUSD.toLocaleString()}</p>
+                              <p className="font-medium">${record.valueUSD ? formatUSD(record.valueUSD) : '-'}</p>
                             </div>
                             <div>
-                              <span className="text-muted-foreground">원산지</span>
-                              <p className="font-medium">{record.originCountry}</p>
+                              <span className="text-muted-foreground">원산지 국가</span>
+                              <p className="font-medium">{formatValue(record.originCountry)}</p>
                             </div>
                             <div>
-                              <span className="text-muted-foreground">목적지</span>
-                              <p className="font-medium">{record.destinationCountry}</p>
+                              <span className="text-muted-foreground">목적지 국가</span>
+                              <p className="font-medium">{formatValue(record.destinationCountry)}</p>
                             </div>
                           </div>
                           <div>
                             <span className="text-muted-foreground text-sm">제품 설명</span>
-                            <p className="font-medium mt-1">{record.productName}</p>
+                            <p className="font-medium mt-1">{formatValue(record.productName)}</p>
                           </div>
                           <div className="pt-4 border-t border-border">
                             <span className="text-xs text-muted-foreground">Raw JSON</span>
