@@ -1,8 +1,19 @@
 import React from 'react';
-import { User, FileText } from 'lucide-react';
+import { User, FileText, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const TopHeader: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return location.pathname === '/' || !location.pathname.startsWith('/bl-search');
+    }
+    return location.pathname.startsWith(path);
+  };
+
   return (
     <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-50">
       {/* Left: Logo */}
@@ -15,7 +26,19 @@ const TopHeader: React.FC = () => {
 
       {/* Center: Navigation */}
       <nav className="flex items-center gap-1">
-        <span className="nav-pill nav-pill-active">TaaS CRM</span>
+        <span 
+          className={`nav-pill cursor-pointer ${isActive('/') ? 'nav-pill-active' : 'nav-pill-inactive'}`}
+          onClick={() => navigate('/')}
+        >
+          TaaS CRM
+        </span>
+        <span 
+          className={`nav-pill cursor-pointer flex items-center gap-1.5 ${isActive('/bl-search') ? 'nav-pill-active' : 'nav-pill-inactive'}`}
+          onClick={() => navigate('/bl-search')}
+        >
+          <Search className="w-3.5 h-3.5" />
+          B/L Search
+        </span>
         <span className="nav-pill nav-pill-inactive cursor-pointer">Trade Tips</span>
         <span className="nav-pill nav-pill-inactive cursor-pointer">FAQ</span>
       </nav>
