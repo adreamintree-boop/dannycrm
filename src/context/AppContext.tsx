@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { useAuthContext } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   mockProjects, 
   mockBuyers, 
@@ -12,7 +13,6 @@ import {
   Document,
   Activity,
   BuyerStatus,
-  ActivityType,
   BuyerContact
 } from '@/data/mockData';
 
@@ -27,19 +27,20 @@ interface AppState {
   moveHistory: MoveHistoryItem[];
   documents: Document[];
   activeTab: 'dashboard' | 'funnel' | 'history' | 'databoard';
+  loading: boolean;
 }
 
 interface AppContextType extends AppState {
   setActiveProjectId: (id: string) => void;
   setActiveTab: (tab: AppState['activeTab']) => void;
-  addProject: (name: string) => void;
-  deleteProject: (id: string) => void;
-  updateProject: (id: string, name: string) => void;
-  addBuyer: (buyer: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => void;
-  updateBuyer: (buyerId: string, updates: Partial<Buyer>) => void;
-  updateBuyerStatus: (buyerId: string, status: BuyerStatus) => void;
-  toggleBookmark: (buyerId: string) => void;
-  deleteBuyer: (buyerId: string) => void;
+  addProject: (name: string) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+  updateProject: (id: string, name: string) => Promise<void>;
+  addBuyer: (buyer: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => Promise<void>;
+  updateBuyer: (buyerId: string, updates: Partial<Buyer>) => Promise<void>;
+  updateBuyerStatus: (buyerId: string, status: BuyerStatus) => Promise<void>;
+  toggleBookmark: (buyerId: string) => Promise<void>;
+  deleteBuyer: (buyerId: string) => Promise<void>;
   addActivity: (activity: Omit<Activity, 'id'>) => void;
   deleteActivity: (activityId: string) => void;
   getBuyerActivities: (buyerId: string) => Activity[];
@@ -49,14 +50,10 @@ interface AppContextType extends AppState {
   getProjectMoveHistory: () => MoveHistoryItem[];
   getProjectDocuments: () => Document[];
   isDemoAccount: boolean;
+  refreshData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-// Empty initial state for new users
-const emptyProjects: Project[] = [
-  { id: 'default', name: '기본 프로젝트', createdAt: new Date().toISOString() }
-];
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { profile, user } = useAuthContext();
@@ -64,16 +61,120 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Check if this is the demo account
   const isDemoAccount = user?.email === DEMO_ACCOUNT_EMAIL;
   
-  // Initialize with empty data for new users, demo data for apharm
-  const [projects, setProjects] = useState<Project[]>(emptyProjects);
-  const [activeProjectId, setActiveProjectId] = useState<string>('default');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string>('');
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [activeTab, setActiveTab] = useState<AppState['activeTab']>('dashboard');
+  const [loading, setLoading] = useState(true);
 
-  // Load demo data for apharm account, empty for others
+  // Fetch projects from database
+  const fetchProjects = useCallback(async () => {
+    if (!user?.id) return;
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Error fetching projects:', error);
+      return;
+    }
+    
+    if (data && data.length > 0) {
+      const mappedProjects: Project[] = data.map(p => ({
+        id: p.id,
+        name: p.project_name,
+        createdAt: p.created_at,
+      }));
+      setProjects(mappedProjects);
+      
+      // Set active project to default or first project
+      const defaultProject = data.find(p => p.is_default);
+      setActiveProjectId(defaultProject?.id || data[0].id);
+    } else {
+      // Create default project for new user
+      const { data: newProject, error: createError } = await supabase
+        .from('projects')
+        .insert({
+          user_id: user.id,
+          project_name: '기본 프로젝트',
+          is_default: true,
+        })
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error('Error creating default project:', createError);
+        return;
+      }
+      
+      if (newProject) {
+        setProjects([{
+          id: newProject.id,
+          name: newProject.project_name,
+          createdAt: newProject.created_at,
+        }]);
+        setActiveProjectId(newProject.id);
+      }
+    }
+  }, [user?.id]);
+
+  // Fetch buyers from database
+  const fetchBuyers = useCallback(async () => {
+    if (!user?.id) return;
+    
+    const { data, error } = await supabase
+      .from('crm_buyers')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching buyers:', error);
+      return;
+    }
+    
+    if (data) {
+      const mappedBuyers: Buyer[] = data.map(b => ({
+        id: b.id,
+        projectId: b.project_id || '',
+        name: b.company_name,
+        country: b.country || '',
+        countryCode: '',
+        region: (b.region as Buyer['region']) || 'asia',
+        status: b.stage as BuyerStatus,
+        createdAt: b.created_at,
+        activityCount: b.activity_count,
+        bookmarked: false,
+        websiteUrl: '',
+        address: '',
+        phone: '',
+        email: '',
+        revenue: '',
+        revenueCurrency: 'USD',
+        mainProducts: '',
+        facebookUrl: '',
+        linkedinUrl: '',
+        youtubeUrl: '',
+        contacts: [],
+      }));
+      setBuyers(mappedBuyers);
+    }
+  }, [user?.id]);
+
+  // Refresh all data
+  const refreshData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchProjects(), fetchBuyers()]);
+    setLoading(false);
+  }, [fetchProjects, fetchBuyers]);
+
+  // Load data on user change
   useEffect(() => {
     if (isDemoAccount) {
       // Demo account gets seeded data
@@ -83,37 +184,87 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setActivities(mockActivities);
       setMoveHistory(mockMoveHistory);
       setDocuments(mockDocuments);
+      setLoading(false);
+    } else if (user?.id) {
+      // Regular users load from database
+      refreshData();
     } else {
-      // Regular users start with empty data
-      setProjects(emptyProjects);
-      setActiveProjectId('default');
+      // No user - clear data
+      setProjects([]);
+      setActiveProjectId('');
       setBuyers([]);
       setActivities([]);
       setMoveHistory([]);
       setDocuments([]);
+      setLoading(false);
     }
-  }, [isDemoAccount, user?.id]);
+  }, [isDemoAccount, user?.id, refreshData]);
 
-  const addProject = (name: string) => {
-    const newProject: Project = {
-      id: String(Date.now()),
-      name,
-      createdAt: new Date().toISOString(),
-    };
-    setProjects([...projects, newProject]);
-    setActiveProjectId(newProject.id);
+  const addProject = async (name: string) => {
+    if (!user?.id) return;
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        user_id: user.id,
+        project_name: name,
+        is_default: false,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding project:', error);
+      return;
+    }
+    
+    if (data) {
+      const newProject: Project = {
+        id: data.id,
+        name: data.project_name,
+        createdAt: data.created_at,
+      };
+      setProjects(prev => [...prev, newProject]);
+      setActiveProjectId(data.id);
+    }
   };
 
-  const deleteProject = (id: string) => {
-    setProjects(projects.filter(p => p.id !== id));
+  const deleteProject = async (id: string) => {
+    if (!user?.id) return;
+    
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error deleting project:', error);
+      return;
+    }
+    
+    setProjects(prev => prev.filter(p => p.id !== id));
     if (activeProjectId === id && projects.length > 1) {
       const remaining = projects.filter(p => p.id !== id);
       setActiveProjectId(remaining[0]?.id || '');
     }
   };
 
-  const updateProject = (id: string, name: string) => {
-    setProjects(projects.map(p => p.id === id ? { ...p, name } : p));
+  const updateProject = async (id: string, name: string) => {
+    if (!user?.id) return;
+    
+    const { error } = await supabase
+      .from('projects')
+      .update({ project_name: name })
+      .eq('id', id)
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error updating project:', error);
+      return;
+    }
+    
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, name } : p));
   };
 
   const createEmptyContact = (id: string): BuyerContact => ({
@@ -130,68 +281,155 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     instagramUrl: '',
   });
 
-  const addBuyer = (buyerData: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => {
-    const newBuyer: Buyer = {
-      ...buyerData,
-      id: String(Date.now()),
-      createdAt: new Date().toISOString(),
-      activityCount: 0,
-    };
-    setBuyers([newBuyer, ...buyers]);
+  const addBuyer = async (buyerData: Omit<Buyer, 'id' | 'createdAt' | 'activityCount'>) => {
+    if (!user?.id) return;
     
-    // Add to move history
-    const newHistoryItem: MoveHistoryItem = {
-      id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
-      projectId: buyerData.projectId,
-      category: 'funnel',
-      description: `${newBuyer.name} 바이어 기업 등록`,
-      author: profile?.full_name || '관리자',
-      date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
-    };
-    setMoveHistory([newHistoryItem, ...moveHistory]);
-  };
-
-  const updateBuyer = (buyerId: string, updates: Partial<Buyer>) => {
-    setBuyers(buyers.map(b => b.id === buyerId ? { ...b, ...updates } : b));
-  };
-
-  const updateBuyerStatus = (buyerId: string, status: BuyerStatus) => {
-    const buyer = buyers.find(b => b.id === buyerId);
-    if (buyer && buyer.status !== status) {
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
-      const statusDateField = `${status}Date` as keyof Buyer;
-      
-      setBuyers(buyers.map(b => b.id === buyerId ? { 
-        ...b, 
-        status,
-        [statusDateField]: today.slice(2) // Format: 25.12.21
-      } : b));
-      
-      const statusNames: Record<BuyerStatus, string> = {
-        list: 'level1 List',
-        lead: 'level2 Lead',
-        target: 'level3 Target',
-        client: 'level4 Client',
+    const { data, error } = await supabase
+      .from('crm_buyers')
+      .insert({
+        user_id: user.id,
+        project_id: buyerData.projectId || null,
+        company_name: buyerData.name,
+        country: buyerData.country,
+        region: buyerData.region,
+        source: 'BL_SEARCH',
+        stage: buyerData.status || 'list',
+        activity_count: 0,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding buyer:', error);
+      return;
+    }
+    
+    if (data) {
+      const newBuyer: Buyer = {
+        id: data.id,
+        projectId: data.project_id || '',
+        name: data.company_name,
+        country: data.country || '',
+        countryCode: '',
+        region: (data.region as Buyer['region']) || 'asia',
+        status: data.stage as BuyerStatus,
+        createdAt: data.created_at,
+        activityCount: data.activity_count,
+        bookmarked: false,
+        websiteUrl: '',
+        address: '',
+        phone: '',
+        email: '',
+        revenue: '',
+        revenueCurrency: 'USD',
+        mainProducts: '',
+        facebookUrl: '',
+        linkedinUrl: '',
+        youtubeUrl: '',
+        contacts: [],
       };
+      setBuyers(prev => [newBuyer, ...prev]);
       
+      // Add to move history (local for now)
       const newHistoryItem: MoveHistoryItem = {
         id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
-        projectId: buyer.projectId,
+        projectId: buyerData.projectId,
         category: 'funnel',
-        description: `${buyer.name} 바이어 기업의 인사이트 등급 변경: ${statusNames[buyer.status]} → ${statusNames[status]}`,
+        description: `${newBuyer.name} 바이어 기업 등록`,
         author: profile?.full_name || '관리자',
         date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
       };
-      setMoveHistory([newHistoryItem, ...moveHistory]);
+      setMoveHistory(prev => [newHistoryItem, ...prev]);
     }
   };
 
-  const toggleBookmark = (buyerId: string) => {
-    setBuyers(buyers.map(b => b.id === buyerId ? { ...b, bookmarked: !b.bookmarked } : b));
+  const updateBuyer = async (buyerId: string, updates: Partial<Buyer>) => {
+    if (!user?.id) return;
+    
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.name) dbUpdates.company_name = updates.name;
+    if (updates.country) dbUpdates.country = updates.country;
+    if (updates.region) dbUpdates.region = updates.region;
+    if (updates.status) dbUpdates.stage = updates.status;
+    if (updates.activityCount !== undefined) dbUpdates.activity_count = updates.activityCount;
+    
+    if (Object.keys(dbUpdates).length > 0) {
+      const { error } = await supabase
+        .from('crm_buyers')
+        .update(dbUpdates)
+        .eq('id', buyerId)
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error updating buyer:', error);
+        return;
+      }
+    }
+    
+    setBuyers(prev => prev.map(b => b.id === buyerId ? { ...b, ...updates } : b));
   };
 
-  const deleteBuyer = (buyerId: string) => {
-    setBuyers(buyers.filter(b => b.id !== buyerId));
+  const updateBuyerStatus = async (buyerId: string, status: BuyerStatus) => {
+    const buyer = buyers.find(b => b.id === buyerId);
+    if (!buyer || buyer.status === status || !user?.id) return;
+    
+    const { error } = await supabase
+      .from('crm_buyers')
+      .update({ stage: status })
+      .eq('id', buyerId)
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error updating buyer status:', error);
+      return;
+    }
+    
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+    const statusDateField = `${status}Date` as keyof Buyer;
+    
+    setBuyers(prev => prev.map(b => b.id === buyerId ? { 
+      ...b, 
+      status,
+      [statusDateField]: today.slice(2)
+    } : b));
+    
+    const statusNames: Record<BuyerStatus, string> = {
+      list: 'level1 List',
+      lead: 'level2 Lead',
+      target: 'level3 Target',
+      client: 'level4 Client',
+    };
+    
+    const newHistoryItem: MoveHistoryItem = {
+      id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
+      projectId: buyer.projectId,
+      category: 'funnel',
+      description: `${buyer.name} 바이어 기업의 인사이트 등급 변경: ${statusNames[buyer.status]} → ${statusNames[status]}`,
+      author: profile?.full_name || '관리자',
+      date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
+    };
+    setMoveHistory(prev => [newHistoryItem, ...prev]);
+  };
+
+  const toggleBookmark = async (buyerId: string) => {
+    setBuyers(prev => prev.map(b => b.id === buyerId ? { ...b, bookmarked: !b.bookmarked } : b));
+  };
+
+  const deleteBuyer = async (buyerId: string) => {
+    if (!user?.id) return;
+    
+    const { error } = await supabase
+      .from('crm_buyers')
+      .delete()
+      .eq('id', buyerId)
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error deleting buyer:', error);
+      return;
+    }
+    
+    setBuyers(prev => prev.filter(b => b.id !== buyerId));
   };
 
   const addActivity = (activityData: Omit<Activity, 'id'>) => {
@@ -199,10 +437,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...activityData,
       id: String(Date.now()),
     };
-    setActivities([newActivity, ...activities]);
+    setActivities(prev => [newActivity, ...prev]);
     
     // Update buyer activity count
-    setBuyers(buyers.map(b => 
+    setBuyers(prev => prev.map(b => 
       b.id === activityData.buyerId 
         ? { ...b, activityCount: b.activityCount + 1 }
         : b
@@ -219,16 +457,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         author: activityData.author,
         date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
       };
-      setMoveHistory([newHistoryItem, ...moveHistory]);
+      setMoveHistory(prev => [newHistoryItem, ...prev]);
     }
   };
 
   const deleteActivity = (activityId: string) => {
     const activity = activities.find(a => a.id === activityId);
     if (activity) {
-      setActivities(activities.filter(a => a.id !== activityId));
-      // Update buyer activity count
-      setBuyers(buyers.map(b => 
+      setActivities(prev => prev.filter(a => a.id !== activityId));
+      setBuyers(prev => prev.map(b => 
         b.id === activity.buyerId 
           ? { ...b, activityCount: Math.max(0, b.activityCount - 1) }
           : b
@@ -247,11 +484,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: String(Date.now()),
       createdAt: new Date().toISOString(),
     };
-    setDocuments([newDoc, ...documents]);
+    setDocuments(prev => [newDoc, ...prev]);
   };
 
   const deleteDocument = (docId: string) => {
-    setDocuments(documents.filter(d => d.id !== docId));
+    setDocuments(prev => prev.filter(d => d.id !== docId));
   };
 
   const getProjectBuyers = () => buyers.filter(b => b.projectId === activeProjectId);
@@ -267,6 +504,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       moveHistory,
       documents,
       activeTab,
+      loading,
       setActiveProjectId,
       setActiveTab,
       addProject,
@@ -286,6 +524,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       getProjectMoveHistory,
       getProjectDocuments,
       isDemoAccount,
+      refreshData,
     }}>
       {children}
     </AppContext.Provider>
