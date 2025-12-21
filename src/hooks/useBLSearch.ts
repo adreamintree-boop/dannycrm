@@ -1,13 +1,17 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { BLRecord, SearchFilter, searchBLData, FilterType } from '@/data/blMockData';
 
 interface UseBLSearchReturn {
-  // Filters
+  // Filters (right panel)
   filters: SearchFilter[];
   addFilter: () => void;
   removeFilter: (id: string) => void;
   updateFilter: (id: string, type: FilterType, value: string) => void;
   resetFilters: () => void;
+  
+  // Main keyword (top strip - independent from filters)
+  setMainKeyword: (keyword: string) => void;
+  setDateRange: (start: Date | undefined, end: Date | undefined) => void;
   
   // Search
   results: BLRecord[];
@@ -37,8 +41,12 @@ const createDefaultFilter = (): SearchFilter => ({
 });
 
 export function useBLSearch(): UseBLSearchReturn {
-  // Filter state
+  // Filter state (right panel - completely independent)
   const [filters, setFilters] = useState<SearchFilter[]>([createDefaultFilter()]);
+  
+  // Main keyword state (top strip - independent from filters)
+  const mainKeywordRef = useRef<string>('');
+  const dateRangeRef = useRef<{ start?: Date; end?: Date }>({});
   
   // Search state
   const [results, setResults] = useState<BLRecord[]>([]);
@@ -52,6 +60,16 @@ export function useBLSearch(): UseBLSearchReturn {
   
   // Sorting state
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Set main keyword (does NOT affect filters)
+  const setMainKeyword = useCallback((keyword: string) => {
+    mainKeywordRef.current = keyword;
+  }, []);
+
+  // Set date range
+  const setDateRange = useCallback((start: Date | undefined, end: Date | undefined) => {
+    dateRangeRef.current = { start, end };
+  }, []);
 
   // Filter management
   const addFilter = useCallback(() => {
@@ -81,15 +99,17 @@ export function useBLSearch(): UseBLSearchReturn {
     setHasSearched(false);
     setCurrentPage(1);
     setValidationError(null);
+    mainKeywordRef.current = '';
   }, []);
 
   // Search function
   const search = useCallback(() => {
-    // Validation: at least one filter must have a value
+    const mainKeyword = mainKeywordRef.current.trim();
     const hasValidFilter = filters.some(f => f.value.trim() !== '');
     
-    if (!hasValidFilter) {
-      setValidationError('Please enter at least one search condition.');
+    // Validation: either mainKeyword or at least one filter must have value
+    if (!mainKeyword && !hasValidFilter) {
+      setValidationError('검색 조건을 최소 1개 이상 입력해주세요.');
       return;
     }
 
@@ -99,7 +119,37 @@ export function useBLSearch(): UseBLSearchReturn {
 
     // Simulate async search (for future API integration)
     setTimeout(() => {
-      const searchResults = searchBLData(filters);
+      // Build effective filters: combine filter panel + main keyword
+      const effectiveFilters: SearchFilter[] = [];
+      
+      // Add filter panel filters that have values
+      filters.forEach(f => {
+        if (f.value.trim()) {
+          effectiveFilters.push(f);
+        }
+      });
+      
+      // Add main keyword as productName search if provided
+      if (mainKeyword) {
+        effectiveFilters.push({
+          id: 'main-keyword',
+          type: 'productName',
+          value: mainKeyword
+        });
+      }
+      
+      let searchResults = searchBLData(effectiveFilters);
+      
+      // Apply date range filter
+      const { start, end } = dateRangeRef.current;
+      if (start || end) {
+        searchResults = searchResults.filter(record => {
+          const recordDate = new Date(record.date);
+          if (start && recordDate < start) return false;
+          if (end && recordDate > end) return false;
+          return true;
+        });
+      }
       
       // Sort by date
       const sortedResults = [...searchResults].sort((a, b) => {
@@ -141,6 +191,8 @@ export function useBLSearch(): UseBLSearchReturn {
     removeFilter,
     updateFilter,
     resetFilters,
+    setMainKeyword,
+    setDateRange,
     results,
     isLoading,
     hasSearched,

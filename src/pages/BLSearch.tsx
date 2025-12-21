@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { subMonths } from 'date-fns';
-import BLLeftMenu from '@/components/bl-search/BLLeftMenu';
 import BLSearchStrip from '@/components/bl-search/BLSearchStrip';
 import BLRecentSearches from '@/components/bl-search/BLRecentSearches';
 import BLDataUpdates from '@/components/bl-search/BLDataUpdates';
@@ -25,22 +24,27 @@ const BLSearch: React.FC = () => {
     totalPages,
     paginatedResults,
     sortOrder,
-    toggleSortOrder
+    toggleSortOrder,
+    setMainKeyword,
+    setDateRange
   } = useBLSearch();
 
-  // Search strip state
+  // Search strip state (independent from filter panel)
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 12));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
 
   const handleSearch = () => {
-    // If searchKeyword is provided, add it to productName filter if not already
-    if (searchKeyword.trim()) {
-      const productFilter = filters.find(f => f.type === 'productName');
-      if (productFilter) {
-        updateFilter(productFilter.id, 'productName', searchKeyword);
-      }
-    }
+    // Pass main keyword and date range to search hook - DO NOT modify filters
+    setMainKeyword(searchKeyword);
+    setDateRange(startDate, endDate);
+    search();
+  };
+
+  const handleFilterPanelSearch = () => {
+    // Filter panel search uses date range but NOT main keyword
+    setMainKeyword('');
+    setDateRange(startDate, endDate);
     search();
   };
 
@@ -51,9 +55,6 @@ const BLSearch: React.FC = () => {
 
   return (
     <div className="h-[calc(100vh-3.5rem)] flex bg-background">
-      {/* Left Icon Menu */}
-      <BLLeftMenu />
-
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Search Strip */}
@@ -105,7 +106,7 @@ const BLSearch: React.FC = () => {
           onRemoveFilter={removeFilter}
           onUpdateFilter={updateFilter}
           onReset={resetFilters}
-          onSearch={handleSearch}
+          onSearch={handleFilterPanelSearch}
           validationError={validationError}
           isLoading={isLoading}
         />
