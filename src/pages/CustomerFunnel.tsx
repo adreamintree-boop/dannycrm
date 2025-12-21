@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Grid3X3, List, Bookmark, Trash2, Globe, MapPin, Youtube, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,18 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import BuyerDetailModal from '@/components/buyer/BuyerDetailModal';
 
 const CustomerFunnel: React.FC = () => {
-  const { getProjectBuyers, addBuyer, updateBuyerStatus, toggleBookmark, deleteBuyer, activeProjectId, buyers } = useApp();
+  const navigate = useNavigate();
+  const { getProjectBuyers, addBuyer, updateBuyerStatus, toggleBookmark, deleteBuyer, activeProjectId } = useApp();
   const projectBuyers = getProjectBuyers();
 
   const [activeFormTab, setActiveFormTab] = useState<'direct' | 'excel'>('direct');
   const [showBookmarked, setShowBookmarked] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -98,20 +97,7 @@ const CustomerFunnel: React.FC = () => {
     filteredBuyers.filter(b => b.status === status);
 
   const handleBuyerClick = (buyer: Buyer) => {
-    setSelectedBuyer(buyer);
-    setIsModalOpen(true);
-  };
-
-  const handleNavigateBuyer = (buyerId: string) => {
-    const buyer = projectBuyers.find(b => b.id === buyerId);
-    if (buyer) {
-      setSelectedBuyer(buyer);
-    }
-  };
-
-  const getBuyersInSameColumn = () => {
-    if (!selectedBuyer) return [];
-    return filteredBuyers.filter(b => b.status === selectedBuyer.status);
+    navigate(`/buyers/${buyer.id}`);
   };
 
   const handleDragStart = (e: React.DragEvent, buyerId: string) => {
@@ -377,18 +363,6 @@ const CustomerFunnel: React.FC = () => {
           })}
         </div>
       </div>
-
-      {/* Buyer Detail Modal */}
-      <BuyerDetailModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedBuyer(null);
-        }}
-        buyer={selectedBuyer}
-        buyersInColumn={getBuyersInSameColumn()}
-        onNavigate={handleNavigateBuyer}
-      />
     </div>
   );
 };
