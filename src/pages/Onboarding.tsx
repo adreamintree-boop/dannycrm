@@ -104,7 +104,7 @@ const Onboarding: React.FC = () => {
                 <Input
                   id="fullName"
                   type="text"
-                  placeholder="홍길동"
+                  placeholder="예) 홍길동"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="h-12 pl-10 text-base bg-muted/50 border-border"
@@ -123,7 +123,7 @@ const Onboarding: React.FC = () => {
                 <Input
                   id="companyName"
                   type="text"
-                  placeholder="주식회사 예시"
+                  placeholder="예) (주)트레이드잇"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   className="h-12 pl-10 text-base bg-muted/50 border-border"
@@ -142,7 +142,7 @@ const Onboarding: React.FC = () => {
                 <Input
                   id="department"
                   type="text"
-                  placeholder="영업팀"
+                  placeholder="예) 해외영업팀"
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   className="h-12 pl-10 text-base bg-muted/50 border-border"
