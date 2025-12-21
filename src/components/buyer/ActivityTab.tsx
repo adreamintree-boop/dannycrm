@@ -21,9 +21,10 @@ import {
 
 interface ActivityTabProps {
   buyer: Buyer;
+  onOpenDrawer: (mode: 'detail' | 'collection', activity?: Activity) => void;
 }
 
-const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
+const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
   const { getBuyerActivities, addActivity, deleteActivity, activeProjectId } = useApp();
   const activities = getBuyerActivities(buyer.id);
 
@@ -41,6 +42,14 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
     title: '',
     note: '',
   });
+
+  const handleActivityClick = (activity: Activity) => {
+    onOpenDrawer('detail', activity);
+  };
+
+  const handleCollectionClick = () => {
+    onOpenDrawer('collection', activities[0]);
+  };
 
   const today = new Date();
 
@@ -133,7 +142,7 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 relative">
       {/* Top Section: KPIs, Manager, Funnel Progress */}
       <div className="grid grid-cols-3 gap-6">
         {/* KPI Summary */}
@@ -251,7 +260,12 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
           <div className="text-xs text-muted-foreground">
             ※ 캘린더는 현재 날짜와 관계없이 가장 마지막에 등록된 영업활동일지가 속한 연월 기준으로 표시됩니다.
           </div>
-          <Button variant="outline" size="sm" className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center gap-2"
+            onClick={handleCollectionClick}
+          >
             <FileText className="w-4 h-4" />
             영업활동일지 모아보기
           </Button>
@@ -310,7 +324,8 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
           filteredActivities.map((activity) => (
             <div
               key={activity.id}
-              className="bg-blue-100 rounded-lg p-4 relative min-h-[180px] flex flex-col"
+              onClick={() => handleActivityClick(activity)}
+              className="bg-blue-100 rounded-lg p-4 relative min-h-[180px] flex flex-col cursor-pointer hover:bg-blue-200 transition-colors"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-blue-700 font-medium">{activity.createdAt}</span>
@@ -329,7 +344,10 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer }) => {
               <div className="flex items-center justify-between mt-auto pt-2">
                 <span className="text-sm text-blue-700">{activity.author}</span>
                 <button
-                  onClick={() => deleteActivity(activity.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteActivity(activity.id);
+                  }}
                   className="p-1 hover:bg-blue-200 rounded text-blue-600"
                 >
                   <Trash2 className="w-4 h-4" />
