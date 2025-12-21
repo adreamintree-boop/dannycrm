@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -22,30 +22,39 @@ export interface EmailMessage {
   created_at: string;
 }
 
-export interface EmailThread {
-  id: string;
-  owner_user_id: string;
-  subject: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface ComposeData {
   to: string;
   cc?: string;
   bcc?: string;
   subject: string;
   body: string;
-  replyToId?: string;
-  forwardFromId?: string;
 }
 
-export function useEmail() {
+interface EmailContextType {
+  messages: EmailMessage[];
+  loading: boolean;
+  unreadCount: number;
+  fetchMessages: (mailbox?: string) => Promise<void>;
+  fetchUnreadCount: () => Promise<void>;
+  getMessage: (id: string) => Promise<EmailMessage | null>;
+  markAsRead: (id: string) => Promise<void>;
+  toggleStar: (id: string) => Promise<void>;
+  deleteMessage: (id: string) => Promise<void>;
+  sendEmail: (data: ComposeData) => Promise<boolean>;
+  saveDraft: (data: ComposeData) => Promise<boolean>;
+  seedSampleEmails: () => Promise<void>;
+  logActivity: (action: string, messageId?: string, threadId?: string, meta?: Record<string, unknown>) => Promise<void>;
+}
+
+const EmailContext = createContext<EmailContextType | undefined>(undefined);
+
+export function EmailProvider({ children }: { children: ReactNode }) {
   const { user } = useAuthContext();
   const { toast } = useToast();
   const [messages, setMessages] = useState<EmailMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const hasSeededRef = useRef(false);
 
   const logActivity = useCallback(async (
     action: string,
@@ -155,7 +164,6 @@ export function useEmail() {
         .eq('id', id)
         .eq('owner_user_id', user.id);
 
-      await logActivity('mark_read', id);
       setMessages((prev) =>
         prev.map((msg) => (msg.id === id ? { ...msg, is_read: true } : msg))
       );
@@ -178,7 +186,6 @@ export function useEmail() {
         .eq('id', id)
         .eq('owner_user_id', user.id);
 
-      await logActivity('star', id, undefined, { starred: newStarred });
       setMessages((prev) =>
         prev.map((msg) => (msg.id === id ? { ...msg, is_starred: newStarred } : msg))
       );
@@ -206,7 +213,6 @@ export function useEmail() {
           .eq('owner_user_id', user.id);
       }
 
-      await logActivity('delete', id);
       setMessages((prev) => prev.filter((msg) => msg.id !== id));
       toast({
         title: '삭제됨',
@@ -222,7 +228,7 @@ export function useEmail() {
     }
   }, [user, messages, toast]);
 
-  const createThread = async (subject: string): Promise<string | null> => {
+  const createThread = useCallback(async (subject: string): Promise<string | null> => {
     if (!user) return null;
     try {
       const { data, error } = await supabase
@@ -240,7 +246,7 @@ export function useEmail() {
       console.error('Failed to create thread:', error);
       return null;
     }
-  };
+  }, [user]);
 
   const sendEmail = useCallback(async (composeData: ComposeData) => {
     if (!user) return false;
@@ -254,8 +260,7 @@ export function useEmail() {
     try {
       const threadId = await createThread(composeData.subject);
 
-      // Insert sent message for current user
-      const { data: sentMsg, error: sentError } = await supabase
+      const { error: sentError } = await supabase
         .from('email_messages')
         .insert({
           thread_id: threadId,
@@ -271,19 +276,12 @@ export function useEmail() {
           body: composeData.body,
           snippet,
           is_read: true,
-        })
-        .select('id')
-        .single();
+        });
 
       if (sentError) throw sentError;
 
-      await logActivity('send', sentMsg.id, threadId || undefined, {
-        to: toEmails,
-        subject: composeData.subject,
-      });
-
       // Insert simulated incoming message for testing
-      const { data: inboxMsg, error: inboxError } = await supabase
+      await supabase
         .from('email_messages')
         .insert({
           thread_id: threadId,
@@ -299,15 +297,7 @@ export function useEmail() {
           body: `This is a simulated auto-reply to your email:\n\n---\n${composeData.body}`,
           snippet: 'This is a simulated auto-reply...',
           is_read: false,
-        })
-        .select('id')
-        .single();
-
-      if (inboxError) throw inboxError;
-
-      await logActivity('compose', inboxMsg.id, threadId || undefined, {
-        simulated: true,
-      });
+        });
 
       toast({
         title: '전송 완료',
@@ -324,7 +314,7 @@ export function useEmail() {
       });
       return false;
     }
-  }, [user, toast]);
+  }, [user, toast, createThread]);
 
   const saveDraft = useCallback(async (composeData: ComposeData) => {
     if (!user) return false;
@@ -336,7 +326,7 @@ export function useEmail() {
     const snippet = composeData.body.substring(0, 100);
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('email_messages')
         .insert({
           owner_user_id: user.id,
@@ -351,13 +341,9 @@ export function useEmail() {
           body: composeData.body,
           snippet,
           is_read: true,
-        })
-        .select('id')
-        .single();
+        });
 
       if (error) throw error;
-
-      await logActivity('save_draft', data.id);
 
       toast({
         title: '저장됨',
@@ -377,7 +363,7 @@ export function useEmail() {
   }, [user, toast]);
 
   const seedSampleEmails = useCallback(async () => {
-    if (!user) return;
+    if (!user || hasSeededRef.current) return;
     
     try {
       const { count } = await supabase
@@ -385,7 +371,12 @@ export function useEmail() {
         .select('*', { count: 'exact', head: true })
         .eq('owner_user_id', user.id);
 
-      if (count && count > 0) return;
+      if (count && count > 0) {
+        hasSeededRef.current = true;
+        return;
+      }
+
+      hasSeededRef.current = true;
 
       const sampleEmails = [
         {
@@ -449,7 +440,7 @@ export function useEmail() {
     }
   }, [user, fetchUnreadCount]);
 
-  return {
+  const value: EmailContextType = {
     messages,
     loading,
     unreadCount,
@@ -464,4 +455,18 @@ export function useEmail() {
     seedSampleEmails,
     logActivity,
   };
+
+  return (
+    <EmailContext.Provider value={value}>
+      {children}
+    </EmailContext.Provider>
+  );
+}
+
+export function useEmailContext() {
+  const context = useContext(EmailContext);
+  if (context === undefined) {
+    throw new Error('useEmailContext must be used within an EmailProvider');
+  }
+  return context;
 }

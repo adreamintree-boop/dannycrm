@@ -1,29 +1,24 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import TopHeader from '@/components/layout/TopHeader';
 import EmailSidebar from '@/components/email/EmailSidebar';
 import EmailList from '@/components/email/EmailList';
 import EmailDetail from '@/components/email/EmailDetail';
 import EmailCompose from '@/components/email/EmailCompose';
-import { useEmail } from '@/hooks/useEmail';
+import { EmailProvider, useEmailContext } from '@/context/EmailContext';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 
-const EmailListView: React.FC<{ mailbox: string }> = ({ mailbox }) => {
-  const { messages, loading, fetchMessages, toggleStar, seedSampleEmails } = useEmail();
+function EmailListView({ mailbox }: { mailbox: string }) {
+  const { messages, loading, fetchMessages, toggleStar, seedSampleEmails } = useEmailContext();
   const [searchQuery, setSearchQuery] = useState('');
-  const hasSeedRef = useRef(false);
 
   useEffect(() => {
     fetchMessages(mailbox);
-  }, [mailbox, fetchMessages]);
-
-  useEffect(() => {
-    if (mailbox === 'inbox' && !hasSeedRef.current) {
-      hasSeedRef.current = true;
+    if (mailbox === 'inbox') {
       seedSampleEmails();
     }
-  }, [mailbox, seedSampleEmails]);
+  }, [mailbox, fetchMessages, seedSampleEmails]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: '받은편지함',
@@ -62,19 +57,19 @@ const EmailListView: React.FC<{ mailbox: string }> = ({ mailbox }) => {
       </div>
     </div>
   );
-};
+}
 
-const EmailSettingsView: React.FC = () => {
+function EmailSettingsView() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
       <p className="text-lg">이메일 설정</p>
       <p className="text-sm mt-2">설정 기능은 준비 중입니다.</p>
     </div>
   );
-};
+}
 
-const Email: React.FC = () => {
-  const { unreadCount, fetchUnreadCount } = useEmail();
+function EmailContent() {
+  const { unreadCount, fetchUnreadCount } = useEmailContext();
   const location = useLocation();
 
   useEffect(() => {
@@ -98,6 +93,12 @@ const Email: React.FC = () => {
       </div>
     </div>
   );
-};
+}
 
-export default Email;
+export default function Email() {
+  return (
+    <EmailProvider>
+      <EmailContent />
+    </EmailProvider>
+  );
+}

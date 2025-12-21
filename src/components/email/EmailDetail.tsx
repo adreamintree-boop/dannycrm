@@ -2,21 +2,22 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Reply, Forward, Trash2, Star } from 'lucide-react';
-import { useEmail, EmailMessage } from '@/hooks/useEmail';
+import { useEmailContext, EmailMessage } from '@/context/EmailContext';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
-const EmailDetail: React.FC = () => {
+export default function EmailDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getMessage, markAsRead, toggleStar, deleteMessage, logActivity } = useEmail();
+  const { getMessage, markAsRead, toggleStar, deleteMessage, logActivity } = useEmailContext();
   const [message, setMessage] = useState<EmailMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const hasLoggedRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
+    hasLoggedRef.current = false;
     
     const load = async () => {
       if (!id) return;
@@ -30,7 +31,6 @@ const EmailDetail: React.FC = () => {
         if (!msg.is_read) {
           markAsRead(id);
         }
-        // Only log once per mount
         if (!hasLoggedRef.current) {
           hasLoggedRef.current = true;
           logActivity('open', id, msg.thread_id || undefined);
@@ -162,6 +162,4 @@ const EmailDetail: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default EmailDetail;
+}
