@@ -1,7 +1,8 @@
 import React from 'react';
-import { User, FileText, Search } from 'lucide-react';
+import { FileText, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
+import ProfileDropdown from './ProfileDropdown';
 
 const TopHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -49,9 +50,7 @@ const TopHeader: React.FC = () => {
           <FileText className="w-4 h-4" />
           Strategy
         </Button>
-        <div className="w-9 h-9 rounded-full bg-accent flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity">
-          <User className="w-5 h-5 text-accent-foreground" />
-        </div>
+        <ProfileDropdown />
       </div>
     </header>
   );

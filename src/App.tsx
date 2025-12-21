@@ -9,6 +9,7 @@ import BLSearch from "./pages/BLSearch";
 import CompanyAggregation from "./pages/CompanyAggregation";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
+import MyProfile from "./pages/MyProfile";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -53,6 +54,11 @@ const App = () => (
               <Route path="/company-aggregation" element={
                 <ProtectedRoute>
                   <CompanyAggregation />
+                </ProtectedRoute>
+              } />
+              <Route path="/my-profile" element={
+                <ProtectedRoute>
+                  <MyProfile />
                 </ProtectedRoute>
               } />
             </Routes>

@@ -20,9 +20,14 @@ export type Database = {
           created_at: string
           department: string | null
           email: string | null
+          email_domain: string | null
+          email_local: string | null
           full_name: string | null
           id: string
           is_first_login: boolean
+          phone_country_code: string | null
+          phone_number: string | null
+          role_position: string | null
           updated_at: string
         }
         Insert: {
@@ -30,9 +35,14 @@ export type Database = {
           created_at?: string
           department?: string | null
           email?: string | null
+          email_domain?: string | null
+          email_local?: string | null
           full_name?: string | null
           id: string
           is_first_login?: boolean
+          phone_country_code?: string | null
+          phone_number?: string | null
+          role_position?: string | null
           updated_at?: string
         }
         Update: {
@@ -40,9 +50,14 @@ export type Database = {
           created_at?: string
           department?: string | null
           email?: string | null
+          email_domain?: string | null
+          email_local?: string | null
           full_name?: string | null
           id?: string
           is_first_login?: boolean
+          phone_country_code?: string | null
+          phone_number?: string | null
+          role_position?: string | null
           updated_at?: string
         }
         Relationships: []
