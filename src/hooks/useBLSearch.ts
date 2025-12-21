@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import { BLRecord, SearchFilter, searchBLData, FilterType } from '@/data/blMockData';
+import { BLRecord, SearchFilter, searchBLDataByCategory, FilterType } from '@/data/blMockData';
+import { SearchCategory } from '@/components/bl-search/BLSearchStrip';
 
 interface UseBLSearchReturn {
   // Filters (right panel)
@@ -12,6 +13,7 @@ interface UseBLSearchReturn {
   // Main keyword (top strip - independent from filters)
   setMainKeyword: (keyword: string) => void;
   setDateRange: (start: Date | undefined, end: Date | undefined) => void;
+  setSearchCategory: (category: SearchCategory) => void;
   
   // Search
   results: BLRecord[];
@@ -47,6 +49,7 @@ export function useBLSearch(): UseBLSearchReturn {
   // Main keyword state (top strip - independent from filters)
   const mainKeywordRef = useRef<string>('');
   const dateRangeRef = useRef<{ start?: Date; end?: Date }>({});
+  const searchCategoryRef = useRef<SearchCategory>('bl');
   
   // Search state
   const [results, setResults] = useState<BLRecord[]>([]);
@@ -69,6 +72,11 @@ export function useBLSearch(): UseBLSearchReturn {
   // Set date range
   const setDateRange = useCallback((start: Date | undefined, end: Date | undefined) => {
     dateRangeRef.current = { start, end };
+  }, []);
+
+  // Set search category
+  const setSearchCategory = useCallback((category: SearchCategory) => {
+    searchCategoryRef.current = category;
   }, []);
 
   // Filter management
@@ -102,9 +110,10 @@ export function useBLSearch(): UseBLSearchReturn {
     mainKeywordRef.current = '';
   }, []);
 
-  // Search function
+  // Search function with field-specific matching
   const search = useCallback(() => {
     const mainKeyword = mainKeywordRef.current.trim();
+    const category = searchCategoryRef.current;
     const hasValidFilter = filters.some(f => f.value.trim() !== '');
     
     // Validation: either mainKeyword or at least one filter must have value
@@ -119,26 +128,13 @@ export function useBLSearch(): UseBLSearchReturn {
 
     // Simulate async search (for future API integration)
     setTimeout(() => {
-      // Build effective filters: combine filter panel + main keyword
-      const effectiveFilters: SearchFilter[] = [];
+      // Build effective filters from filter panel
+      const panelFilters: SearchFilter[] = filters
+        .filter(f => f.value.trim())
+        .map(f => ({ ...f }));
       
-      // Add filter panel filters that have values
-      filters.forEach(f => {
-        if (f.value.trim()) {
-          effectiveFilters.push(f);
-        }
-      });
-      
-      // Add main keyword as productName search if provided
-      if (mainKeyword) {
-        effectiveFilters.push({
-          id: 'main-keyword',
-          type: 'productName',
-          value: mainKeyword
-        });
-      }
-      
-      let searchResults = searchBLData(effectiveFilters);
+      // Field-specific search: use category to determine which field to search
+      let searchResults = searchBLDataByCategory(mainKeyword, category, panelFilters);
       
       // Apply date range filter
       const { start, end } = dateRangeRef.current;
@@ -193,6 +189,7 @@ export function useBLSearch(): UseBLSearchReturn {
     resetFilters,
     setMainKeyword,
     setDateRange,
+    setSearchCategory,
     results,
     isLoading,
     hasSearched,

@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { cn } from '@/lib/utils';
 
-type TabType = 'product' | 'hscode' | 'company' | 'importer' | 'exporter' | 'bl';
+export type SearchCategory = 'product' | 'hscode' | 'importer' | 'exporter' | 'bl';
 
 interface Tab {
-  id: TabType;
+  id: SearchCategory;
   label: string;
   placeholder: string;
 }
@@ -16,10 +16,9 @@ interface Tab {
 const tabs: Tab[] = [
   { id: 'product', label: '제품', placeholder: '제품 이름 또는 설명을 입력하세요' },
   { id: 'hscode', label: 'HS 코드', placeholder: 'HS 코드를 입력하세요' },
-  { id: 'company', label: '회사', placeholder: '회사명을 입력하세요' },
-  { id: 'importer', label: '임포터', placeholder: '수입자명을 입력하세요' },
-  { id: 'exporter', label: '내보내기', placeholder: '수출자명을 입력하세요' },
-  { id: 'bl', label: 'B/L', placeholder: '제품 이름 또는 설명을 입력하세요' },
+  { id: 'importer', label: '수입자', placeholder: '수입자명을 입력하세요' },
+  { id: 'exporter', label: '수출자', placeholder: '수출자명을 입력하세요' },
+  { id: 'bl', label: 'B/L', placeholder: 'B/L 번호를 입력하세요' },
 ];
 
 interface BLSearchStripProps {
@@ -32,6 +31,8 @@ interface BLSearchStripProps {
   onSearch: () => void;
   onImport: () => void;
   isLoading: boolean;
+  searchCategory: SearchCategory;
+  onSearchCategoryChange: (category: SearchCategory) => void;
 }
 
 const BLSearchStrip: React.FC<BLSearchStripProps> = ({
@@ -43,11 +44,11 @@ const BLSearchStrip: React.FC<BLSearchStripProps> = ({
   onEndDateChange,
   onSearch,
   onImport,
-  isLoading
+  isLoading,
+  searchCategory,
+  onSearchCategoryChange
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('bl');
-
-  const currentPlaceholder = tabs.find(t => t.id === activeTab)?.placeholder || '';
+  const currentPlaceholder = tabs.find(t => t.id === searchCategory)?.placeholder || '';
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -73,16 +74,16 @@ const BLSearchStrip: React.FC<BLSearchStripProps> = ({
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => onSearchCategoryChange(tab.id)}
             className={cn(
               "px-4 py-2.5 text-sm font-medium transition-colors relative",
-              activeTab === tab.id
+              searchCategory === tab.id
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tab.label}
-            {activeTab === tab.id && (
+            {searchCategory === tab.id && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
             )}
           </button>

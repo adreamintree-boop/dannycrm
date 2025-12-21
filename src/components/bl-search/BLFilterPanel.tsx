@@ -21,8 +21,8 @@ interface BLFilterPanelProps {
 const filterTypeLabels: Record<FilterType, string> = {
   productName: '제품 설명',
   hsCode: 'HS 코드',
-  importer: '임포터',
-  exporter: '내보내기'
+  importer: '수입자',
+  exporter: '수출자'
 };
 
 const BLFilterPanel: React.FC<BLFilterPanelProps> = ({
