@@ -3,29 +3,15 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User } from 'lucide-
 import { Buyer, Activity, ActivityType, BuyerStatus } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 interface ActivityTabProps {
   buyer: Buyer;
-  onOpenDrawer: (mode: 'detail' | 'collection', activity?: Activity) => void;
+  onOpenDrawer: (mode: 'detail' | 'collection' | 'create', activity?: Activity, date?: Date) => void;
 }
 
 const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
-  const { getBuyerActivities, addActivity, deleteActivity, activeProjectId } = useApp();
+  const { getBuyerActivities, deleteActivity } = useApp();
   const activities = getBuyerActivities(buyer.id);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -34,13 +20,6 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
     'inquiry': true,
     'rfq': true,
     'quotation': true,
-  });
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [newActivity, setNewActivity] = useState({
-    type: 'pre-sales' as ActivityType,
-    title: '',
-    note: '',
   });
 
   const handleActivityClick = (activity: Activity) => {
@@ -102,28 +81,6 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
 
   const handleNextMonth = () => {
     setSelectedMonth(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1));
-  };
-
-  const handleAddActivity = () => {
-    if (!newActivity.title.trim()) return;
-
-    const activityDate = selectedDay 
-      ? new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), selectedDay)
-      : new Date();
-
-    addActivity({
-      projectId: activeProjectId,
-      buyerId: buyer.id,
-      type: newActivity.type,
-      title: newActivity.title,
-      note: newActivity.note,
-      createdAt: activityDate.toISOString().split('T')[0],
-      author: '관리자',
-    });
-
-    setNewActivity({ type: 'pre-sales', title: '', note: '' });
-    setShowAddForm(false);
-    setSelectedDay(null);
   };
 
   const statusLabels: { key: BuyerStatus; label: string; color: string }[] = [
@@ -288,8 +245,8 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
                   {!isDisabled && (
                     <button
                       onClick={() => {
-                        setSelectedDay(day);
-                        setShowAddForm(true);
+                        const clickedDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day);
+                        onOpenDrawer('create', undefined, clickedDate);
                       }}
                       className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs hover:bg-primary/90 mt-1"
                     >
@@ -361,65 +318,6 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
           </div>
         )}
       </div>
-
-      {/* Add Activity Dialog */}
-      <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>활동 등록</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {selectedDay && (
-              <div className="text-sm text-muted-foreground">
-                날짜: {selectedMonth.getFullYear()}.{String(selectedMonth.getMonth() + 1).padStart(2, '0')}.{String(selectedDay).padStart(2, '0')}
-              </div>
-            )}
-            <div>
-              <label className="text-sm font-medium">활동 유형</label>
-              <Select
-                value={newActivity.type}
-                onValueChange={(value) => setNewActivity({ ...newActivity, type: value as ActivityType })}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pre-sales">Pre-sales</SelectItem>
-                  <SelectItem value="inquiry">Inquiry</SelectItem>
-                  <SelectItem value="rfq">RFQ</SelectItem>
-                  <SelectItem value="quotation">Quotation</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">제목</label>
-              <Input
-                value={newActivity.title}
-                onChange={(e) => setNewActivity({ ...newActivity, title: e.target.value })}
-                placeholder="활동 제목 입력"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">메모</label>
-              <Input
-                value={newActivity.note}
-                onChange={(e) => setNewActivity({ ...newActivity, note: e.target.value })}
-                placeholder="메모 입력 (선택)"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowAddForm(false)}>
-              취소
-            </Button>
-            <Button onClick={handleAddActivity}>
-              등록
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

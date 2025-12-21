@@ -14,15 +14,17 @@ const BuyerDetail: React.FC = () => {
   
   const [activeTab, setActiveTab] = useState<'activity' | 'details'>('activity');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'detail' | 'collection'>('detail');
+  const [drawerMode, setDrawerMode] = useState<'detail' | 'collection' | 'create'>('detail');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [prefilledDate, setPrefilledDate] = useState<Date | null>(null);
 
   const buyer = buyers.find(b => b.id === buyerId);
   const activities = buyer ? getBuyerActivities(buyer.id) : [];
 
-  const handleOpenDrawer = (mode: 'detail' | 'collection', activity?: Activity) => {
+  const handleOpenDrawer = (mode: 'detail' | 'collection' | 'create', activity?: Activity, date?: Date) => {
     setDrawerMode(mode);
     setSelectedActivity(activity || activities[0] || null);
+    setPrefilledDate(date || null);
     setDrawerOpen(true);
   };
 
@@ -179,6 +181,7 @@ const BuyerDetail: React.FC = () => {
           mode={drawerMode}
           selectedActivity={selectedActivity}
           onSelectActivity={setSelectedActivity}
+          prefilledDate={prefilledDate}
         />
       </div>
     </div>
