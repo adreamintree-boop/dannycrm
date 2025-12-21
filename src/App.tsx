@@ -10,6 +10,8 @@ import CompanyAggregation from "./pages/CompanyAggregation";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import MyProfile from "./pages/MyProfile";
+import OnboardingSurvey from "./pages/OnboardingSurvey";
+import StrategyResult from "./pages/StrategyResult";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -59,6 +61,16 @@ const App = () => (
               <Route path="/my-profile" element={
                 <ProtectedRoute>
                   <MyProfile />
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding-survey" element={
+                <ProtectedRoute>
+                  <OnboardingSurvey />
+                </ProtectedRoute>
+              } />
+              <Route path="/strategy" element={
+                <ProtectedRoute>
+                  <StrategyResult />
                 </ProtectedRoute>
               } />
             </Routes>

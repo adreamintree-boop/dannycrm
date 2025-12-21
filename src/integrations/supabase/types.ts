@@ -14,6 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
+      company_products: {
+        Row: {
+          created_at: string
+          id: string
+          product_description: string | null
+          product_name: string
+          survey_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_description?: string | null
+          product_name: string
+          survey_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_description?: string | null
+          product_name?: string
+          survey_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_products_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "company_surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_surveys: {
+        Row: {
+          catalog_file_url: string | null
+          certifications: string[] | null
+          company_description: string | null
+          company_website: string | null
+          core_strengths: string | null
+          created_at: string
+          employee_count: string | null
+          existing_markets: string[] | null
+          export_experience: string | null
+          id: string
+          intro_file_url: string | null
+          target_regions: string[] | null
+          updated_at: string
+          user_id: string
+          year_founded: number | null
+        }
+        Insert: {
+          catalog_file_url?: string | null
+          certifications?: string[] | null
+          company_description?: string | null
+          company_website?: string | null
+          core_strengths?: string | null
+          created_at?: string
+          employee_count?: string | null
+          existing_markets?: string[] | null
+          export_experience?: string | null
+          id?: string
+          intro_file_url?: string | null
+          target_regions?: string[] | null
+          updated_at?: string
+          user_id: string
+          year_founded?: number | null
+        }
+        Update: {
+          catalog_file_url?: string | null
+          certifications?: string[] | null
+          company_description?: string | null
+          company_website?: string | null
+          core_strengths?: string | null
+          created_at?: string
+          employee_count?: string | null
+          existing_markets?: string[] | null
+          export_experience?: string | null
+          id?: string
+          intro_file_url?: string | null
+          target_regions?: string[] | null
+          updated_at?: string
+          user_id?: string
+          year_founded?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null

@@ -46,7 +46,7 @@ const TopHeader: React.FC = () => {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/strategy')}>
           <FileText className="w-4 h-4" />
           Strategy
         </Button>
