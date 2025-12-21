@@ -77,19 +77,21 @@ function EmailContent() {
   }, [location.pathname, fetchUnreadCount]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-background">
       <TopHeader />
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         <EmailSidebar unreadCount={unreadCount} />
-        <Routes>
-          <Route index element={<EmailListView mailbox="inbox" />} />
-          <Route path="sent" element={<EmailListView mailbox="sent" />} />
-          <Route path="drafts" element={<EmailListView mailbox="draft" />} />
-          <Route path="all" element={<EmailListView mailbox="all" />} />
-          <Route path="settings" element={<EmailSettingsView />} />
-          <Route path="compose" element={<EmailCompose />} />
-          <Route path=":id" element={<EmailDetail />} />
-        </Routes>
+        <main className="flex-1 flex flex-col min-h-0 overflow-auto bg-background">
+          <Routes>
+            <Route index element={<EmailListView mailbox="inbox" />} />
+            <Route path="sent" element={<EmailListView mailbox="sent" />} />
+            <Route path="drafts" element={<EmailListView mailbox="draft" />} />
+            <Route path="all" element={<EmailListView mailbox="all" />} />
+            <Route path="settings" element={<EmailSettingsView />} />
+            <Route path="compose" element={<EmailCompose />} />
+            <Route path=":id" element={<EmailDetail />} />
+          </Routes>
+        </main>
       </div>
     </div>
   );
