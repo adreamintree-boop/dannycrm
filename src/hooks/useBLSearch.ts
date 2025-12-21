@@ -19,7 +19,7 @@ interface UseBLSearchReturn {
   results: BLRecord[];
   isLoading: boolean;
   hasSearched: boolean;
-  search: () => void;
+  search: (onCreditCheck?: (resultCount: number, searchMeta: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>) => void;
   validationError: string | null;
   
   // Pagination
@@ -32,6 +32,9 @@ interface UseBLSearchReturn {
   // Sorting
   sortOrder: 'asc' | 'desc';
   toggleSortOrder: () => void;
+  
+  // Search meta for credits
+  getSearchMeta: () => Record<string, unknown>;
 }
 
 const generateFilterId = () => `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -79,6 +82,20 @@ export function useBLSearch(): UseBLSearchReturn {
     searchCategoryRef.current = category;
   }, []);
 
+  // Get search meta for credit logging
+  const getSearchMeta = useCallback(() => {
+    const { start, end } = dateRangeRef.current;
+    return {
+      keyword: mainKeywordRef.current,
+      category: searchCategoryRef.current,
+      filters: filters.filter(f => f.value.trim()).map(f => ({ type: f.type, value: f.value })),
+      dateRange: {
+        start: start?.toISOString(),
+        end: end?.toISOString(),
+      },
+    };
+  }, [filters]);
+
   // Filter management
   const addFilter = useCallback(() => {
     setFilters(prev => [...prev, createDefaultFilter()]);
@@ -110,8 +127,10 @@ export function useBLSearch(): UseBLSearchReturn {
     mainKeywordRef.current = '';
   }, []);
 
-  // Search function with field-specific matching
-  const search = useCallback(() => {
+  // Search function with field-specific matching and credit callback
+  const search = useCallback(async (
+    onCreditCheck?: (resultCount: number, searchMeta: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  ) => {
     const mainKeyword = mainKeywordRef.current.trim();
     const category = searchCategoryRef.current;
     const hasValidFilter = filters.some(f => f.value.trim() !== '');
@@ -126,38 +145,55 @@ export function useBLSearch(): UseBLSearchReturn {
     setIsLoading(true);
     setHasSearched(true);
 
-    // Simulate async search (for future API integration)
-    setTimeout(() => {
-      // Build effective filters from filter panel
-      const panelFilters: SearchFilter[] = filters
-        .filter(f => f.value.trim())
-        .map(f => ({ ...f }));
-      
-      // Field-specific search: use category to determine which field to search
-      let searchResults = searchBLDataByCategory(mainKeyword, category, panelFilters);
-      
-      // Apply date range filter
-      const { start, end } = dateRangeRef.current;
-      if (start || end) {
-        searchResults = searchResults.filter(record => {
-          const recordDate = new Date(record.date);
-          if (start && recordDate < start) return false;
-          if (end && recordDate > end) return false;
-          return true;
-        });
-      }
-      
-      // Sort by date
-      const sortedResults = [...searchResults].sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    // Build effective filters from filter panel
+    const panelFilters: SearchFilter[] = filters
+      .filter(f => f.value.trim())
+      .map(f => ({ ...f }));
+    
+    // Field-specific search: use category to determine which field to search
+    let searchResults = searchBLDataByCategory(mainKeyword, category, panelFilters);
+    
+    // Apply date range filter
+    const { start, end } = dateRangeRef.current;
+    if (start || end) {
+      searchResults = searchResults.filter(record => {
+        const recordDate = new Date(record.date);
+        if (start && recordDate < start) return false;
+        if (end && recordDate > end) return false;
+        return true;
       });
+    }
+
+    // If credit check callback provided, check credits before returning results
+    if (onCreditCheck && searchResults.length > 0) {
+      const searchMeta = {
+        keyword: mainKeyword,
+        category,
+        filters: panelFilters.map(f => ({ type: f.type, value: f.value })),
+        dateRange: { start: start?.toISOString(), end: end?.toISOString() },
+        result_count: searchResults.length,
+      };
+
+      const creditResult = await onCreditCheck(searchResults.length, searchMeta);
       
-      setResults(sortedResults);
-      setCurrentPage(1);
-      setIsLoading(false);
-    }, 300);
+      if (!creditResult.success) {
+        setIsLoading(false);
+        setValidationError(creditResult.error || '크레딧이 부족합니다.');
+        setResults([]);
+        return;
+      }
+    }
+    
+    // Sort by date
+    const sortedResults = [...searchResults].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
+    
+    setResults(sortedResults);
+    setCurrentPage(1);
+    setIsLoading(false);
   }, [filters, sortOrder]);
 
   // Toggle sort order
@@ -201,6 +237,7 @@ export function useBLSearch(): UseBLSearchReturn {
     totalPages,
     paginatedResults,
     sortOrder,
-    toggleSortOrder
+    toggleSortOrder,
+    getSearchMeta
   };
 }

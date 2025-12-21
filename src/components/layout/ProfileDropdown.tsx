@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, LogOut, User } from 'lucide-react';
+import { Settings, LogOut, User, Coins } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -9,11 +9,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuthContext } from '@/context/AuthContext';
+import { useCreditsContext } from '@/context/CreditsContext';
 import { toast } from '@/hooks/use-toast';
 
 const ProfileDropdown: React.FC = () => {
   const navigate = useNavigate();
   const { signOut, profile } = useAuthContext();
+  const { balance, isLoading: isCreditsLoading } = useCreditsContext();
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -55,6 +57,16 @@ const ProfileDropdown: React.FC = () => {
             <DropdownMenuSeparator />
           </>
         )}
+        
+        {/* Credits Display */}
+        <div className="px-3 py-2 flex items-center gap-2">
+          <Coins className="w-4 h-4 text-primary" />
+          <span className="text-sm text-foreground">
+            Credits: {isCreditsLoading ? '...' : balance.toLocaleString()}
+          </span>
+        </div>
+        <DropdownMenuSeparator />
+        
         <DropdownMenuItem onClick={handleSettings} className="cursor-pointer">
           <Settings className="w-4 h-4 mr-2" />
           Setting

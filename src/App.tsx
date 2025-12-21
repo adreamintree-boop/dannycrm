@@ -15,6 +15,7 @@ import StrategyResult from "./pages/StrategyResult";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 import { AuthProvider } from "./context/AuthContext";
+import { CreditsProvider } from "./context/CreditsContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -26,7 +27,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppProvider>
+          <CreditsProvider>
+            <AppProvider>
             <Routes>
               {/* Public routes */}
               <Route path="/auth" element={<Auth />} />
@@ -74,7 +76,8 @@ const App = () => (
                 </ProtectedRoute>
               } />
             </Routes>
-          </AppProvider>
+            </AppProvider>
+          </CreditsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

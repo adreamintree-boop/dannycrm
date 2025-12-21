@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TopHeader from '@/components/layout/TopHeader';
 import { useCompanySurvey, CompanySurvey } from '@/hooks/useCompanySurvey';
+import { useCreditsContext } from '@/context/CreditsContext';
 
 // Mock AI strategy generator (placeholder for future AI integration)
 function generateMockStrategy(survey: CompanySurvey): string {
@@ -156,22 +157,56 @@ ${survey.core_strengths ? `- ${survey.core_strengths}` : '- 제품 강점 분석
 const StrategyResult: React.FC = () => {
   const navigate = useNavigate();
   const { survey, isLoading, hasSurvey } = useCompanySurvey();
+  const { deductStrategyCredits, refreshBalance, balance } = useCreditsContext();
   const [strategyContent, setStrategyContent] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const hasDeductedCredits = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && hasSurvey) {
+    const generateStrategy = async () => {
+      if (isLoading || !hasSurvey || hasDeductedCredits.current) return;
+      
+      hasDeductedCredits.current = true;
       setIsGenerating(true);
-      // Simulate AI generation delay
+      setCreditError(null);
+
+      // Deduct credits first
+      const strategyMeta = {
+        product_name: survey.products[0]?.product_name || 'Unknown',
+        target_regions: survey.target_regions,
+        export_experience: survey.export_experience,
+      };
+
+      const creditResult = await deductStrategyCredits(strategyMeta);
+
+      if (!creditResult.success) {
+        setCreditError(creditResult.error || '크레딧이 부족합니다. (필요: 10)');
+        toast({
+          variant: 'destructive',
+          title: '크레딧 부족',
+          description: creditResult.error || '크레딧이 부족합니다. (필요: 10)',
+        });
+        setIsGenerating(false);
+        return;
+      }
+
+      // Refresh balance after deduction
+      await refreshBalance();
+
+      // Generate strategy after successful credit deduction
       const timer = setTimeout(() => {
         const content = generateMockStrategy(survey);
         setStrategyContent(content);
         setIsGenerating(false);
       }, 1500);
+
       return () => clearTimeout(timer);
-    }
-  }, [isLoading, hasSurvey, survey]);
+    };
+
+    generateStrategy();
+  }, [isLoading, hasSurvey, survey, deductStrategyCredits, refreshBalance]);
 
   const handleCopy = async () => {
     try {
@@ -208,6 +243,29 @@ const StrategyResult: React.FC = () => {
             </p>
             <Button onClick={() => navigate('/onboarding-survey')}>
               Onboarding Survey 작성하기
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (creditError) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <TopHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md p-8">
+            <FileText className="w-16 h-16 text-destructive mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-foreground mb-2">크레딧 부족</h2>
+            <p className="text-muted-foreground mb-2">
+              {creditError}
+            </p>
+            <p className="text-sm text-muted-foreground mb-6">
+              현재 보유 크레딧: {balance}
+            </p>
+            <Button variant="outline" onClick={() => navigate(-1)}>
+              돌아가기
             </Button>
           </div>
         </div>

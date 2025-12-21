@@ -1,1 +1,10 @@
 project_id = "qazycmfhcopyihnycbkb"
+
+[functions.bl-search]
+verify_jwt = true
+
+[functions.strategy-credits]
+verify_jwt = true
+
+[functions.get-credits]
+verify_jwt = true
