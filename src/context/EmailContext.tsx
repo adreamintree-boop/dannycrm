@@ -19,6 +19,7 @@ export interface EmailMessage {
   snippet: string | null;
   is_read: boolean;
   is_starred: boolean;
+  is_logged_to_crm: boolean;
   created_at: string;
 }
 
@@ -44,6 +45,7 @@ interface EmailContextType {
   saveDraft: (data: ComposeData) => Promise<boolean>;
   seedSampleEmails: () => Promise<void>;
   logActivity: (action: string, messageId?: string, threadId?: string, meta?: Record<string, unknown>) => Promise<void>;
+  logEmailToCRM: (messageId: string) => Promise<{ success: boolean; buyerName?: string; isUnassigned?: boolean }>;
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined);
@@ -434,6 +436,149 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchMessages, fetchUnreadCount]);
 
+  // Free email domains to ignore for domain matching
+  const FREE_EMAIL_DOMAINS = ['gmail.com', 'outlook.com', 'yahoo.com', 'hotmail.com', 'naver.com', 'daum.net', 'hanmail.net', 'kakao.com'];
+
+  const extractDomain = (email: string): string | null => {
+    const match = email.match(/@([^@]+)$/);
+    return match ? match[1].toLowerCase() : null;
+  };
+
+  const logEmailToCRM = useCallback(async (messageId: string): Promise<{ success: boolean; buyerName?: string; isUnassigned?: boolean }> => {
+    if (!user) return { success: false };
+
+    try {
+      // Get the email message
+      const { data: emailData, error: emailError } = await supabase
+        .from('email_messages')
+        .select('*')
+        .eq('id', messageId)
+        .eq('owner_user_id', user.id)
+        .maybeSingle();
+
+      if (emailError || !emailData) {
+        throw new Error('Email not found');
+      }
+
+      if (emailData.is_logged_to_crm) {
+        toast({
+          title: '이미 기록됨',
+          description: '이 이메일은 이미 CRM에 저장되었습니다.',
+        });
+        return { success: false };
+      }
+
+      // Get user's active project
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const projectId = projectData?.id || null;
+
+      // Determine email to match based on direction
+      const isInbound = emailData.direction === 'inbound' || emailData.mailbox === 'inbox';
+      const toEmailsArray = Array.isArray(emailData.to_emails) ? emailData.to_emails.map(String) : [];
+      const matchEmail = isInbound ? emailData.from_email : (toEmailsArray[0] || '');
+      const matchName = isInbound ? emailData.from_name : null;
+      const matchDomain = extractDomain(String(matchEmail));
+
+      // Skip domain matching for free email domains
+      const shouldMatchDomain = matchDomain && !FREE_EMAIL_DOMAINS.includes(matchDomain);
+
+      // Find matching buyers
+      let matchedBuyer: { id: string; company_name: string } | null = null;
+
+      if (projectId) {
+        const { data: buyers } = await supabase
+          .from('crm_buyers')
+          .select('id, company_name')
+          .eq('user_id', user.id);
+
+        if (buyers && buyers.length > 0) {
+          // Try to find exact match by company name
+          if (matchName) {
+            const nameMatch = buyers.find(b => 
+              b.company_name.toLowerCase().includes(matchName.toLowerCase()) ||
+              matchName.toLowerCase().includes(b.company_name.toLowerCase())
+            );
+            if (nameMatch) {
+              matchedBuyer = nameMatch;
+            }
+          }
+
+          // If no name match and domain is valid, try domain matching
+          if (!matchedBuyer && shouldMatchDomain) {
+            const domainMatches = buyers.filter(b => 
+              b.company_name.toLowerCase().includes(matchDomain.split('.')[0])
+            );
+            if (domainMatches.length === 1) {
+              matchedBuyer = domainMatches[0];
+            }
+          }
+        }
+      }
+
+      // Create activity log entry
+      const direction = isInbound ? 'inbound' : 'outbound';
+      const toEmailsList = Array.isArray(emailData.to_emails) ? emailData.to_emails : [];
+      const content = `보낸사람: ${emailData.from_name || emailData.from_email}\n받는사람: ${toEmailsList.join(', ')}\n날짜: ${emailData.created_at}\n\n${emailData.snippet || emailData.body?.substring(0, 200) || ''}`;
+
+      const { error: insertError } = await supabase
+        .from('sales_activity_logs')
+        .insert({
+          project_id: projectId,
+          buyer_id: matchedBuyer?.id || null,
+          source: 'email',
+          direction,
+          title: emailData.subject,
+          content,
+          email_message_id: messageId,
+          occurred_at: emailData.created_at,
+          created_by: user.id,
+        });
+
+      if (insertError) throw insertError;
+
+      // Mark email as logged
+      await supabase
+        .from('email_messages')
+        .update({ is_logged_to_crm: true })
+        .eq('id', messageId)
+        .eq('owner_user_id', user.id);
+
+      // Update local state
+      setMessages(prev =>
+        prev.map(msg => msg.id === messageId ? { ...msg, is_logged_to_crm: true } : msg)
+      );
+
+      if (matchedBuyer) {
+        toast({
+          title: 'CRM 기록 완료',
+          description: `${matchedBuyer.company_name}에 연결되었습니다.`,
+        });
+        return { success: true, buyerName: matchedBuyer.company_name, isUnassigned: false };
+      } else {
+        toast({
+          title: 'CRM 기록 완료 (미배정)',
+          description: '바이어 매칭이 되지 않아 미배정으로 저장되었습니다. Customer Funnel에서 연결하세요.',
+        });
+        return { success: true, isUnassigned: true };
+      }
+    } catch (error) {
+      console.error('Failed to log email to CRM:', error);
+      toast({
+        title: '오류',
+        description: 'CRM 기록에 실패했습니다.',
+        variant: 'destructive',
+      });
+      return { success: false };
+    }
+  }, [user, toast]);
+
   useEffect(() => {
     if (user) {
       fetchUnreadCount();
@@ -454,6 +599,7 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     saveDraft,
     seedSampleEmails,
     logActivity,
+    logEmailToCRM,
   };
 
   return (

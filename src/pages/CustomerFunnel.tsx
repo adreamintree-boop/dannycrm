@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Grid3X3, List, Bookmark, Trash2, Globe, MapPin, Youtube, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, Grid3X3, List, Bookmark, Trash2, Globe, MapPin, Youtube, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useApp } from '@/context/AppContext';
 import { getFlagEmoji, countries, BuyerStatus, Buyer } from '@/data/mockData';
+import { useSalesActivityLogs } from '@/hooks/useSalesActivityLogs';
 import {
   Select,
   SelectContent,
@@ -16,13 +17,22 @@ import {
 
 const CustomerFunnel: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { getProjectBuyers, addBuyer, updateBuyerStatus, toggleBookmark, deleteBuyer, activeProjectId } = useApp();
+  const { logs: unassignedLogs, fetchUnassignedLogs } = useSalesActivityLogs();
   const projectBuyers = getProjectBuyers();
 
   const [activeFormTab, setActiveFormTab] = useState<'direct' | 'excel'>('direct');
   const [showBookmarked, setShowBookmarked] = useState(false);
+  const [showUnassignedEmails, setShowUnassignedEmails] = useState(searchParams.get('unassigned') === 'true');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  useEffect(() => {
+    if (showUnassignedEmails) {
+      fetchUnassignedLogs();
+    }
+  }, [showUnassignedEmails, fetchUnassignedLogs]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -241,6 +251,17 @@ const CustomerFunnel: React.FC = () => {
       <div className="flex-1 min-w-0">
         {/* Controls */}
         <div className="flex items-center justify-end gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="unassigned-emails"
+              checked={showUnassignedEmails}
+              onCheckedChange={(checked) => setShowUnassignedEmails(checked as boolean)}
+            />
+            <label htmlFor="unassigned-emails" className="text-sm text-muted-foreground cursor-pointer flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              미배정 이메일 ({unassignedLogs.length})
+            </label>
+          </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="bookmark"

@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User, Mail, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { Buyer, Activity, ActivityType, BuyerStatus } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useSalesActivityLogs, SalesActivityLog } from '@/hooks/useSalesActivityLogs';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 interface ActivityTabProps {
   buyer: Buyer;
@@ -13,6 +16,11 @@ interface ActivityTabProps {
 const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
   const { getBuyerActivities, deleteActivity } = useApp();
   const activities = getBuyerActivities(buyer.id);
+  const { logs: emailLogs, loading: emailLogsLoading, fetchLogsByBuyer } = useSalesActivityLogs();
+
+  useEffect(() => {
+    fetchLogsByBuyer(buyer.id);
+  }, [buyer.id, fetchLogsByBuyer]);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [filters, setFilters] = useState<Record<ActivityType, boolean>>({
@@ -318,6 +326,55 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
           </div>
         )}
       </div>
+
+      {/* Email Logs Section */}
+      {emailLogs.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Mail className="w-5 h-5" />
+            이메일 기록
+            <span className="text-sm font-normal text-muted-foreground">({emailLogs.length})</span>
+          </h3>
+          <div className="space-y-3">
+            {emailLogs.map((log) => (
+              <div
+                key={log.id}
+                className="bg-card border border-border rounded-lg p-4 hover:shadow-sm transition-shadow"
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    log.direction === 'inbound' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
+                  }`}>
+                    {log.direction === 'inbound' ? (
+                      <ArrowDownLeft className="w-4 h-4" />
+                    ) : (
+                      <ArrowUpRight className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-foreground truncate">{log.title}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        log.direction === 'inbound' 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {log.direction === 'inbound' ? '수신' : '발신'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">
+                      {log.content}
+                    </p>
+                    <div className="text-xs text-muted-foreground mt-2">
+                      {format(new Date(log.occurred_at), 'yyyy년 M월 d일 a h:mm', { locale: ko })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
