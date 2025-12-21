@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Reply, Forward, Trash2, Star } from 'lucide-react';
@@ -13,22 +13,37 @@ const EmailDetail: React.FC = () => {
   const { getMessage, markAsRead, toggleStar, deleteMessage, logActivity } = useEmail();
   const [message, setMessage] = useState<EmailMessage | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoggedRef = useRef(false);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const load = async () => {
       if (!id) return;
       setLoading(true);
       const msg = await getMessage(id);
+      
+      if (!isMounted) return;
+      
       if (msg) {
         setMessage(msg);
         if (!msg.is_read) {
           markAsRead(id);
         }
-        logActivity('open', id, msg.thread_id || undefined);
+        // Only log once per mount
+        if (!hasLoggedRef.current) {
+          hasLoggedRef.current = true;
+          logActivity('open', id, msg.thread_id || undefined);
+        }
       }
       setLoading(false);
     };
+    
     load();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [id, getMessage, markAsRead, logActivity]);
 
   const handleReply = () => {
