@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { subMonths } from 'date-fns';
 import BLSearchStrip, { SearchCategory } from '@/components/bl-search/BLSearchStrip';
 import BLRecentSearches from '@/components/bl-search/BLRecentSearches';
@@ -6,6 +6,8 @@ import BLDataUpdates from '@/components/bl-search/BLDataUpdates';
 import BLResultsTable from '@/components/bl-search/BLResultsTable';
 import BLFilterPanel from '@/components/bl-search/BLFilterPanel';
 import { useBLSearch } from '@/hooks/useBLSearch';
+import { useCreditsContext } from '@/context/CreditsContext';
+import { toast } from '@/hooks/use-toast';
 
 const BLSearch: React.FC = () => {
   const {
@@ -30,6 +32,8 @@ const BLSearch: React.FC = () => {
     setSearchCategory
   } = useBLSearch();
 
+  const { deductBLSearchCredits, refreshBalance } = useCreditsContext();
+
   // Search strip state (independent from filter panel)
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 12));
@@ -41,19 +45,40 @@ const BLSearch: React.FC = () => {
     setSearchCategory(category);
   };
 
+  // Credit check callback for search
+  const handleCreditCheck = useCallback(async (
+    resultCount: number,
+    searchMeta: Record<string, unknown>
+  ): Promise<{ success: boolean; error?: string }> => {
+    const result = await deductBLSearchCredits(resultCount, searchMeta);
+    
+    if (!result.success) {
+      toast({
+        variant: 'destructive',
+        title: '크레딧 부족',
+        description: result.error || '크레딧이 부족합니다.',
+      });
+      return { success: false, error: result.error };
+    }
+    
+    // Refresh balance after successful deduction
+    await refreshBalance();
+    return { success: true };
+  }, [deductBLSearchCredits, refreshBalance]);
+
   const handleSearch = () => {
     // Pass main keyword, category, and date range to search hook - DO NOT modify filters
     setMainKeyword(searchKeyword);
     setSearchCategory(searchCategory);
     setDateRange(startDate, endDate);
-    search();
+    search(handleCreditCheck);
   };
 
   const handleFilterPanelSearch = () => {
     // Filter panel search uses date range but NOT main keyword
     setMainKeyword('');
     setDateRange(startDate, endDate);
-    search();
+    search(handleCreditCheck);
   };
 
   const handleImport = () => {

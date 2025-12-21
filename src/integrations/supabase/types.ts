@@ -100,6 +100,36 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_ledger: {
+        Row: {
+          action_type: Database["public"]["Enums"]["credit_action_type"]
+          amount: number
+          created_at: string
+          id: string
+          meta: Json | null
+          request_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: Database["public"]["Enums"]["credit_action_type"]
+          amount: number
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          request_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: Database["public"]["Enums"]["credit_action_type"]
+          amount?: number
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          request_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       crm_buyers: {
         Row: {
           activity_count: number
@@ -225,15 +255,47 @@ export type Database = {
         }
         Relationships: []
       }
+      user_credits: {
+        Row: {
+          balance: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      deduct_credits: {
+        Args: {
+          p_action_type: Database["public"]["Enums"]["credit_action_type"]
+          p_amount: number
+          p_meta?: Json
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: {
+          error_message: string
+          new_balance: number
+          success: boolean
+        }[]
+      }
+      get_credit_balance: { Args: { p_user_id: string }; Returns: number }
     }
     Enums: {
-      [_ in never]: never
+      credit_action_type: "INIT_GRANT" | "BL_SEARCH" | "STRATEGY"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -360,6 +422,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      credit_action_type: ["INIT_GRANT", "BL_SEARCH", "STRATEGY"],
+    },
   },
 } as const
