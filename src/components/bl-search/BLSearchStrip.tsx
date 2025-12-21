@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { Search, SlidersHorizontal, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { format } from 'date-fns';
+import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { cn } from '@/lib/utils';
 
 type TabType = 'product' | 'hscode' | 'company' | 'importer' | 'exporter' | 'bl';
@@ -105,40 +103,20 @@ const BLSearchStrip: React.FC<BLSearchStripProps> = ({
           />
         </div>
 
-        {/* Date Pickers */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="h-10 w-[130px] justify-start font-normal">
-              {startDate ? format(startDate, 'yyyy-MM-dd') : '시작일'}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={startDate}
-              onSelect={onStartDateChange}
-              initialFocus
-              className="pointer-events-auto"
-            />
-          </PopoverContent>
-        </Popover>
+        {/* Date Pickers with 3-year rolling restriction */}
+        <EnhancedDatePicker
+          date={startDate}
+          onDateChange={onStartDateChange}
+          placeholder="시작일"
+          maxDate={endDate}
+        />
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="h-10 w-[130px] justify-start font-normal">
-              {endDate ? format(endDate, 'yyyy-MM-dd') : '종료일'}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={endDate}
-              onSelect={onEndDateChange}
-              initialFocus
-              className="pointer-events-auto"
-            />
-          </PopoverContent>
-        </Popover>
+        <EnhancedDatePicker
+          date={endDate}
+          onDateChange={onEndDateChange}
+          placeholder="종료일"
+          minDate={startDate}
+        />
 
         {/* Action Buttons */}
         <Button variant="outline" size="icon" className="h-10 w-10">
