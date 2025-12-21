@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, MapPin, Globe, ExternalLink } from 'lucide-react';
+import { X, MapPin, ExternalLink } from 'lucide-react';
 import { Buyer, Activity, ActivityType } from '@/data/mockData';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -67,22 +67,25 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
     'https://via.placeholder.com/150x120?text=Product+3',
   ];
 
-  if (!isOpen) return null;
-
   return (
     <>
-      {/* Overlay inside modal */}
+      {/* Overlay - covers entire buyer detail screen */}
       <div 
-        className="absolute inset-0 bg-black/30 z-10 transition-opacity duration-300"
+        className={`absolute inset-0 bg-black/40 z-10 transition-opacity duration-300 ease-in-out ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
         onClick={onClose}
       />
 
-      {/* Drawer */}
+      {/* Drawer - slides from right */}
       <div 
         className={`absolute top-0 right-0 h-full bg-background shadow-2xl z-20 transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
-        style={{ width: mode === 'detail' ? '75%' : '65%' }}
+        style={{ 
+          width: 'min(1400px, 80%)',
+          minWidth: '1100px',
+        }}
       >
         {/* Drawer Header */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-4 flex items-center justify-between">
@@ -121,6 +124,7 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({
             />
           ) : (
             <CollectionView
+              buyer={buyer}
               activities={sortedActivities}
               filters={filters}
               setFilters={setFilters}
@@ -157,8 +161,8 @@ const DetailView: React.FC<DetailViewProps> = ({
 }) => {
   return (
     <div className="flex h-full">
-      {/* Left Column: Activity List */}
-      <div className="w-64 border-r border-border bg-muted/30 flex flex-col">
+      {/* Left Column: Activity List - fixed width 300px */}
+      <div className="w-[300px] shrink-0 border-r border-border bg-muted/30 flex flex-col">
         {/* Filters */}
         <div className="p-4 border-b border-border">
           <div className="flex flex-wrap gap-3">
@@ -283,8 +287,8 @@ const DetailView: React.FC<DetailViewProps> = ({
         </ScrollArea>
       </div>
 
-      {/* Right Column: Buyer Info Panel */}
-      <div className="w-72 border-l border-border bg-muted/20 flex flex-col">
+      {/* Right Column: Buyer Info Panel - fixed width 400px */}
+      <div className="w-[400px] shrink-0 border-l border-border bg-muted/20 flex flex-col">
         {/* Tabs */}
         <div className="flex border-b border-border">
           <button className="flex-1 py-3 text-sm font-medium text-primary border-b-2 border-primary">
@@ -308,61 +312,61 @@ const DetailView: React.FC<DetailViewProps> = ({
               </div>
             </div>
 
-            {/* Buyer Fields */}
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">☆ 고객등급</span>
+            {/* Buyer Fields - wider labels for better readability */}
+            <div className="space-y-4 text-sm">
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">☆ 고객등급</span>
                 <span className="font-medium capitalize">level 2 · {buyer.status}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">🏢 바이어 기업명</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🏢 바이어 기업명</span>
                 <span className="font-medium">{buyer.name}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">🌍 대륙</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🌍 대륙</span>
                 <span className="text-primary">아시아</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">📍 세부지역</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📍 세부지역</span>
                 <span className="text-primary">동남아시아</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">🏳️ 국가</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🏳️ 국가</span>
                 <span>{buyer.country}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">🕐 실시간 현지시간</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🕐 실시간 현지시간</span>
                 <span>{new Date().toLocaleString('ko-KR')}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">📮 주소</span>
-                <span>{buyer.address || '37 Jalan Pemimpin #06-09 MAPEX Building Singapore 577177'}</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📮 주소</span>
+                <span className="break-words">{buyer.address || '37 Jalan Pemimpin #06-09 MAPEX Building Singapore 577177'}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">🌐 웹사이트</span>
-                <a href={buyer.websiteUrl || '#'} className="text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
-                  {buyer.websiteUrl ? buyer.websiteUrl.slice(0, 30) + '...' : '-'}
-                  <ExternalLink className="w-3 h-3" />
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🌐 웹사이트</span>
+                <a href={buyer.websiteUrl || '#'} className="text-primary hover:underline flex items-center gap-1 break-all" target="_blank" rel="noopener noreferrer">
+                  {buyer.websiteUrl || '-'}
+                  {buyer.websiteUrl && <ExternalLink className="w-3 h-3 shrink-0" />}
                 </a>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">💰 매출액</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">💰 매출액</span>
                 <span>$ -</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">📦 주요품목</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📦 주요품목</span>
                 <span>-</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">📞 대표 연락처</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📞 대표 연락처</span>
                 <span>{buyer.phone || '-'}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">✉️ 대표 이메일</span>
-                <span>{buyer.email || '-'}</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">✉️ 대표 이메일</span>
+                <span className="break-all">{buyer.email || '-'}</span>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="text-muted-foreground w-20 shrink-0">♡ SNS</span>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">♡ SNS</span>
                 <span>-</span>
               </div>
             </div>
@@ -374,6 +378,7 @@ const DetailView: React.FC<DetailViewProps> = ({
 };
 
 interface CollectionViewProps {
+  buyer: Buyer;
   activities: Activity[];
   filters: Record<ActivityType, boolean>;
   setFilters: React.Dispatch<React.SetStateAction<Record<ActivityType, boolean>>>;
@@ -382,6 +387,7 @@ interface CollectionViewProps {
 }
 
 const CollectionView: React.FC<CollectionViewProps> = ({
+  buyer,
   activities,
   filters,
   setFilters,
@@ -390,8 +396,8 @@ const CollectionView: React.FC<CollectionViewProps> = ({
 }) => {
   return (
     <div className="flex h-full">
-      {/* Left Column: Activity List Navigation */}
-      <div className="w-64 border-r border-border bg-muted/30 flex flex-col">
+      {/* Left Column: Activity List Navigation - fixed width 300px */}
+      <div className="w-[300px] shrink-0 border-r border-border bg-muted/30 flex flex-col">
         {/* Filters */}
         <div className="p-4 border-b border-border">
           <div className="flex flex-wrap gap-3">
@@ -427,8 +433,8 @@ const CollectionView: React.FC<CollectionViewProps> = ({
         </ScrollArea>
       </div>
 
-      {/* Right Column: Activity Cards Feed */}
-      <div className="flex-1">
+      {/* Middle Column: Activity Cards Feed */}
+      <div className="flex-1 min-w-0">
         <ScrollArea className="h-full">
           <div className="p-6 space-y-6">
             {activities.map((activity) => (
@@ -493,6 +499,66 @@ const CollectionView: React.FC<CollectionViewProps> = ({
                 등록된 활동일지가 없습니다.
               </div>
             )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Right Column: Buyer Info Panel - fixed width 400px */}
+      <div className="w-[400px] shrink-0 border-l border-border bg-muted/20 flex flex-col">
+        {/* Tabs */}
+        <div className="flex border-b border-border">
+          <button className="flex-1 py-3 text-sm font-medium text-primary border-b-2 border-primary">
+            company
+          </button>
+          <button className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+            person
+          </button>
+          <button className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+            history
+          </button>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-5 space-y-5">
+            {/* Map Placeholder */}
+            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border border-border overflow-hidden">
+              <div className="text-center text-muted-foreground">
+                <MapPin className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                <span className="text-xs">지도</span>
+              </div>
+            </div>
+
+            {/* Buyer Fields */}
+            <div className="space-y-4 text-sm">
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">☆ 고객등급</span>
+                <span className="font-medium capitalize">level 2 · {buyer.status}</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🏢 바이어 기업명</span>
+                <span className="font-medium">{buyer.name}</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🌍 대륙</span>
+                <span className="text-primary">아시아</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📍 세부지역</span>
+                <span className="text-primary">동남아시아</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">🏳️ 국가</span>
+                <span>{buyer.country}</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">📞 대표 연락처</span>
+                <span>{buyer.phone || '-'}</span>
+              </div>
+              <div className="flex items-start gap-4">
+                <span className="text-muted-foreground w-28 shrink-0">✉️ 대표 이메일</span>
+                <span className="break-all">{buyer.email || '-'}</span>
+              </div>
+            </div>
           </div>
         </ScrollArea>
       </div>
