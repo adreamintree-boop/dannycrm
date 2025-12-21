@@ -47,7 +47,7 @@ export function useEmail() {
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const logActivity = async (
+  const logActivity = useCallback(async (
     action: string,
     messageId?: string,
     threadId?: string,
@@ -65,7 +65,7 @@ export function useEmail() {
     } catch (error) {
       console.error('Failed to log activity:', error);
     }
-  };
+  }, [user]);
 
   const fetchMessages = useCallback(async (mailbox?: string) => {
     if (!user) return;

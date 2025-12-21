@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import TopHeader from '@/components/layout/TopHeader';
 import EmailSidebar from '@/components/email/EmailSidebar';
@@ -12,13 +12,18 @@ import { Search } from 'lucide-react';
 const EmailListView: React.FC<{ mailbox: string }> = ({ mailbox }) => {
   const { messages, loading, fetchMessages, toggleStar, seedSampleEmails } = useEmail();
   const [searchQuery, setSearchQuery] = useState('');
+  const hasSeedRef = useRef(false);
 
   useEffect(() => {
     fetchMessages(mailbox);
-    if (mailbox === 'inbox') {
+  }, [mailbox, fetchMessages]);
+
+  useEffect(() => {
+    if (mailbox === 'inbox' && !hasSeedRef.current) {
+      hasSeedRef.current = true;
       seedSampleEmails();
     }
-  }, [mailbox, fetchMessages, seedSampleEmails]);
+  }, [mailbox, seedSampleEmails]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: '받은편지함',
