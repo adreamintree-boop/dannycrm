@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import BuyerDetail from "./pages/BuyerDetail";
 import BLSearch from "./pages/BLSearch";
+import CompanyAggregation from "./pages/CompanyAggregation";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 
@@ -27,6 +28,7 @@ const App = () => (
                 <BLSearch />
               </div>
             } />
+            <Route path="/company-aggregation" element={<CompanyAggregation />} />
           </Routes>
         </AppProvider>
       </BrowserRouter>

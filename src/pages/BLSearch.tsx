@@ -86,6 +86,9 @@ const BLSearch: React.FC = () => {
               results={results}
               paginatedResults={paginatedResults}
               filters={filters}
+              mainKeyword={searchKeyword}
+              startDate={startDate}
+              endDate={endDate}
               isLoading={isLoading}
               hasSearched={hasSearched}
               currentPage={currentPage}

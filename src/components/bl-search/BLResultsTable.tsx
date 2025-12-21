@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowUp, ArrowDown, ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,6 +12,8 @@ interface BLResultsTableProps {
   paginatedResults: BLRecord[];
   filters: SearchFilter[];
   mainKeyword?: string;
+  startDate?: Date;
+  endDate?: Date;
   isLoading: boolean;
   hasSearched: boolean;
   currentPage: number;
@@ -25,6 +28,8 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
   paginatedResults,
   filters,
   mainKeyword = '',
+  startDate,
+  endDate,
   isLoading,
   hasSearched,
   currentPage,
@@ -33,6 +38,21 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
   sortOrder,
   onToggleSortOrder
 }) => {
+  const navigate = useNavigate();
+
+  // Handle click on importer/exporter name
+  const handleCompanyClick = (companyName: string, type: 'importer' | 'exporter') => {
+    const searchContext = {
+      companyName,
+      companyType: type,
+      mainKeyword,
+      startDate: startDate?.toISOString().split('T')[0] || '',
+      endDate: endDate?.toISOString().split('T')[0] || '',
+      filters: filters.map(f => ({ type: f.type, value: f.value }))
+    };
+    
+    navigate('/company-aggregation', { state: searchContext });
+  };
   // Collect search terms for highlighting from filters AND mainKeyword
   const searchTerms = [
     ...filters
@@ -186,13 +206,19 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
                   <TableCell className="text-sm">{formatValue(record.originCountry)}</TableCell>
                   {/* 수입자 */}
                   <TableCell className="text-sm">
-                    <span className="text-primary hover:underline cursor-pointer font-medium">
+                    <span 
+                      className="text-primary hover:underline cursor-pointer font-medium"
+                      onClick={() => handleCompanyClick(record.importer, 'importer')}
+                    >
                       {formatValue(record.importer)}
                     </span>
                   </TableCell>
                   {/* 수출자 */}
                   <TableCell className="text-sm">
-                    <span className="text-primary hover:underline cursor-pointer font-medium">
+                    <span 
+                      className="text-primary hover:underline cursor-pointer font-medium"
+                      onClick={() => handleCompanyClick(record.exporter, 'exporter')}
+                    >
                       {formatValue(record.exporter)}
                     </span>
                   </TableCell>
