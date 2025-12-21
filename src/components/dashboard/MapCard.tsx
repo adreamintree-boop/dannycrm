@@ -1,6 +1,6 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
-import { Buyer, regionSummary } from '@/data/mockData';
+import { Buyer } from '@/data/mockData';
 
 interface MapCardProps {
   buyers: Buyer[];
@@ -14,6 +14,28 @@ const MapCard: React.FC<MapCardProps> = ({ buyers }) => {
     { key: 'oceania' as const, label: '오세아니아', labelEn: 'Oceania' },
     { key: 'europe' as const, label: '유럽', labelEn: 'Europe' },
   ];
+
+  // Calculate region summary from buyers data
+  const calculateRegionSummary = () => {
+    const summary: Record<string, { list: number; lead: number; target: number; client: number }> = {
+      america: { list: 0, lead: 0, target: 0, client: 0 },
+      asia: { list: 0, lead: 0, target: 0, client: 0 },
+      africa: { list: 0, lead: 0, target: 0, client: 0 },
+      oceania: { list: 0, lead: 0, target: 0, client: 0 },
+      europe: { list: 0, lead: 0, target: 0, client: 0 },
+    };
+
+    buyers.forEach(buyer => {
+      if (summary[buyer.region] && summary[buyer.region][buyer.status] !== undefined) {
+        summary[buyer.region][buyer.status]++;
+      }
+    });
+
+    return summary;
+  };
+
+  const regionSummary = calculateRegionSummary();
+  const hasBuyers = buyers.length > 0;
 
   return (
     <div className="dashboard-card">
@@ -49,7 +71,14 @@ const MapCard: React.FC<MapCardProps> = ({ buyers }) => {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
             <MapPin className="w-12 h-12 text-muted-foreground/30 mx-auto mb-2" />
-            <span className="text-sm text-muted-foreground">Map View</span>
+            {hasBuyers ? (
+              <span className="text-sm text-muted-foreground">Map View</span>
+            ) : (
+              <>
+                <span className="text-sm text-muted-foreground block">아직 데이터가 없습니다</span>
+                <span className="text-xs text-muted-foreground/70">바이어를 추가하면 지도에 표시됩니다.</span>
+              </>
+            )}
           </div>
         </div>
         {/* Tabs on map */}
@@ -57,10 +86,14 @@ const MapCard: React.FC<MapCardProps> = ({ buyers }) => {
           <button className="px-3 py-1.5 text-sm bg-card hover:bg-muted">지도</button>
           <button className="px-3 py-1.5 text-sm bg-muted text-muted-foreground">위성</button>
         </div>
-        {/* Mock pins */}
-        <div className="absolute top-1/4 left-1/4 w-3 h-3 rounded-full bg-status-target border-2 border-white shadow" />
-        <div className="absolute top-1/3 right-1/3 w-3 h-3 rounded-full bg-status-client border-2 border-white shadow" />
-        <div className="absolute bottom-1/3 left-1/2 w-3 h-3 rounded-full bg-status-lead border-2 border-white shadow" />
+        {/* Mock pins - only show if there are buyers */}
+        {hasBuyers && (
+          <>
+            <div className="absolute top-1/4 left-1/4 w-3 h-3 rounded-full bg-status-target border-2 border-white shadow" />
+            <div className="absolute top-1/3 right-1/3 w-3 h-3 rounded-full bg-status-client border-2 border-white shadow" />
+            <div className="absolute bottom-1/3 left-1/2 w-3 h-3 rounded-full bg-status-lead border-2 border-white shadow" />
+          </>
+        )}
       </div>
 
       {/* Region summary cards */}

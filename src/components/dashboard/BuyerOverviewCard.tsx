@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users } from 'lucide-react';
+import { Users, UserPlus } from 'lucide-react';
 
 interface BuyerOverviewCardProps {
   statusCounts: {
@@ -21,6 +21,8 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({ statusCounts, tot
 
   // Calculate gauge value (example: based on client ratio or total score)
   const gaugeValue = total > 0 ? Math.round((statusCounts.client / total) * 100 + (statusCounts.target / total) * 50 + (statusCounts.lead / total) * 25 + (statusCounts.list / total) * 10) : 0;
+
+  const hasData = total > 0;
 
   return (
     <div className="dashboard-card bg-gradient-to-br from-primary to-blue-600 text-primary-foreground">
@@ -59,7 +61,11 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({ statusCounts, tot
             <span className="text-4xl font-bold">{total}</span>
           </div>
         </div>
-        <span className="text-sm opacity-80 mt-2">0% vs last month</span>
+        {hasData ? (
+          <span className="text-sm opacity-80 mt-2">0% vs last month</span>
+        ) : (
+          <span className="text-sm opacity-80 mt-2">등록된 바이어 없음</span>
+        )}
       </div>
 
       {/* Status legend */}
@@ -105,6 +111,16 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({ statusCounts, tot
           </div>
         </div>
       </div>
+
+      {/* Empty state suggestion */}
+      {!hasData && (
+        <div className="mt-4 pt-4 border-t border-white/20">
+          <div className="flex items-center gap-2 text-sm opacity-90">
+            <UserPlus className="w-4 h-4" />
+            <span>B/L Search에서 바이어를 추가해보세요</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

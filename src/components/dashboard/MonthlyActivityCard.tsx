@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
-import { monthlyActivityData } from '@/data/mockData';
+import { BarChart3, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { useApp } from '@/context/AppContext';
 
 const monthIcons = ['❄️', '❄️', '🌸', '🌷', '🌻', '🌿', '🍉', '☀️', '🍂', '🎃', '🍁', '🎄'];
 
 const MonthlyActivityCard: React.FC = () => {
+  const { buyers, activities, isDemoAccount } = useApp();
   const [selectedYear, setSelectedYear] = useState(2025);
   const [selectedMonth, setSelectedMonth] = useState(12);
 
@@ -23,6 +24,28 @@ const MonthlyActivityCard: React.FC = () => {
     { num: 12, label: '12월', labelEn: 'December' },
   ];
 
+  // Generate monthly data - for demo account use mock data, for others calculate from real data
+  const monthlyActivityData = isDemoAccount ? [
+    { month: '1월', buyerRegistrations: 0, activityLogs: 16 },
+    { month: '2월', buyerRegistrations: 0, activityLogs: 20 },
+    { month: '3월', buyerRegistrations: 69, activityLogs: 13 },
+    { month: '4월', buyerRegistrations: 0, activityLogs: 16 },
+    { month: '5월', buyerRegistrations: 3, activityLogs: 27 },
+    { month: '6월', buyerRegistrations: 3, activityLogs: 49 },
+    { month: '7월', buyerRegistrations: 2, activityLogs: 107 },
+    { month: '8월', buyerRegistrations: 1, activityLogs: 31 },
+    { month: '9월', buyerRegistrations: 1, activityLogs: 16 },
+    { month: '10월', buyerRegistrations: 0, activityLogs: 1 },
+    { month: '11월', buyerRegistrations: 0, activityLogs: 0 },
+    { month: '12월', buyerRegistrations: 0, activityLogs: 4 },
+  ] : months.map(m => ({
+    month: m.label,
+    buyerRegistrations: 0,
+    activityLogs: 0,
+  }));
+
+  const hasData = buyers.length > 0 || activities.length > 0;
+
   // Chart dimensions
   const width = 700;
   const height = 200;
@@ -31,7 +54,7 @@ const MonthlyActivityCard: React.FC = () => {
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  const maxValue = Math.max(...monthlyActivityData.map(d => Math.max(d.buyerRegistrations, d.activityLogs)));
+  const maxValue = Math.max(...monthlyActivityData.map(d => Math.max(d.buyerRegistrations, d.activityLogs)), 1);
   const yScale = (val: number) => chartHeight - (val / maxValue) * chartHeight + padding.top;
   const xScale = (index: number) => (index / (monthlyActivityData.length - 1)) * chartWidth + padding.left;
 
@@ -99,103 +122,117 @@ const MonthlyActivityCard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Area chart */}
+        {/* Right: Area chart or empty state */}
         <div>
-          {/* Legend */}
-          <div className="flex items-center justify-end gap-6 mb-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-primary"></span>
-              <span className="text-muted-foreground">바이어 기업 등록 : {totalBuyers}</span>
+          {!hasData ? (
+            <div className="flex flex-col items-center justify-center h-full py-12">
+              <Calendar className="w-12 h-12 text-muted-foreground/30 mb-4" />
+              <p className="text-sm text-muted-foreground text-center">
+                아직 데이터가 없습니다.
+              </p>
+              <p className="text-xs text-muted-foreground/70 text-center mt-1">
+                바이어 등록 및 영업 활동이 기록되면 차트가 표시됩니다.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-chart-2"></span>
-              <span className="text-muted-foreground">영업활동일지 등록 : {totalActivities}</span>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Legend */}
+              <div className="flex items-center justify-end gap-6 mb-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-primary"></span>
+                  <span className="text-muted-foreground">바이어 기업 등록 : {totalBuyers}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-chart-2"></span>
+                  <span className="text-muted-foreground">영업활동일지 등록 : {totalActivities}</span>
+                </div>
+              </div>
 
-          {/* Chart */}
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48">
-            {/* Y-axis labels */}
-            {[0, 20, 40, 60, 80, 100, 120].map((val) => (
-              <g key={val}>
-                <text
-                  x={padding.left - 10}
-                  y={yScale(val)}
-                  className="text-[10px] fill-muted-foreground"
-                  textAnchor="end"
-                  dominantBaseline="middle"
-                >
-                  {val}
-                </text>
-                <line
-                  x1={padding.left}
-                  y1={yScale(val)}
-                  x2={width - padding.right}
-                  y2={yScale(val)}
-                  stroke="hsl(var(--border))"
-                  strokeWidth="1"
-                  opacity="0.5"
+              {/* Chart */}
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48">
+                {/* Y-axis labels */}
+                {[0, 20, 40, 60, 80, 100, 120].map((val) => (
+                  <g key={val}>
+                    <text
+                      x={padding.left - 10}
+                      y={yScale(val)}
+                      className="text-[10px] fill-muted-foreground"
+                      textAnchor="end"
+                      dominantBaseline="middle"
+                    >
+                      {val}
+                    </text>
+                    <line
+                      x1={padding.left}
+                      y1={yScale(val)}
+                      x2={width - padding.right}
+                      y2={yScale(val)}
+                      stroke="hsl(var(--border))"
+                      strokeWidth="1"
+                      opacity="0.5"
+                    />
+                  </g>
+                ))}
+
+                {/* Area fills */}
+                <path
+                  d={createAreaPath(monthlyActivityData.map(d => d.activityLogs))}
+                  fill="hsl(var(--chart-2))"
+                  opacity="0.2"
                 />
-              </g>
-            ))}
+                <path
+                  d={createAreaPath(monthlyActivityData.map(d => d.buyerRegistrations))}
+                  fill="hsl(var(--primary))"
+                  opacity="0.2"
+                />
 
-            {/* Area fills */}
-            <path
-              d={createAreaPath(monthlyActivityData.map(d => d.activityLogs))}
-              fill="hsl(var(--chart-2))"
-              opacity="0.2"
-            />
-            <path
-              d={createAreaPath(monthlyActivityData.map(d => d.buyerRegistrations))}
-              fill="hsl(var(--primary))"
-              opacity="0.2"
-            />
+                {/* Lines */}
+                <path d={activityPath} fill="none" stroke="hsl(var(--chart-2))" strokeWidth="2" />
+                <path d={buyerPath} fill="none" stroke="hsl(var(--primary))" strokeWidth="2" />
 
-            {/* Lines */}
-            <path d={activityPath} fill="none" stroke="hsl(var(--chart-2))" strokeWidth="2" />
-            <path d={buyerPath} fill="none" stroke="hsl(var(--primary))" strokeWidth="2" />
+                {/* X-axis labels */}
+                {monthlyActivityData.map((d, i) => (
+                  <text
+                    key={i}
+                    x={xScale(i)}
+                    y={height - 10}
+                    className="text-[10px] fill-muted-foreground"
+                    textAnchor="middle"
+                  >
+                    {d.month}
+                  </text>
+                ))}
+              </svg>
 
-            {/* X-axis labels */}
-            {monthlyActivityData.map((d, i) => (
-              <text
-                key={i}
-                x={xScale(i)}
-                y={height - 10}
-                className="text-[10px] fill-muted-foreground"
-                textAnchor="middle"
-              >
-                {d.month}
-              </text>
-            ))}
-          </svg>
-
-          {/* Data table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <tbody>
-                <tr className="border-t border-border">
-                  <td className="py-2 pr-4">
-                    <span className="w-2 h-2 rounded bg-primary inline-block mr-2"></span>
-                  </td>
-                  {monthlyActivityData.map((d, i) => (
-                    <td key={i} className="py-2 px-1 text-center text-muted-foreground">
-                      {d.buyerRegistrations}
-                    </td>
-                  ))}
-                </tr>
-                <tr className="border-t border-border">
-                  <td className="py-2 pr-4">
-                    <span className="w-2 h-2 rounded bg-chart-2 inline-block mr-2"></span>
-                  </td>
-                  {monthlyActivityData.map((d, i) => (
-                    <td key={i} className="py-2 px-1 text-center text-muted-foreground">
-                      {d.activityLogs}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+              {/* Data table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <tbody>
+                    <tr className="border-t border-border">
+                      <td className="py-2 pr-4">
+                        <span className="w-2 h-2 rounded bg-primary inline-block mr-2"></span>
+                      </td>
+                      {monthlyActivityData.map((d, i) => (
+                        <td key={i} className="py-2 px-1 text-center text-muted-foreground">
+                          {d.buyerRegistrations}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="border-t border-border">
+                      <td className="py-2 pr-4">
+                        <span className="w-2 h-2 rounded bg-chart-2 inline-block mr-2"></span>
+                      </td>
+                      {monthlyActivityData.map((d, i) => (
+                        <td key={i} className="py-2 px-1 text-center text-muted-foreground">
+                          {d.activityLogs}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -75,6 +75,12 @@ const Auth: React.FC = () => {
               description: '이메일 또는 비밀번호가 올바르지 않습니다.',
               variant: 'destructive',
             });
+          } else if (error.message.includes('Email not confirmed')) {
+            toast({
+              title: '이메일 인증 필요',
+              description: '이메일 인증 후 로그인하실 수 있습니다.',
+              variant: 'destructive',
+            });
           } else {
             toast({
               title: '로그인 실패',
@@ -101,9 +107,13 @@ const Auth: React.FC = () => {
           }
         } else {
           toast({
-            title: '회원가입 성공',
-            description: '계정이 생성되었습니다.',
+            title: '회원가입 완료',
+            description: '인증 이메일을 발송했습니다. 이메일을 확인하여 계정을 인증해주세요.',
           });
+          setMode('login');
+          setEmail('');
+          setPassword('');
+          setConfirmPassword('');
         }
       } else if (mode === 'forgot') {
         toast({
