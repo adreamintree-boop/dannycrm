@@ -94,7 +94,7 @@ const MyProfile: React.FC = () => {
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: Home, onClick: () => navigate('/') },
     { id: 'profile', label: 'My Profile', icon: User, active: true },
-    { id: 'onboarding', label: 'Onboarding Survey', icon: ClipboardList },
+    { id: 'onboarding', label: 'Onboarding Survey', icon: ClipboardList, onClick: () => navigate('/onboarding-survey') },
     { id: 'withdrawal', label: 'Withdrawal', icon: UserMinus },
   ];
 
