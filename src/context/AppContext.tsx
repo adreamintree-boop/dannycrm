@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { useAuthContext } from '@/context/AuthContext';
 import { 
   mockProjects, 
   mockBuyers, 
@@ -14,6 +15,9 @@ import {
   ActivityType,
   BuyerContact
 } from '@/data/mockData';
+
+// Demo account identifier - apharm account gets seeded data
+const DEMO_ACCOUNT_EMAIL = 'apharm@apharm.com';
 
 interface AppState {
   projects: Project[];
@@ -44,18 +48,51 @@ interface AppContextType extends AppState {
   getProjectBuyers: () => Buyer[];
   getProjectMoveHistory: () => MoveHistoryItem[];
   getProjectDocuments: () => Document[];
+  isDemoAccount: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Empty initial state for new users
+const emptyProjects: Project[] = [
+  { id: 'default', name: '기본 프로젝트', createdAt: new Date().toISOString() }
+];
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [activeProjectId, setActiveProjectId] = useState<string>(mockProjects[0]?.id || '');
-  const [buyers, setBuyers] = useState<Buyer[]>(mockBuyers);
-  const [activities, setActivities] = useState<Activity[]>(mockActivities);
-  const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>(mockMoveHistory);
-  const [documents, setDocuments] = useState<Document[]>(mockDocuments);
+  const { profile, user } = useAuthContext();
+  
+  // Check if this is the demo account
+  const isDemoAccount = user?.email === DEMO_ACCOUNT_EMAIL;
+  
+  // Initialize with empty data for new users, demo data for apharm
+  const [projects, setProjects] = useState<Project[]>(emptyProjects);
+  const [activeProjectId, setActiveProjectId] = useState<string>('default');
+  const [buyers, setBuyers] = useState<Buyer[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [moveHistory, setMoveHistory] = useState<MoveHistoryItem[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [activeTab, setActiveTab] = useState<AppState['activeTab']>('dashboard');
+
+  // Load demo data for apharm account, empty for others
+  useEffect(() => {
+    if (isDemoAccount) {
+      // Demo account gets seeded data
+      setProjects(mockProjects);
+      setActiveProjectId(mockProjects[0]?.id || 'default');
+      setBuyers(mockBuyers);
+      setActivities(mockActivities);
+      setMoveHistory(mockMoveHistory);
+      setDocuments(mockDocuments);
+    } else {
+      // Regular users start with empty data
+      setProjects(emptyProjects);
+      setActiveProjectId('default');
+      setBuyers([]);
+      setActivities([]);
+      setMoveHistory([]);
+      setDocuments([]);
+    }
+  }, [isDemoAccount, user?.id]);
 
   const addProject = (name: string) => {
     const newProject: Project = {
@@ -108,7 +145,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       projectId: buyerData.projectId,
       category: 'funnel',
       description: `${newBuyer.name} 바이어 기업 등록`,
-      author: '관리자',
+      author: profile?.full_name || '관리자',
       date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
     };
     setMoveHistory([newHistoryItem, ...moveHistory]);
@@ -142,7 +179,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         projectId: buyer.projectId,
         category: 'funnel',
         description: `${buyer.name} 바이어 기업의 인사이트 등급 변경: ${statusNames[buyer.status]} → ${statusNames[status]}`,
-        author: '관리자',
+        author: profile?.full_name || '관리자',
         date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
       };
       setMoveHistory([newHistoryItem, ...moveHistory]);
@@ -248,6 +285,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       getProjectBuyers,
       getProjectMoveHistory,
       getProjectDocuments,
+      isDemoAccount,
     }}>
       {children}
     </AppContext.Provider>

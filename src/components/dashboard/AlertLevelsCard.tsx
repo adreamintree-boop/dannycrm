@@ -1,9 +1,14 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LineChart } from 'lucide-react';
+import { useApp } from '@/context/AppContext';
 
 const AlertLevelsCard: React.FC = () => {
-  // Mock line chart data
-  const dataPoints = [
+  const { activities } = useApp();
+  
+  const hasData = activities.length > 0;
+
+  // Mock line chart data for demo account
+  const dataPoints = hasData ? [
     { x: 10, y: 5 },
     { x: 11, y: 6 },
     { x: 12, y: 4 },
@@ -16,7 +21,7 @@ const AlertLevelsCard: React.FC = () => {
     { x: 19, y: 6 },
     { x: 20, y: 5 },
     { x: 21, y: 4 },
-  ];
+  ] : [];
 
   const width = 600;
   const height = 150;
@@ -28,6 +33,31 @@ const AlertLevelsCard: React.FC = () => {
   const linePath = dataPoints
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.x)} ${yScale(p.y)}`)
     .join(' ');
+
+  if (!hasData) {
+    return (
+      <div className="dashboard-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+            </div>
+            <h3 className="font-semibold text-foreground">Sales Activity Alert Levels</h3>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-center py-12">
+          <LineChart className="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <p className="text-sm text-muted-foreground text-center">
+            아직 데이터가 없습니다.
+          </p>
+          <p className="text-xs text-muted-foreground/70 text-center mt-1">
+            영업 활동이 기록되면 알림 레벨이 표시됩니다.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-card">

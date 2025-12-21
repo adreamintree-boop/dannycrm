@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award } from 'lucide-react';
+import { Award, Users } from 'lucide-react';
 import { Buyer } from '@/data/mockData';
 
 interface TopBuyersCardProps {
@@ -65,8 +65,14 @@ const TopBuyersCard: React.FC<TopBuyersCardProps> = ({ buyers }) => {
         ))}
 
         {topBuyers.length === 0 && (
-          <div className="text-center text-muted-foreground py-8">
-            No buyer data available
+          <div className="flex flex-col items-center justify-center py-12">
+            <Users className="w-12 h-12 text-muted-foreground/30 mb-4" />
+            <p className="text-sm text-muted-foreground text-center">
+              아직 데이터가 없습니다.
+            </p>
+            <p className="text-xs text-muted-foreground/70 text-center mt-1">
+              B/L Search를 통해 잠재 바이어를 추가해보세요.
+            </p>
           </div>
         )}
       </div>
