@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, MapPin, Globe, Facebook, Youtube, Linkedin, Phone, Mail, Bookmark, Plus, Trash2 } from 'lucide-react';
-import { Buyer, BuyerStatus, ActivityType } from '@/data/mockData';
+import { Buyer, BuyerStatus, Activity, ActivityType } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import ActivityTab from './ActivityTab';
 import DetailsTab from './DetailsTab';
+import ActivityDrawer from './ActivityDrawer';
 
 interface BuyerDetailModalProps {
   isOpen: boolean;
@@ -23,8 +24,25 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
   buyersInColumn,
   onNavigate,
 }) => {
-  const { toggleBookmark } = useApp();
+  const { toggleBookmark, getBuyerActivities } = useApp();
   const [activeTab, setActiveTab] = useState<'activity' | 'details'>('activity');
+  
+  // Drawer state - lifted to modal level
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<'detail' | 'collection'>('detail');
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  
+  const activities = buyer ? getBuyerActivities(buyer.id) : [];
+
+  const handleOpenDrawer = (mode: 'detail' | 'collection', activity?: Activity) => {
+    setDrawerMode(mode);
+    setSelectedActivity(activity || activities[0] || null);
+    setDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+  };
 
   const currentIndex = buyer ? buyersInColumn.findIndex(b => b.id === buyer.id) : -1;
   const canGoPrev = currentIndex > 0;
@@ -66,7 +84,7 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] p-0 overflow-hidden bg-background">
+      <DialogContent className="max-w-[95vw] w-[1400px] max-h-[90vh] p-0 overflow-hidden bg-background relative">
         <VisuallyHidden>
           <DialogTitle>Buyer Details - {buyer.name}</DialogTitle>
         </VisuallyHidden>
@@ -180,11 +198,22 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
         {/* Tab Content */}
         <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
           {activeTab === 'activity' ? (
-            <ActivityTab buyer={buyer} />
+            <ActivityTab buyer={buyer} onOpenDrawer={handleOpenDrawer} />
           ) : (
             <DetailsTab buyer={buyer} />
           )}
         </div>
+
+        {/* Activity Drawer - rendered at modal level for proper overlay */}
+        <ActivityDrawer
+          isOpen={drawerOpen}
+          onClose={handleCloseDrawer}
+          buyer={buyer}
+          activities={activities}
+          mode={drawerMode}
+          selectedActivity={selectedActivity}
+          onSelectActivity={setSelectedActivity}
+        />
       </DialogContent>
     </Dialog>
   );
