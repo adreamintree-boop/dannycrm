@@ -25,11 +25,6 @@ const CustomerFunnel: React.FC = () => {
   const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [activeFormTab, setActiveFormTab] = useState<'direct' | 'excel'>('direct');
-  const [showBookmarked, setShowBookmarked] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
   // Form state
   const [formData, setFormData] = useState({
     company: '',
@@ -93,7 +88,7 @@ const CustomerFunnel: React.FC = () => {
     setFormData({ company: '', country: '', address: '', websiteUrl: '' });
   };
 
-  const filteredBuyers = buyers.filter(buyer => {
+  const filteredBuyers = projectBuyers.filter(buyer => {
     if (showBookmarked && !buyer.bookmarked) return false;
     if (searchQuery && !buyer.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
@@ -101,6 +96,23 @@ const CustomerFunnel: React.FC = () => {
 
   const getBuyersByStatus = (status: BuyerStatus) =>
     filteredBuyers.filter(b => b.status === status);
+
+  const handleBuyerClick = (buyer: Buyer) => {
+    setSelectedBuyer(buyer);
+    setIsModalOpen(true);
+  };
+
+  const handleNavigateBuyer = (buyerId: string) => {
+    const buyer = projectBuyers.find(b => b.id === buyerId);
+    if (buyer) {
+      setSelectedBuyer(buyer);
+    }
+  };
+
+  const getBuyersInSameColumn = () => {
+    if (!selectedBuyer) return [];
+    return filteredBuyers.filter(b => b.status === selectedBuyer.status);
+  };
 
   const handleDragStart = (e: React.DragEvent, buyerId: string) => {
     e.dataTransfer.setData('buyerId', buyerId);
@@ -315,7 +327,8 @@ const CustomerFunnel: React.FC = () => {
                       key={buyer.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, buyer.id)}
-                      className="dashboard-card cursor-move hover:shadow-card-hover transition-shadow"
+                      onClick={() => handleBuyerClick(buyer)}
+                      className="dashboard-card cursor-pointer hover:shadow-card-hover transition-shadow"
                     >
                       {/* Header */}
                       <div className="flex items-center justify-between mb-2">
@@ -337,13 +350,13 @@ const CustomerFunnel: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => toggleBookmark(buyer.id)}
+                            onClick={(e) => { e.stopPropagation(); toggleBookmark(buyer.id); }}
                             className={`p-1 hover:bg-muted rounded ${buyer.bookmarked ? 'text-primary' : 'text-muted-foreground'}`}
                           >
                             <Bookmark className={`w-4 h-4 ${buyer.bookmarked ? 'fill-current' : ''}`} />
                           </button>
                           <button
-                            onClick={() => deleteBuyer(buyer.id)}
+                            onClick={(e) => { e.stopPropagation(); deleteBuyer(buyer.id); }}
                             className="p-1 hover:bg-muted rounded text-muted-foreground"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -364,6 +377,18 @@ const CustomerFunnel: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Buyer Detail Modal */}
+      <BuyerDetailModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedBuyer(null);
+        }}
+        buyer={selectedBuyer}
+        buyersInColumn={getBuyersInSameColumn()}
+        onNavigate={handleNavigateBuyer}
+      />
     </div>
   );
 };
