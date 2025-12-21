@@ -84,13 +84,16 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] max-h-[90vh] p-0 flex flex-col bg-background relative overflow-hidden">
+      <DialogContent 
+        className="w-[min(1200px,92vw)] h-[min(820px,88vh)] max-h-[88vh] p-0 flex flex-col bg-background rounded-lg overflow-hidden"
+        aria-describedby={undefined}
+      >
         <VisuallyHidden>
           <DialogTitle>Buyer Details - {buyer.name}</DialogTitle>
         </VisuallyHidden>
         
-        {/* Blue Header */}
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-4">
+        {/* Blue Header - Sticky */}
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-4 shrink-0">
           <div className="flex items-center justify-between">
             {/* Left: Level badge, company name, social icons */}
             <div className="flex items-center gap-4">
@@ -169,8 +172,8 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-border bg-card">
+        {/* Tabs - Sticky */}
+        <div className="border-b border-border bg-card shrink-0">
           <div className="flex">
             <button
               onClick={() => setActiveTab('activity')}
@@ -195,8 +198,8 @@ const BuyerDetailModal: React.FC<BuyerDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Tab Content - Scrollable Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto relative">
           {activeTab === 'activity' ? (
             <ActivityTab buyer={buyer} onOpenDrawer={handleOpenDrawer} />
           ) : (
