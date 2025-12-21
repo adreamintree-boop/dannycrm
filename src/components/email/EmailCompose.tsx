@@ -5,12 +5,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronUp, Send, Save, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEmail, ComposeData } from '@/hooks/useEmail';
+import { useEmailContext, ComposeData } from '@/context/EmailContext';
 
-const EmailCompose: React.FC = () => {
+export default function EmailCompose() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { sendEmail, saveDraft, getMessage } = useEmail();
+  const { sendEmail, saveDraft, getMessage } = useEmailContext();
 
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -165,6 +165,4 @@ const EmailCompose: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default EmailCompose;
+}
