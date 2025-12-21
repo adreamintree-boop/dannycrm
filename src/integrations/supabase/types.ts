@@ -236,6 +236,140 @@ export type Database = {
           },
         ]
       }
+      email_activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          message_id: string | null
+          meta: Json | null
+          thread_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          meta?: Json | null
+          thread_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          meta?: Json | null
+          thread_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_activity_log_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_activity_log_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "email_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_messages: {
+        Row: {
+          bcc_emails: Json | null
+          body: string
+          cc_emails: Json | null
+          created_at: string
+          direction: string
+          from_email: string
+          from_name: string | null
+          id: string
+          is_read: boolean
+          is_starred: boolean
+          mailbox: string
+          owner_user_id: string
+          snippet: string | null
+          subject: string
+          thread_id: string | null
+          to_emails: Json
+        }
+        Insert: {
+          bcc_emails?: Json | null
+          body?: string
+          cc_emails?: Json | null
+          created_at?: string
+          direction?: string
+          from_email: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean
+          is_starred?: boolean
+          mailbox?: string
+          owner_user_id: string
+          snippet?: string | null
+          subject: string
+          thread_id?: string | null
+          to_emails?: Json
+        }
+        Update: {
+          bcc_emails?: Json | null
+          body?: string
+          cc_emails?: Json | null
+          created_at?: string
+          direction?: string
+          from_email?: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean
+          is_starred?: boolean
+          mailbox?: string
+          owner_user_id?: string
+          snippet?: string | null
+          subject?: string
+          thread_id?: string | null
+          to_emails?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "email_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_threads: {
+        Row: {
+          created_at: string
+          id: string
+          owner_user_id: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_user_id: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_user_id?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
