@@ -100,6 +100,56 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_buyers: {
+        Row: {
+          activity_count: number
+          company_name: string
+          country: string | null
+          created_at: string
+          id: string
+          project_id: string | null
+          region: string | null
+          source: string
+          stage: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_count?: number
+          company_name: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string | null
+          region?: string | null
+          source?: string
+          stage?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_count?: number
+          company_name?: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string | null
+          region?: string | null
+          source?: string
+          stage?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_buyers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           company_name: string | null
@@ -145,6 +195,33 @@ export type Database = {
           phone_number?: string | null
           role_position?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          project_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          project_name?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          project_name?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
