@@ -512,6 +512,50 @@ export type Database = {
           },
         ]
       }
+      survey_files: {
+        Row: {
+          file_size: number
+          file_type: string
+          id: string
+          mime_type: string
+          original_file_name: string
+          storage_path: string
+          survey_id: string | null
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          file_size: number
+          file_type: string
+          id?: string
+          mime_type: string
+          original_file_name: string
+          storage_path: string
+          survey_id?: string | null
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          file_size?: number
+          file_type?: string
+          id?: string
+          mime_type?: string
+          original_file_name?: string
+          storage_path?: string
+          survey_id?: string | null
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_files_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "company_surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_credits: {
         Row: {
           balance: number

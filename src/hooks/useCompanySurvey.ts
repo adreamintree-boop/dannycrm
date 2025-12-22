@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 
@@ -6,6 +6,13 @@ export interface CompanyProduct {
   id?: string;
   product_name: string;
   product_description: string;
+}
+
+export interface SurveyFile {
+  id?: string;
+  name: string;
+  size: number;
+  storagePath?: string;
 }
 
 export interface CompanySurvey {
@@ -22,6 +29,9 @@ export interface CompanySurvey {
   intro_file_url: string;
   target_regions: string[];
   products: CompanyProduct[];
+  // File references
+  catalogFile: SurveyFile | null;
+  introFile: SurveyFile | null;
 }
 
 const defaultSurvey: CompanySurvey = {
@@ -37,6 +47,8 @@ const defaultSurvey: CompanySurvey = {
   intro_file_url: '',
   target_regions: [],
   products: [{ product_name: '', product_description: '' }],
+  catalogFile: null,
+  introFile: null,
 };
 
 export function useCompanySurvey() {
@@ -45,6 +57,10 @@ export function useCompanySurvey() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasSurvey, setHasSurvey] = useState(false);
+  const [uploadingCatalog, setUploadingCatalog] = useState(false);
+  const [uploadingIntro, setUploadingIntro] = useState(false);
+  const [catalogProgress, setCatalogProgress] = useState(0);
+  const [introProgress, setIntroProgress] = useState(0);
 
   const fetchSurvey = useCallback(async () => {
     if (!user) return;
@@ -67,6 +83,15 @@ export function useCompanySurvey() {
 
         if (productsError) throw productsError;
 
+        // Fetch file metadata
+        const { data: filesData } = await supabase
+          .from('survey_files')
+          .select('*')
+          .eq('survey_id', surveyData.id);
+
+        const catalogFileData = filesData?.find(f => f.file_type === 'product_catalog');
+        const introFileData = filesData?.find(f => f.file_type === 'company_introduction');
+
         setSurvey({
           id: surveyData.id,
           company_website: surveyData.company_website || '',
@@ -87,6 +112,18 @@ export function useCompanySurvey() {
                 product_description: p.product_description || '',
               }))
             : [{ product_name: '', product_description: '' }],
+          catalogFile: catalogFileData ? {
+            id: catalogFileData.id,
+            name: catalogFileData.original_file_name,
+            size: catalogFileData.file_size,
+            storagePath: catalogFileData.storage_path,
+          } : null,
+          introFile: introFileData ? {
+            id: introFileData.id,
+            name: introFileData.original_file_name,
+            size: introFileData.file_size,
+            storagePath: introFileData.storage_path,
+          } : null,
         });
         setHasSurvey(true);
       } else {
@@ -103,6 +140,80 @@ export function useCompanySurvey() {
   useEffect(() => {
     fetchSurvey();
   }, [fetchSurvey]);
+
+  const uploadFile = async (
+    file: File,
+    fileType: 'product_catalog' | 'company_introduction',
+    setUploading: React.Dispatch<React.SetStateAction<boolean>>,
+    setProgress: React.Dispatch<React.SetStateAction<number>>
+  ): Promise<SurveyFile | null> => {
+    if (!user) return null;
+
+    setUploading(true);
+    setProgress(0);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const storagePath = `${user.id}/${fileType}/${fileName}`;
+
+      // Simulate progress (Supabase doesn't support progress events)
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress = Math.min(progress + 10, 90);
+        setProgress(progress);
+      }, 200);
+
+      const { error: uploadError } = await supabase.storage
+        .from('survey-files')
+        .upload(storagePath, file);
+
+      clearInterval(progressInterval);
+
+      if (uploadError) throw uploadError;
+
+      setProgress(100);
+
+      return {
+        name: file.name,
+        size: file.size,
+        storagePath,
+      };
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const uploadCatalogFile = async (file: File) => {
+    const result = await uploadFile(file, 'product_catalog', setUploadingCatalog, setCatalogProgress);
+    if (result) {
+      setSurvey(prev => ({ ...prev, catalogFile: result }));
+    }
+  };
+
+  const uploadIntroFile = async (file: File) => {
+    const result = await uploadFile(file, 'company_introduction', setUploadingIntro, setIntroProgress);
+    if (result) {
+      setSurvey(prev => ({ ...prev, introFile: result }));
+    }
+  };
+
+  const removeFile = async (fileType: 'product_catalog' | 'company_introduction') => {
+    const fileToRemove = fileType === 'product_catalog' ? survey.catalogFile : survey.introFile;
+    
+    if (fileToRemove?.storagePath) {
+      await supabase.storage.from('survey-files').remove([fileToRemove.storagePath]);
+    }
+
+    if (fileType === 'product_catalog') {
+      setSurvey(prev => ({ ...prev, catalogFile: null }));
+    } else {
+      setSurvey(prev => ({ ...prev, introFile: null }));
+    }
+  };
 
   const saveSurvey = async (): Promise<{ error: Error | null }> => {
     if (!user) return { error: new Error('User not authenticated') };
@@ -166,6 +277,47 @@ export function useCompanySurvey() {
             .insert(productsToInsert);
           if (productsError) throw productsError;
         }
+
+        // Handle file metadata
+        // Delete existing file records
+        await supabase
+          .from('survey_files')
+          .delete()
+          .eq('survey_id', surveyId);
+
+        // Insert new file records
+        const filesToInsert = [];
+
+        if (survey.catalogFile?.storagePath) {
+          filesToInsert.push({
+            user_id: user.id,
+            survey_id: surveyId,
+            file_type: 'product_catalog',
+            original_file_name: survey.catalogFile.name,
+            file_size: survey.catalogFile.size,
+            mime_type: getMimeType(survey.catalogFile.name),
+            storage_path: survey.catalogFile.storagePath,
+          });
+        }
+
+        if (survey.introFile?.storagePath) {
+          filesToInsert.push({
+            user_id: user.id,
+            survey_id: surveyId,
+            file_type: 'company_introduction',
+            original_file_name: survey.introFile.name,
+            file_size: survey.introFile.size,
+            mime_type: getMimeType(survey.introFile.name),
+            storage_path: survey.introFile.storagePath,
+          });
+        }
+
+        if (filesToInsert.length > 0) {
+          const { error: filesError } = await supabase
+            .from('survey_files')
+            .insert(filesToInsert);
+          if (filesError) throw filesError;
+        }
       }
 
       setHasSurvey(true);
@@ -214,5 +366,25 @@ export function useCompanySurvey() {
     removeProduct,
     updateProduct,
     refetch: fetchSurvey,
+    // File upload
+    uploadCatalogFile,
+    uploadIntroFile,
+    removeFile,
+    uploadingCatalog,
+    uploadingIntro,
+    catalogProgress,
+    introProgress,
   };
+}
+
+function getMimeType(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'ppt': return 'application/vnd.ms-powerpoint';
+    case 'pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    case 'doc': return 'application/msword';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    default: return 'application/octet-stream';
+  }
 }
