@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import TopHeader from '@/components/layout/TopHeader';
 import { useCompanySurvey } from '@/hooks/useCompanySurvey';
+import { FileUpload } from '@/components/survey/FileUpload';
 
 const EMPLOYEE_OPTIONS = ['1–10', '11–50', '51–200', '200+'];
 
@@ -49,9 +50,26 @@ const OnboardingSurvey: React.FC = () => {
     addProduct,
     removeProduct,
     updateProduct,
+    uploadCatalogFile,
+    uploadIntroFile,
+    removeFile,
+    uploadingCatalog,
+    uploadingIntro,
+    catalogProgress,
+    introProgress,
   } = useCompanySurvey();
 
   const handleSave = async () => {
+    // Validate required catalog file
+    if (!survey.catalogFile) {
+      toast({
+        variant: 'destructive',
+        title: '파일 필요',
+        description: '제품 카탈로그 파일을 업로드해주세요.',
+      });
+      return;
+    }
+
     const { error } = await saveSurvey();
     if (error) {
       toast({
@@ -307,28 +325,24 @@ const OnboardingSurvey: React.FC = () => {
                 <h2 className="text-lg font-medium text-foreground mb-4 border-b border-border pb-2">
                   D. Sales & Materials
                 </h2>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="catalog">Company Product Catalog URL (PDF)</Label>
-                    <Input
-                      id="catalog"
-                      value={survey.catalog_file_url}
-                      onChange={(e) => updateSurvey({ catalog_file_url: e.target.value })}
-                      placeholder="https://example.com/catalog.pdf"
-                      className="mt-1.5"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">파일 업로드 기능은 추후 추가 예정입니다.</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="intro">Company Introduction File URL (optional)</Label>
-                    <Input
-                      id="intro"
-                      value={survey.intro_file_url}
-                      onChange={(e) => updateSurvey({ intro_file_url: e.target.value })}
-                      placeholder="https://example.com/intro.pdf"
-                      className="mt-1.5"
-                    />
-                  </div>
+                <div className="space-y-6">
+                  <FileUpload
+                    label="Company Product Catalog"
+                    required
+                    file={survey.catalogFile}
+                    isUploading={uploadingCatalog}
+                    uploadProgress={catalogProgress}
+                    onUpload={uploadCatalogFile}
+                    onRemove={() => removeFile('product_catalog')}
+                  />
+                  <FileUpload
+                    label="Company Introduction File (optional)"
+                    file={survey.introFile}
+                    isUploading={uploadingIntro}
+                    uploadProgress={introProgress}
+                    onUpload={uploadIntroFile}
+                    onRemove={() => removeFile('company_introduction')}
+                  />
                   <div>
                     <Label>Preferred Target Regions</Label>
                     <div className="flex flex-wrap gap-3 mt-2">
