@@ -3,14 +3,52 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ChevronDown, ChevronUp, Send, Save, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Send, Save, X, Search, Building2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEmailContext, ComposeData } from '@/context/EmailContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthContext } from '@/context/AuthContext';
+import { Badge } from '@/components/ui/badge';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+
+interface Buyer {
+  id: string;
+  company_name: string;
+  stage: string;
+  country: string | null;
+}
+
+const stageBadgeColors: Record<string, string> = {
+  list: 'bg-muted text-muted-foreground',
+  lead: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+  target: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  client: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+};
+
+const stageLabels: Record<string, string> = {
+  list: 'List',
+  lead: 'Lead',
+  target: 'Target',
+  client: 'Client',
+};
 
 export default function EmailCompose() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { sendEmail, saveDraft, getMessage } = useEmailContext();
+  const { user } = useAuthContext();
 
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -21,6 +59,41 @@ export default function EmailCompose() {
   const [showBcc, setShowBcc] = useState(false);
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Buyer selection state
+  const [buyers, setBuyers] = useState<Buyer[]>([]);
+  const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
+  const [buyerOpen, setBuyerOpen] = useState(false);
+  const [buyerSearch, setBuyerSearch] = useState('');
+
+  // Fetch buyers
+  useEffect(() => {
+    const fetchBuyers = async () => {
+      if (!user) return;
+
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (!projectData) return;
+
+      const { data, error } = await supabase
+        .from('crm_buyers')
+        .select('id, company_name, stage, country')
+        .eq('project_id', projectData.id)
+        .order('company_name', { ascending: true });
+
+      if (!error && data) {
+        setBuyers(data);
+      }
+    };
+
+    fetchBuyers();
+  }, [user]);
 
   useEffect(() => {
     const replyTo = searchParams.get('replyTo');
@@ -52,7 +125,15 @@ export default function EmailCompose() {
       return;
     }
     setSending(true);
-    const data: ComposeData = { to, cc, bcc, subject, body };
+    const data: ComposeData = {
+      to,
+      cc,
+      bcc,
+      subject,
+      body,
+      buyerId: selectedBuyer?.id,
+      buyerName: selectedBuyer?.company_name,
+    };
     const success = await sendEmail(data);
     setSending(false);
     if (success) {
@@ -70,6 +151,10 @@ export default function EmailCompose() {
     }
   };
 
+  const filteredBuyers = buyers.filter((buyer) =>
+    buyer.company_name.toLowerCase().includes(buyerSearch.toLowerCase())
+  );
+
   return (
     <div className="flex-1 flex flex-col bg-background">
       <div className="border-b border-border p-4 flex items-center justify-between">
@@ -80,9 +165,93 @@ export default function EmailCompose() {
       </div>
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
+        {/* Buyer Selection */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Label className="w-16 text-right text-muted-foreground">받는사람</Label>
+            <Label className="w-20 text-right text-muted-foreground shrink-0">바이어 선택</Label>
+            <Popover open={buyerOpen} onOpenChange={setBuyerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={buyerOpen}
+                  className="flex-1 justify-between font-normal"
+                >
+                  {selectedBuyer ? (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                      <span>{selectedBuyer.company_name}</span>
+                      <Badge variant="secondary" className={stageBadgeColors[selectedBuyer.stage]}>
+                        {stageLabels[selectedBuyer.stage]}
+                      </Badge>
+                      {selectedBuyer.country && (
+                        <span className="text-muted-foreground text-sm">{selectedBuyer.country}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">CRM에 기록할 바이어를 선택하세요 (선택)</span>
+                  )}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0 z-50 bg-popover" align="start">
+                <Command>
+                  <CommandInput
+                    placeholder="회사명 검색..."
+                    value={buyerSearch}
+                    onValueChange={setBuyerSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>바이어를 찾을 수 없습니다.</CommandEmpty>
+                    <CommandGroup>
+                      {filteredBuyers.map((buyer) => (
+                        <CommandItem
+                          key={buyer.id}
+                          value={buyer.company_name}
+                          onSelect={() => {
+                            setSelectedBuyer(buyer);
+                            setBuyerOpen(false);
+                            setBuyerSearch('');
+                          }}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span className="flex-1">{buyer.company_name}</span>
+                          <Badge variant="secondary" className={stageBadgeColors[buyer.stage]}>
+                            {stageLabels[buyer.stage]}
+                          </Badge>
+                          {buyer.country && (
+                            <span className="text-muted-foreground text-sm">{buyer.country}</span>
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {selectedBuyer && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedBuyer(null)}
+                className="shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          {selectedBuyer && (
+            <div className="ml-24 text-sm text-primary flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+              이 메일은 발신 후 CRM 영업활동일지에 자동 기록됩니다
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="w-20 text-right text-muted-foreground shrink-0">받는사람</Label>
             <Input
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -109,7 +278,7 @@ export default function EmailCompose() {
 
           {showCc && (
             <div className="flex items-center gap-2">
-              <Label className="w-16 text-right text-muted-foreground">참조</Label>
+              <Label className="w-20 text-right text-muted-foreground shrink-0">참조</Label>
               <Input
                 value={cc}
                 onChange={(e) => setCc(e.target.value)}
@@ -121,7 +290,7 @@ export default function EmailCompose() {
 
           {showBcc && (
             <div className="flex items-center gap-2">
-              <Label className="w-16 text-right text-muted-foreground">숨은참조</Label>
+              <Label className="w-20 text-right text-muted-foreground shrink-0">숨은참조</Label>
               <Input
                 value={bcc}
                 onChange={(e) => setBcc(e.target.value)}
@@ -132,7 +301,7 @@ export default function EmailCompose() {
           )}
 
           <div className="flex items-center gap-2">
-            <Label className="w-16 text-right text-muted-foreground">제목</Label>
+            <Label className="w-20 text-right text-muted-foreground shrink-0">제목</Label>
             <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}

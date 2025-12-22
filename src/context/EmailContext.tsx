@@ -29,6 +29,8 @@ export interface ComposeData {
   bcc?: string;
   subject: string;
   body: string;
+  buyerId?: string;
+  buyerName?: string;
 }
 
 interface EmailContextType {
@@ -262,7 +264,7 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     try {
       const threadId = await createThread(composeData.subject);
 
-      const { error: sentError } = await supabase
+      const { data: sentData, error: sentError } = await supabase
         .from('email_messages')
         .insert({
           thread_id: threadId,
@@ -278,9 +280,43 @@ export function EmailProvider({ children }: { children: ReactNode }) {
           body: composeData.body,
           snippet,
           is_read: true,
-        });
+          is_logged_to_crm: !!composeData.buyerId,
+        })
+        .select('id, created_at')
+        .single();
 
       if (sentError) throw sentError;
+
+      // If buyer selected, log to CRM automatically
+      if (composeData.buyerId && sentData) {
+        const { data: projectData } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        const projectId = projectData?.id || null;
+
+        const ccPart = ccEmails.length > 0 ? `\n참조: ${ccEmails.join(', ')}` : '';
+        const bccPart = bccEmails.length > 0 ? `\n숨은참조: ${bccEmails.join(', ')}` : '';
+        const content = `받는사람: ${toEmails.join(', ')}${ccPart}${bccPart}\n제목: ${composeData.subject}\n발신일: ${sentData.created_at}\n\n${composeData.body}`;
+
+        await supabase
+          .from('sales_activity_logs')
+          .insert({
+            project_id: projectId,
+            buyer_id: composeData.buyerId,
+            source: 'email',
+            direction: 'outbound',
+            title: composeData.subject,
+            content,
+            email_message_id: sentData.id,
+            occurred_at: sentData.created_at,
+            created_by: user.id,
+          });
+      }
 
       // Insert simulated incoming message for testing
       await supabase
@@ -301,9 +337,13 @@ export function EmailProvider({ children }: { children: ReactNode }) {
           is_read: false,
         });
 
+      const toastMessage = composeData.buyerId && composeData.buyerName
+        ? `이메일이 전송되고 ${composeData.buyerName} CRM에 기록되었습니다.`
+        : '이메일이 전송되었습니다.';
+
       toast({
         title: '전송 완료',
-        description: '이메일이 전송되었습니다.',
+        description: toastMessage,
       });
 
       return true;
