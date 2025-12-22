@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Save, ExternalLink, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, ExternalLink, User, Sparkles, Loader2 } from 'lucide-react';
 import { Buyer, BuyerContact, countries, getFlagEmoji } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -12,16 +12,74 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { toast } from '@/hooks/use-toast';
+import { useBuyerEnrichment } from '@/hooks/useBuyerEnrichment';
+import { useCreditsContext } from '@/context/CreditsContext';
+import EnrichmentReviewModal from './EnrichmentReviewModal';
 
 interface DetailsTabProps {
   buyer: Buyer;
 }
 
+interface EnrichedData {
+  country?: string;
+  address?: string;
+  website?: string;
+  phone?: string;
+  email?: string;
+  facebook_url?: string;
+  linkedin_url?: string;
+  youtube_url?: string;
+  notes?: string;
+  confidence?: {
+    address?: number;
+    website?: number;
+    phone?: number;
+    email?: number;
+  };
+}
+
 const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
   const { updateBuyer } = useApp();
+  const { balance } = useCreditsContext();
+  const { enrichBuyer, isLoading: isEnriching, canEnrich, creditCost } = useBuyerEnrichment();
+  
   const [formData, setFormData] = useState<Buyer>({ ...buyer });
   const [activeContactTab, setActiveContactTab] = useState<number>(0);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [enrichedData, setEnrichedData] = useState<EnrichedData | null>(null);
+
+  // Auto-fill country from BL destination country if empty
+  useEffect(() => {
+    if (!formData.country && buyer.blDestinationCountry) {
+      // Try to find matching country code
+      const matchedCountry = countries.find(
+        c => c.name.toLowerCase().includes(buyer.blDestinationCountry?.toLowerCase() || '') ||
+             buyer.blDestinationCountry?.toLowerCase().includes(c.name.toLowerCase())
+      );
+      
+      if (matchedCountry) {
+        setFormData(prev => ({
+          ...prev,
+          country: matchedCountry.name,
+          countryCode: matchedCountry.code,
+          region: matchedCountry.region,
+        }));
+      } else {
+        // Just set the country name without code
+        setFormData(prev => ({
+          ...prev,
+          country: buyer.blDestinationCountry || '',
+        }));
+      }
+    }
+  }, [buyer.blDestinationCountry, formData.country]);
 
   const handleInputChange = (field: keyof Buyer, value: string) => {
     setFormData({ ...formData, [field]: value });
@@ -41,6 +99,90 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     });
   };
 
+  const handleEnrichClick = async () => {
+    if (!canEnrich) {
+      toast({
+        variant: 'destructive',
+        title: '크레딧 부족',
+        description: `잔여 크레딧이 부족합니다 (필요: ${creditCost}, 보유: ${balance})`,
+      });
+      return;
+    }
+
+    const result = await enrichBuyer(
+      buyer.id,
+      formData.name,
+      formData.country || buyer.blDestinationCountry,
+      {
+        website: formData.websiteUrl,
+        hs_code: buyer.blHsCode,
+        product_desc: buyer.blProductDesc,
+      }
+    );
+
+    if (result.success && result.enrichedData) {
+      setEnrichedData(result.enrichedData);
+      setShowReviewModal(true);
+    }
+  };
+
+  const handleApplyEnrichment = (selectedFields: string[]) => {
+    if (!enrichedData) return;
+
+    const updates: Partial<Buyer> = {};
+    
+    selectedFields.forEach(field => {
+      const value = enrichedData[field as keyof EnrichedData];
+      if (value && typeof value === 'string') {
+        switch (field) {
+          case 'country':
+            updates.country = value;
+            // Try to match country code
+            const matchedCountry = countries.find(
+              c => c.name.toLowerCase().includes(value.toLowerCase()) ||
+                   value.toLowerCase().includes(c.name.toLowerCase())
+            );
+            if (matchedCountry) {
+              updates.countryCode = matchedCountry.code;
+              updates.region = matchedCountry.region;
+            }
+            break;
+          case 'address':
+            updates.address = value;
+            break;
+          case 'website':
+            updates.websiteUrl = value;
+            break;
+          case 'phone':
+            updates.phone = value;
+            break;
+          case 'email':
+            updates.email = value;
+            break;
+          case 'facebook_url':
+            updates.facebookUrl = value;
+            break;
+          case 'linkedin_url':
+            updates.linkedinUrl = value;
+            break;
+          case 'youtube_url':
+            updates.youtubeUrl = value;
+            break;
+        }
+      }
+    });
+
+    if (Object.keys(updates).length > 0) {
+      setFormData(prev => ({ ...prev, ...updates }));
+      toast({
+        title: '정보 적용 완료',
+        description: `${selectedFields.length}개 필드가 업데이트되었습니다. 저장하려면 'Save changes' 버튼을 눌러주세요.`,
+      });
+    }
+
+    setEnrichedData(null);
+  };
+
   const selectedCountry = countries.find(c => c.code === formData.countryCode);
 
   const currencyOptions = ['USD', 'KRW', 'SGD', 'MYR', 'VND', 'AED', 'HKD', 'CAD', 'AUD', 'EUR'];
@@ -49,6 +191,32 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
 
   return (
     <div className="p-6">
+      {/* AI Enrichment Button */}
+      <div className="flex justify-end mb-4">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={handleEnrichClick}
+                disabled={isEnriching || !canEnrich}
+                className="flex items-center gap-2"
+              >
+                {isEnriching ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                AI로 회사정보 자동 채우기
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>웹에서 공개 정보를 기반으로 주소/웹사이트/연락처 등을 제안합니다.</p>
+              <p className="text-muted-foreground">실행 시 {creditCost} credit 차감 (보유: {balance})</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
       <div className="grid grid-cols-2 gap-8">
         {/* Left Column: 회사정보 */}
         <div className="space-y-6">
@@ -84,7 +252,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               }}
             >
               <SelectTrigger className="mt-1">
-                <SelectValue />
+                <SelectValue placeholder={formData.country || "국가 선택"} />
               </SelectTrigger>
               <SelectContent>
                 {countries.map((country) => (
@@ -98,6 +266,11 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               <div className="mt-2 text-xs text-muted-foreground">
                 <div>대륙 : {selectedCountry.region === 'asia' ? '아시아' : selectedCountry.region === 'america' ? '아메리카' : selectedCountry.region === 'europe' ? '유럽' : selectedCountry.region === 'africa' ? '아프리카' : '오세아니아'}</div>
                 <div>세부지역 : {selectedCountry.region === 'asia' ? '동남아시아' : '-'}</div>
+              </div>
+            )}
+            {buyer.blDestinationCountry && !selectedCountry && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                B/L 목적지 국가: {buyer.blDestinationCountry}
               </div>
             )}
           </div>
@@ -171,6 +344,11 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               className="mt-1"
               rows={3}
             />
+            {buyer.blProductDesc && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                B/L 제품: {buyer.blProductDesc}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -369,6 +547,29 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
           Save changes
         </Button>
       </div>
+
+      {/* Enrichment Review Modal */}
+      {enrichedData && (
+        <EnrichmentReviewModal
+          isOpen={showReviewModal}
+          onClose={() => {
+            setShowReviewModal(false);
+            setEnrichedData(null);
+          }}
+          enrichedData={enrichedData}
+          currentData={{
+            country: formData.country,
+            address: formData.address,
+            website: formData.websiteUrl,
+            phone: formData.phone,
+            email: formData.email,
+            facebook_url: formData.facebookUrl,
+            linkedin_url: formData.linkedinUrl,
+            youtube_url: formData.youtubeUrl,
+          }}
+          onApply={handleApplyEnrichment}
+        />
+      )}
     </div>
   );
 };

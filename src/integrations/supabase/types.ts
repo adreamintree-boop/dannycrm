@@ -237,42 +237,78 @@ export type Database = {
       crm_buyers: {
         Row: {
           activity_count: number
+          address: string | null
+          bl_destination_country: string | null
+          bl_hs_code: string | null
+          bl_origin_country: string | null
+          bl_product_desc: string | null
+          bl_row_fingerprint: string | null
+          company_email: string | null
           company_name: string
+          company_phone: string | null
           country: string | null
           created_at: string
+          facebook_url: string | null
           id: string
+          linkedin_url: string | null
           project_id: string | null
           region: string | null
           source: string
           stage: string
           updated_at: string
           user_id: string
+          website: string | null
+          youtube_url: string | null
         }
         Insert: {
           activity_count?: number
+          address?: string | null
+          bl_destination_country?: string | null
+          bl_hs_code?: string | null
+          bl_origin_country?: string | null
+          bl_product_desc?: string | null
+          bl_row_fingerprint?: string | null
+          company_email?: string | null
           company_name: string
+          company_phone?: string | null
           country?: string | null
           created_at?: string
+          facebook_url?: string | null
           id?: string
+          linkedin_url?: string | null
           project_id?: string | null
           region?: string | null
           source?: string
           stage?: string
           updated_at?: string
           user_id: string
+          website?: string | null
+          youtube_url?: string | null
         }
         Update: {
           activity_count?: number
+          address?: string | null
+          bl_destination_country?: string | null
+          bl_hs_code?: string | null
+          bl_origin_country?: string | null
+          bl_product_desc?: string | null
+          bl_row_fingerprint?: string | null
+          company_email?: string | null
           company_name?: string
+          company_phone?: string | null
           country?: string | null
           created_at?: string
+          facebook_url?: string | null
           id?: string
+          linkedin_url?: string | null
           project_id?: string | null
           region?: string | null
           source?: string
           stage?: string
           updated_at?: string
           user_id?: string
+          website?: string | null
+          youtube_url?: string | null
         }
         Relationships: [
           {
@@ -662,7 +698,7 @@ export type Database = {
     }
     Enums: {
       bl_search_type: "bl" | "product" | "hs_code" | "importer" | "exporter"
-      credit_action_type: "INIT_GRANT" | "BL_SEARCH" | "STRATEGY"
+      credit_action_type: "INIT_GRANT" | "BL_SEARCH" | "STRATEGY" | "AI_ENRICH"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -791,7 +827,7 @@ export const Constants = {
   public: {
     Enums: {
       bl_search_type: ["bl", "product", "hs_code", "importer", "exporter"],
-      credit_action_type: ["INIT_GRANT", "BL_SEARCH", "STRATEGY"],
+      credit_action_type: ["INIT_GRANT", "BL_SEARCH", "STRATEGY", "AI_ENRICH"],
     },
   },
 } as const

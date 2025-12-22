@@ -151,17 +151,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createdAt: b.created_at,
         activityCount: b.activity_count,
         bookmarked: false,
-        websiteUrl: '',
-        address: '',
-        phone: '',
-        email: '',
+        websiteUrl: (b as any).website || '',
+        address: (b as any).address || '',
+        phone: (b as any).company_phone || '',
+        email: (b as any).company_email || '',
         revenue: '',
         revenueCurrency: 'USD',
         mainProducts: '',
-        facebookUrl: '',
-        linkedinUrl: '',
-        youtubeUrl: '',
+        facebookUrl: (b as any).facebook_url || '',
+        linkedinUrl: (b as any).linkedin_url || '',
+        youtubeUrl: (b as any).youtube_url || '',
         contacts: [],
+        blDestinationCountry: (b as any).bl_destination_country || undefined,
+        blOriginCountry: (b as any).bl_origin_country || undefined,
+        blHsCode: (b as any).bl_hs_code || undefined,
+        blProductDesc: (b as any).bl_product_desc || undefined,
+        blRowFingerprint: (b as any).bl_row_fingerprint || undefined,
       }));
       setBuyers(mappedBuyers);
     }
@@ -295,6 +300,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         source: 'BL_SEARCH',
         stage: buyerData.status || 'list',
         activity_count: 0,
+        bl_destination_country: buyerData.blDestinationCountry || null,
+        bl_origin_country: buyerData.blOriginCountry || null,
+        bl_hs_code: buyerData.blHsCode || null,
+        bl_product_desc: buyerData.blProductDesc || null,
+        bl_row_fingerprint: buyerData.blRowFingerprint || null,
       })
       .select()
       .single();
@@ -327,6 +337,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         linkedinUrl: '',
         youtubeUrl: '',
         contacts: [],
+        blDestinationCountry: (data as any).bl_destination_country,
+        blOriginCountry: (data as any).bl_origin_country,
+        blHsCode: (data as any).bl_hs_code,
+        blProductDesc: (data as any).bl_product_desc,
+        blRowFingerprint: (data as any).bl_row_fingerprint,
       };
       setBuyers(prev => [newBuyer, ...prev]);
       
