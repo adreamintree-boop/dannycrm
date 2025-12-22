@@ -58,10 +58,14 @@ const BLSearch: React.FC = () => {
   // Track current history item for replay mode
   const currentHistoryIdRef = useRef<string | null>(null);
   const isReplayModeRef = useRef(false);
+  
+  // CRITICAL: Guard flag - credit deduction only happens after explicit search action
+  const searchInitiatedRef = useRef(false);
 
+  // Tab change is UI-only - NO search, NO credit deduction
   const handleSearchCategoryChange = (category: SearchCategory) => {
     setSearchCategoryState(category);
-    setSearchCategory(category);
+    // Only update UI state - do NOT trigger search or credit flow
   };
 
   // Generate search key from current search state using stable hash
@@ -80,8 +84,10 @@ const BLSearch: React.FC = () => {
     return rows.map(row => generateRowFingerprint(row));
   }, []);
 
-  // Charge credits for current page
+  // Charge credits for current page - ONLY when searchInitiated is true
   const chargeForCurrentPage = useCallback(async (rows: BLRecord[], page: number, searchKey: string) => {
+    // CRITICAL: Guard - only charge if search was explicitly initiated
+    if (!searchInitiatedRef.current) return true;
     if (isChargingRef.current || rows.length === 0) return true;
     
     isChargingRef.current = true;
@@ -195,6 +201,9 @@ const BLSearch: React.FC = () => {
     currentHistoryIdRef.current = null;
     isReplayModeRef.current = false;
     
+    // CRITICAL: Set search initiated flag BEFORE calling search
+    searchInitiatedRef.current = true;
+    
     // Pass main keyword, category, and date range to search hook
     setMainKeyword(searchKeyword);
     setSearchCategory(searchCategoryState);
@@ -208,8 +217,12 @@ const BLSearch: React.FC = () => {
     currentHistoryIdRef.current = null;
     isReplayModeRef.current = false;
     
+    // CRITICAL: Set search initiated flag BEFORE calling search
+    searchInitiatedRef.current = true;
+    
     // Filter panel search uses date range but NOT main keyword
     setMainKeyword('');
+    setSearchCategory(searchCategoryState);
     setDateRange(startDate, endDate);
     search();
   };
@@ -220,6 +233,9 @@ const BLSearch: React.FC = () => {
     isReplayModeRef.current = true;
     currentHistoryIdRef.current = item.id;
     
+    // CRITICAL: Set search initiated flag for replay mode
+    searchInitiatedRef.current = true;
+    
     // CRITICAL: Set the search key BEFORE running the search
     // This uses the same query_hash from history, ensuring the backend
     // recognizes this as the same session and doesn't re-charge viewed rows
@@ -228,7 +244,6 @@ const BLSearch: React.FC = () => {
     // Hydrate the search state from history
     setSearchKeyword(item.keyword);
     setSearchCategoryState(item.search_type);
-    handleSearchCategoryChange(item.search_type);
     
     const historyDateFrom = item.date_from ? new Date(item.date_from) : undefined;
     const historyDateTo = item.date_to ? new Date(item.date_to) : undefined;
@@ -263,7 +278,7 @@ const BLSearch: React.FC = () => {
     
     // Refresh history to update last_opened_at
     fetchHistory();
-  }, [filters, resetFilters, addFilter, updateFilter, setMainKeyword, setSearchCategory, setDateRange, search, fetchHistory, handleSearchCategoryChange]);
+  }, [filters, resetFilters, addFilter, updateFilter, setMainKeyword, setSearchCategory, setDateRange, search, fetchHistory]);
 
   const handleImport = () => {
     console.log('Import clicked');
