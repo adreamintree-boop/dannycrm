@@ -46,6 +46,54 @@ export type Database = {
           },
         ]
       }
+      bl_search_history: {
+        Row: {
+          created_at: string
+          date_from: string | null
+          date_to: string | null
+          filters_json: Json | null
+          id: string
+          keyword: string
+          last_opened_at: string
+          last_viewed_page: number | null
+          query_hash: string
+          result_total_count: number | null
+          search_type: Database["public"]["Enums"]["bl_search_type"]
+          user_id: string
+          viewed_row_ids: Json | null
+        }
+        Insert: {
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          filters_json?: Json | null
+          id?: string
+          keyword?: string
+          last_opened_at?: string
+          last_viewed_page?: number | null
+          query_hash: string
+          result_total_count?: number | null
+          search_type: Database["public"]["Enums"]["bl_search_type"]
+          user_id: string
+          viewed_row_ids?: Json | null
+        }
+        Update: {
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          filters_json?: Json | null
+          id?: string
+          keyword?: string
+          last_opened_at?: string
+          last_viewed_page?: number | null
+          query_hash?: string
+          result_total_count?: number | null
+          search_type?: Database["public"]["Enums"]["bl_search_type"]
+          user_id?: string
+          viewed_row_ids?: Json | null
+        }
+        Relationships: []
+      }
       bl_search_sessions: {
         Row: {
           created_at: string
@@ -613,6 +661,7 @@ export type Database = {
       get_credit_balance: { Args: { p_user_id: string }; Returns: number }
     }
     Enums: {
+      bl_search_type: "bl" | "product" | "hs_code" | "importer" | "exporter"
       credit_action_type: "INIT_GRANT" | "BL_SEARCH" | "STRATEGY"
     }
     CompositeTypes: {
@@ -741,6 +790,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      bl_search_type: ["bl", "product", "hs_code", "importer", "exporter"],
       credit_action_type: ["INIT_GRANT", "BL_SEARCH", "STRATEGY"],
     },
   },

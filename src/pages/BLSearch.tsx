@@ -6,6 +6,7 @@ import BLDataUpdates from '@/components/bl-search/BLDataUpdates';
 import BLResultsTable from '@/components/bl-search/BLResultsTable';
 import BLFilterPanel from '@/components/bl-search/BLFilterPanel';
 import { useBLSearch } from '@/hooks/useBLSearch';
+import { useBLSearchHistory, BLSearchHistoryItem } from '@/hooks/useBLSearchHistory';
 import { useCreditsContext } from '@/context/CreditsContext';
 import { toast } from '@/hooks/use-toast';
 import { BLRecord } from '@/data/blMockData';
@@ -34,17 +35,28 @@ const BLSearch: React.FC = () => {
     getSearchMeta
   } = useBLSearch();
 
+  const { 
+    saveSearch, 
+    updateViewedRows, 
+    updateLastViewedPage,
+    fetchHistory 
+  } = useBLSearchHistory();
+
   const { chargeBLSearchPage, generateSearchKey, refreshBalance } = useCreditsContext();
 
   // Search strip state (independent from filter panel)
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 12));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
-  const [searchCategory, setSearchCategoryState] = useState<SearchCategory>('bl');
+  const [searchCategoryState, setSearchCategoryState] = useState<SearchCategory>('bl');
   
   // Track current search key for session
   const currentSearchKeyRef = useRef<string>('');
   const isChargingRef = useRef(false);
+  
+  // Track current history item for replay mode
+  const currentHistoryIdRef = useRef<string | null>(null);
+  const isReplayModeRef = useRef(false);
 
   const handleSearchCategoryChange = (category: SearchCategory) => {
     setSearchCategoryState(category);
@@ -55,13 +67,13 @@ const BLSearch: React.FC = () => {
   const getCurrentSearchKey = useCallback(() => {
     const searchMeta = {
       keyword: searchKeyword,
-      category: searchCategory,
+      category: searchCategoryState,
       filters: filters.filter(f => f.value.trim()).map(f => ({ type: f.type, value: f.value })),
       dateRange: { start: startDate?.toISOString(), end: endDate?.toISOString() },
       sortOrder,
     };
     return generateSearchKey(searchMeta);
-  }, [searchKeyword, searchCategory, filters, startDate, endDate, sortOrder, generateSearchKey]);
+  }, [searchKeyword, searchCategoryState, filters, startDate, endDate, sortOrder, generateSearchKey]);
 
   // Get row fingerprints from paginated results
   const getRowFingerprints = useCallback((rows: BLRecord[]): string[] => {
@@ -102,12 +114,18 @@ const BLSearch: React.FC = () => {
         });
       }
 
+      // Update viewed rows in history if we have a history ID
+      if (currentHistoryIdRef.current) {
+        await updateViewedRows(currentHistoryIdRef.current, fingerprints);
+        await updateLastViewedPage(currentHistoryIdRef.current, page);
+      }
+
       await refreshBalance();
       return true;
     } finally {
       isChargingRef.current = false;
     }
-  }, [getRowFingerprints, getSearchMeta, chargeBLSearchPage, results.length, refreshBalance]);
+  }, [getRowFingerprints, getSearchMeta, chargeBLSearchPage, results.length, refreshBalance, updateViewedRows, updateLastViewedPage]);
 
   // Handle page changes - charge for new page
   const handlePageChange = useCallback(async (newPage: number) => {
@@ -140,26 +158,93 @@ const BLSearch: React.FC = () => {
     }
   }, [hasSearched, isLoading, paginatedResults, currentPage, getCurrentSearchKey, chargeForCurrentPage]);
 
+  // Save search to history after results
+  useEffect(() => {
+    if (hasSearched && !isLoading && results.length > 0 && !isReplayModeRef.current) {
+      saveSearch({
+        searchType: searchCategoryState,
+        keyword: searchKeyword,
+        dateFrom: startDate,
+        dateTo: endDate,
+        filters,
+        resultCount: results.length,
+      }).then(historyItem => {
+        if (historyItem) {
+          currentHistoryIdRef.current = historyItem.id;
+        }
+      });
+    }
+  }, [hasSearched, isLoading, results.length, searchCategoryState, searchKeyword, startDate, endDate, filters, saveSearch]);
+
   const handleSearch = () => {
-    // Reset search key for new search
+    // Reset refs for new search
     currentSearchKeyRef.current = '';
+    currentHistoryIdRef.current = null;
+    isReplayModeRef.current = false;
     
     // Pass main keyword, category, and date range to search hook
     setMainKeyword(searchKeyword);
-    setSearchCategory(searchCategory);
+    setSearchCategory(searchCategoryState);
     setDateRange(startDate, endDate);
     search();
   };
 
   const handleFilterPanelSearch = () => {
-    // Reset search key for new search
+    // Reset refs for new search
     currentSearchKeyRef.current = '';
+    currentHistoryIdRef.current = null;
+    isReplayModeRef.current = false;
     
     // Filter panel search uses date range but NOT main keyword
     setMainKeyword('');
     setDateRange(startDate, endDate);
     search();
   };
+
+  // Handle selecting a history item
+  const handleSelectHistory = useCallback((item: BLSearchHistoryItem) => {
+    // Set replay mode to prevent duplicate credit charging
+    isReplayModeRef.current = true;
+    currentHistoryIdRef.current = item.id;
+    
+    // Hydrate the search state from history
+    setSearchKeyword(item.keyword);
+    setSearchCategoryState(item.search_type);
+    handleSearchCategoryChange(item.search_type);
+    
+    if (item.date_from) {
+      setStartDate(new Date(item.date_from));
+    }
+    if (item.date_to) {
+      setEndDate(new Date(item.date_to));
+    }
+    
+    // Apply filters from history - reset and apply
+    resetFilters();
+    item.filters_json.forEach((f, idx) => {
+      if (idx === 0) {
+        updateFilter(filters[0]?.id || '', f.type, f.value);
+      } else {
+        addFilter();
+        // Need to apply filter after adding
+        setTimeout(() => {
+          updateFilter(filters[idx]?.id || '', f.type, f.value);
+        }, 0);
+      }
+    });
+    
+    // Run the search
+    setMainKeyword(item.keyword);
+    setSearchCategory(item.search_type);
+    if (item.date_from) {
+      setDateRange(new Date(item.date_from), item.date_to ? new Date(item.date_to) : undefined);
+    }
+    
+    search();
+    
+    // Refresh history to update last_opened_at
+    fetchHistory();
+  }, [filters, resetFilters, addFilter, updateFilter, setMainKeyword, setSearchCategory, setDateRange, search, fetchHistory, handleSearchCategoryChange]);
 
   const handleImport = () => {
     console.log('Import clicked');
@@ -180,7 +265,7 @@ const BLSearch: React.FC = () => {
           onSearch={handleSearch}
           onImport={handleImport}
           isLoading={isLoading}
-          searchCategory={searchCategory}
+          searchCategory={searchCategoryState}
           onSearchCategoryChange={handleSearchCategoryChange}
         />
 
@@ -189,7 +274,7 @@ const BLSearch: React.FC = () => {
           {/* Before search - show Recent Searches and Data Updates */}
           {!hasSearched && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <BLRecentSearches />
+              <BLRecentSearches onSelectHistory={handleSelectHistory} />
               <BLDataUpdates />
             </div>
           )}
