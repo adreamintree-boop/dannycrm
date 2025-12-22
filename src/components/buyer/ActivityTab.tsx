@@ -4,9 +4,11 @@ import { Buyer, Activity, ActivityType, BuyerStatus } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useSalesActivityLogs, SalesActivityLog } from '@/hooks/useSalesActivityLogs';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import EmailDetailDrawer from './EmailDetailDrawer';
 
 interface ActivityTabProps {
   buyer: Buyer;
@@ -29,6 +31,16 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
     'rfq': true,
     'quotation': true,
   });
+  
+  const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+
+  const handleEmailLogClick = (log: SalesActivityLog) => {
+    if (log.email_message_id) {
+      setSelectedEmailId(log.email_message_id);
+      setEmailDrawerOpen(true);
+    }
+  };
 
   const handleActivityClick = (activity: Activity) => {
     onOpenDrawer('detail', activity);
@@ -337,44 +349,71 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
           </h3>
           <div className="space-y-3">
             {emailLogs.map((log) => (
-              <div
-                key={log.id}
-                className="bg-card border border-border rounded-lg p-4 hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    log.direction === 'inbound' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
-                  }`}>
-                    {log.direction === 'inbound' ? (
-                      <ArrowDownLeft className="w-4 h-4" />
-                    ) : (
-                      <ArrowUpRight className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-foreground truncate">{log.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        log.direction === 'inbound' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                        {log.direction === 'inbound' ? '수신' : '발신'}
-                      </span>
+              <TooltipProvider key={log.id}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      onClick={() => handleEmailLogClick(log)}
+                      className={`bg-card border border-border rounded-lg p-4 transition-all ${
+                        log.email_message_id 
+                          ? 'cursor-pointer hover:bg-accent hover:shadow-md' 
+                          : 'opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          log.direction === 'inbound' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
+                        }`}>
+                          {log.direction === 'inbound' ? (
+                            <ArrowDownLeft className="w-4 h-4" />
+                          ) : (
+                            <ArrowUpRight className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-foreground truncate">{log.title}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              log.direction === 'inbound' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {log.direction === 'inbound' ? '수신' : '발신'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">
+                            {log.content}
+                          </p>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {format(new Date(log.occurred_at), 'yyyy년 M월 d일 a h:mm', { locale: ko })}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">
-                      {log.content}
-                    </p>
-                    <div className="text-xs text-muted-foreground mt-2">
-                      {format(new Date(log.occurred_at), 'yyyy년 M월 d일 a h:mm', { locale: ko })}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </TooltipTrigger>
+                  {log.email_message_id && (
+                    <TooltipContent>
+                      <p>이메일 내용 보기</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             ))}
           </div>
         </div>
       )}
+
+      {/* Email Detail Drawer */}
+      <EmailDetailDrawer
+        open={emailDrawerOpen}
+        onClose={() => {
+          setEmailDrawerOpen(false);
+          setSelectedEmailId(null);
+        }}
+        emailMessageId={selectedEmailId}
+        buyerName={buyer.name}
+        buyerStage={buyer.status}
+      />
     </div>
   );
 };
