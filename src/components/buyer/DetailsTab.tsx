@@ -104,7 +104,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
       toast({
         variant: 'destructive',
         title: '크레딧 부족',
-        description: `잔여 크레딧이 부족합니다 (필요: ${creditCost}, 보유: ${balance})`,
+        description: `크레딧이 부족합니다.`,
       });
       return;
     }
@@ -114,15 +114,26 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
       formData.name,
       formData.country || buyer.blDestinationCountry,
       {
+        address: formData.address,
+        website: formData.websiteUrl,
+        phone: formData.phone,
+        email: formData.email,
+      },
+      {
         website: formData.websiteUrl,
         hs_code: buyer.blHsCode,
         product_desc: buyer.blProductDesc,
+        sourceCountryFromBL: !!buyer.blDestinationCountry,
       }
     );
 
     if (result.success && result.enrichedData) {
       setEnrichedData(result.enrichedData);
       setShowReviewModal(true);
+      toast({
+        title: 'AI 추천 정보 조회 완료',
+        description: `${creditCost} 크레딧이 차감되었습니다.`,
+      });
     }
   };
 
