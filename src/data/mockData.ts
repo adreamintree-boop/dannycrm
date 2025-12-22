@@ -51,6 +51,12 @@ export interface Buyer {
   leadDate?: string;
   targetDate?: string;
   clientDate?: string;
+  // B/L source metadata
+  blDestinationCountry?: string;
+  blOriginCountry?: string;
+  blHsCode?: string;
+  blProductDesc?: string;
+  blRowFingerprint?: string;
 }
 
 export interface Activity {
