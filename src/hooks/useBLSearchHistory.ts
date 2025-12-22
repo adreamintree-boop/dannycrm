@@ -3,25 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { SearchCategory } from '@/components/bl-search/BLSearchStrip';
 import { SearchFilter } from '@/data/blMockData';
-
-// Map between DB enum and app SearchCategory
-type DBSearchType = 'bl' | 'product' | 'hs_code' | 'importer' | 'exporter';
-
-const categoryToDbType: Record<SearchCategory, DBSearchType> = {
-  bl: 'bl',
-  product: 'product',
-  hscode: 'hs_code',
-  importer: 'importer',
-  exporter: 'exporter',
-};
-
-const dbTypeToCategoryMap: Record<DBSearchType, SearchCategory> = {
-  bl: 'bl',
-  product: 'product',
-  hs_code: 'hscode',
-  importer: 'importer',
-  exporter: 'exporter',
-};
+import { 
+  generateQueryHash as generateStableQueryHash,
+  categoryToDbType,
+  dbTypeToCategoryMap,
+  DBSearchType 
+} from '@/lib/blSearchUtils';
 
 export interface BLSearchHistoryItem {
   id: string;
@@ -46,29 +33,6 @@ interface SaveSearchParams {
   dateTo: Date | undefined;
   filters: SearchFilter[];
   resultCount: number;
-}
-
-// Generate a hash for the search query
-function generateQueryHash(params: SaveSearchParams): string {
-  const hashInput = JSON.stringify({
-    type: params.searchType,
-    keyword: params.keyword.trim().toLowerCase(),
-    dateFrom: params.dateFrom?.toISOString().split('T')[0],
-    dateTo: params.dateTo?.toISOString().split('T')[0],
-    filters: params.filters
-      .filter(f => f.value.trim())
-      .map(f => ({ type: f.type, value: f.value.trim().toLowerCase() }))
-      .sort((a, b) => a.type.localeCompare(b.type) || a.value.localeCompare(b.value)),
-  });
-  
-  // Simple hash function
-  let hash = 0;
-  for (let i = 0; i < hashInput.length; i++) {
-    const char = hashInput.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(36);
 }
 
 function parseFiltersJson(json: unknown): SearchFilter[] {
@@ -129,7 +93,7 @@ export function useBLSearchHistory() {
   const saveSearch = useCallback(async (params: SaveSearchParams): Promise<BLSearchHistoryItem | null> => {
     if (!user) return null;
 
-    const queryHash = generateQueryHash(params);
+    const queryHash = generateStableQueryHash(params);
     const dbSearchType = categoryToDbType[params.searchType];
 
     try {

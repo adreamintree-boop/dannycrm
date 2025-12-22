@@ -10,6 +10,7 @@ import { useBLSearchHistory, BLSearchHistoryItem } from '@/hooks/useBLSearchHist
 import { useCreditsContext } from '@/context/CreditsContext';
 import { toast } from '@/hooks/use-toast';
 import { BLRecord } from '@/data/blMockData';
+import { generateRowFingerprint, generateSearchKey } from '@/lib/blSearchUtils';
 
 const BLSearch: React.FC = () => {
   const {
@@ -42,7 +43,7 @@ const BLSearch: React.FC = () => {
     fetchHistory 
   } = useBLSearchHistory();
 
-  const { chargeBLSearchPage, generateSearchKey, refreshBalance } = useCreditsContext();
+  const { chargeBLSearchPage, refreshBalance } = useCreditsContext();
 
   // Search strip state (independent from filter panel)
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -63,21 +64,20 @@ const BLSearch: React.FC = () => {
     setSearchCategory(category);
   };
 
-  // Generate search key from current search state
+  // Generate search key from current search state using stable hash
   const getCurrentSearchKey = useCallback(() => {
-    const searchMeta = {
+    return generateSearchKey({
+      searchType: searchCategoryState,
       keyword: searchKeyword,
-      category: searchCategoryState,
-      filters: filters.filter(f => f.value.trim()).map(f => ({ type: f.type, value: f.value })),
-      dateRange: { start: startDate?.toISOString(), end: endDate?.toISOString() },
-      sortOrder,
-    };
-    return generateSearchKey(searchMeta);
-  }, [searchKeyword, searchCategoryState, filters, startDate, endDate, sortOrder, generateSearchKey]);
+      dateFrom: startDate,
+      dateTo: endDate,
+      filters: filters,
+    });
+  }, [searchKeyword, searchCategoryState, filters, startDate, endDate]);
 
-  // Get row fingerprints from paginated results
+  // Get row fingerprints from paginated results using stable deterministic hash
   const getRowFingerprints = useCallback((rows: BLRecord[]): string[] => {
-    return rows.map(row => row.id);
+    return rows.map(row => generateRowFingerprint(row));
   }, []);
 
   // Charge credits for current page
@@ -111,6 +111,11 @@ const BLSearch: React.FC = () => {
         toast({
           title: '크레딧 차감',
           description: `이번 페이지 신규 조회: ${result.chargedCount}건 / 차감: ${result.chargedCount} credit`,
+        });
+      } else if (result.chargedCount === 0) {
+        toast({
+          title: '추가 차감 없음',
+          description: '이미 조회한 페이지입니다.',
         });
       }
 
@@ -150,11 +155,19 @@ const BLSearch: React.FC = () => {
     if (hasSearched && !isLoading && paginatedResults.length > 0 && currentPage === 1) {
       const searchKey = getCurrentSearchKey();
       
-      // Only charge if this is a new search (different search key)
-      if (searchKey !== currentSearchKeyRef.current) {
+      // For replay mode, use the already-set search key (from history query_hash)
+      // For new searches, update the search key
+      const effectiveSearchKey = isReplayModeRef.current 
+        ? currentSearchKeyRef.current 
+        : searchKey;
+      
+      // Only update search key ref for new searches
+      if (!isReplayModeRef.current && searchKey !== currentSearchKeyRef.current) {
         currentSearchKeyRef.current = searchKey;
-        chargeForCurrentPage(paginatedResults, 1, searchKey);
       }
+      
+      // Always charge - the backend will handle deduplication
+      chargeForCurrentPage(paginatedResults, 1, effectiveSearchKey);
     }
   }, [hasSearched, isLoading, paginatedResults, currentPage, getCurrentSearchKey, chargeForCurrentPage]);
 
@@ -203,20 +216,28 @@ const BLSearch: React.FC = () => {
 
   // Handle selecting a history item
   const handleSelectHistory = useCallback((item: BLSearchHistoryItem) => {
-    // Set replay mode to prevent duplicate credit charging
+    // Set replay mode - we're reopening a previous search
     isReplayModeRef.current = true;
     currentHistoryIdRef.current = item.id;
+    
+    // CRITICAL: Set the search key BEFORE running the search
+    // This uses the same query_hash from history, ensuring the backend
+    // recognizes this as the same session and doesn't re-charge viewed rows
+    currentSearchKeyRef.current = item.query_hash;
     
     // Hydrate the search state from history
     setSearchKeyword(item.keyword);
     setSearchCategoryState(item.search_type);
     handleSearchCategoryChange(item.search_type);
     
-    if (item.date_from) {
-      setStartDate(new Date(item.date_from));
+    const historyDateFrom = item.date_from ? new Date(item.date_from) : undefined;
+    const historyDateTo = item.date_to ? new Date(item.date_to) : undefined;
+    
+    if (historyDateFrom) {
+      setStartDate(historyDateFrom);
     }
-    if (item.date_to) {
-      setEndDate(new Date(item.date_to));
+    if (historyDateTo) {
+      setEndDate(historyDateTo);
     }
     
     // Apply filters from history - reset and apply
@@ -233,12 +254,10 @@ const BLSearch: React.FC = () => {
       }
     });
     
-    // Run the search
+    // Run the search with hydrated params
     setMainKeyword(item.keyword);
     setSearchCategory(item.search_type);
-    if (item.date_from) {
-      setDateRange(new Date(item.date_from), item.date_to ? new Date(item.date_to) : undefined);
-    }
+    setDateRange(historyDateFrom, historyDateTo);
     
     search();
     
