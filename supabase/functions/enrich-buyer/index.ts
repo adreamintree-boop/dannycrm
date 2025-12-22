@@ -121,27 +121,8 @@ Given a company name and country, search your knowledge for:
 IMPORTANT:
 - Only return information you are confident about
 - Set confidence scores (0-1) for each field
-- If unsure, leave the field empty and set confidence to 0
-- Return ONLY valid JSON, no markdown or explanation
-
-Return a JSON object with this exact structure:
-{
-  "country": "Full country name if known",
-  "address": "Full street address if available",
-  "website": "Official website URL",
-  "phone": "Phone number with country code",
-  "email": "General or sales email",
-  "facebook_url": "Facebook page URL",
-  "linkedin_url": "LinkedIn company page URL",
-  "youtube_url": "YouTube channel URL",
-  "notes": "Brief reasoning about findings and data quality",
-  "confidence": {
-    "address": 0.0-1.0,
-    "website": 0.0-1.0,
-    "phone": 0.0-1.0,
-    "email": 0.0-1.0
-  }
-}`;
+- If you cannot find reliable information, return empty strings and low confidence
+- Always use the tool to return structured data`;
 
     const userPrompt = `Find public information about this company:
 
@@ -151,7 +132,7 @@ ${hints?.website ? `Known Website: ${hints.website}` : ""}
 ${hints?.hs_code ? `Product HS Code: ${hints.hs_code}` : ""}
 ${hints?.product_desc ? `Product Description: ${hints.product_desc}` : ""}
 
-Return ONLY valid JSON with the company information you can find.`;
+Use the enrich_company tool to return the information you find.`;
 
     try {
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -166,12 +147,46 @@ Return ONLY valid JSON with the company information you can find.`;
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "enrich_company",
+                description: "Return structured company information",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    country: { type: "string", description: "Full country name" },
+                    address: { type: "string", description: "Full street address" },
+                    website: { type: "string", description: "Official website URL" },
+                    phone: { type: "string", description: "Phone number with country code" },
+                    email: { type: "string", description: "General or sales email" },
+                    facebook_url: { type: "string", description: "Facebook page URL" },
+                    linkedin_url: { type: "string", description: "LinkedIn company page URL" },
+                    youtube_url: { type: "string", description: "YouTube channel URL" },
+                    notes: { type: "string", description: "Brief reasoning about findings and data quality" },
+                    confidence: {
+                      type: "object",
+                      properties: {
+                        address: { type: "number", description: "Confidence 0-1" },
+                        website: { type: "number", description: "Confidence 0-1" },
+                        phone: { type: "number", description: "Confidence 0-1" },
+                        email: { type: "number", description: "Confidence 0-1" },
+                      },
+                      required: ["address", "website", "phone", "email"],
+                    },
+                  },
+                  required: ["notes", "confidence"],
+                },
+              },
+            },
+          ],
+          tool_choice: { type: "function", function: { name: "enrich_company" } },
         }),
       });
 
       if (!aiResponse.ok) {
         console.error("AI API error:", aiResponse.status, await aiResponse.text());
-        // Refund credits on AI failure
         await refundCredits(supabase, user.id, ENRICH_CREDIT_COST, requestId);
         return new Response(
           JSON.stringify({ error: "AI 서비스 오류가 발생했습니다. 크레딧이 환불됩니다.", refunded: true }),
@@ -180,10 +195,10 @@ Return ONLY valid JSON with the company information you can find.`;
       }
 
       const aiData = await aiResponse.json();
-      const content = aiData.choices?.[0]?.message?.content;
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
 
-      if (!content) {
-        console.error("No AI content received");
+      if (!toolCall || toolCall.function.name !== "enrich_company") {
+        console.error("No tool call received:", JSON.stringify(aiData));
         await refundCredits(supabase, user.id, ENRICH_CREDIT_COST, requestId);
         return new Response(
           JSON.stringify({ error: "AI 응답이 없습니다. 크레딧이 환불됩니다.", refunded: true }),
@@ -191,17 +206,12 @@ Return ONLY valid JSON with the company information you can find.`;
         );
       }
 
-      // Parse AI response (handle markdown code blocks)
+      // Parse tool call arguments
       let enrichedData;
       try {
-        let jsonString = content;
-        // Remove markdown code blocks if present
-        if (jsonString.includes("```")) {
-          jsonString = jsonString.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-        }
-        enrichedData = JSON.parse(jsonString);
+        enrichedData = JSON.parse(toolCall.function.arguments);
       } catch (parseError) {
-        console.error("Failed to parse AI response:", content);
+        console.error("Failed to parse tool call arguments:", toolCall.function.arguments);
         await refundCredits(supabase, user.id, ENRICH_CREDIT_COST, requestId);
         return new Response(
           JSON.stringify({ error: "AI 응답 파싱 오류. 크레딧이 환불됩니다.", refunded: true }),
@@ -240,26 +250,27 @@ Return ONLY valid JSON with the company information you can find.`;
 
 async function refundCredits(supabase: any, userId: string, amount: number, originalRequestId: string) {
   try {
-    // Add credits back (negative deduction = addition)
-    const { error } = await supabase
+    // Get current balance first
+    const { data: current, error: fetchError } = await supabase
       .from("user_credits")
-      .update({ balance: supabase.raw(`balance + ${amount}`) })
+      .select("balance")
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchError || !current) {
+      console.error("Failed to fetch current balance for refund:", fetchError);
+      return;
+    }
+
+    // Update with new balance
+    const { error: updateError } = await supabase
+      .from("user_credits")
+      .update({ balance: current.balance + amount })
       .eq("user_id", userId);
 
-    if (error) {
-      // Fallback: direct update
-      const { data: current } = await supabase
-        .from("user_credits")
-        .select("balance")
-        .eq("user_id", userId)
-        .single();
-
-      if (current) {
-        await supabase
-          .from("user_credits")
-          .update({ balance: current.balance + amount })
-          .eq("user_id", userId);
-      }
+    if (updateError) {
+      console.error("Failed to update balance for refund:", updateError);
+      return;
     }
 
     // Log the refund
