@@ -6,7 +6,21 @@ import { X, Mail, ArrowUpRight, ArrowDownLeft, ExternalLink, Reply, Check } from
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
-import { useEmailContext, EmailMessage } from '@/context/EmailContext';
+import { supabase } from '@/integrations/supabase/client';
+
+interface EmailMessage {
+  id: string;
+  subject: string;
+  body: string;
+  from_email: string;
+  from_name: string | null;
+  to_emails: string[];
+  cc_emails: string[];
+  bcc_emails: string[];
+  direction: 'inbound' | 'outbound';
+  is_logged_to_crm: boolean;
+  created_at: string;
+}
 
 interface EmailDetailDrawerProps {
   open: boolean;
@@ -24,34 +38,64 @@ export default function EmailDetailDrawer({
   buyerStage,
 }: EmailDetailDrawerProps) {
   const navigate = useNavigate();
-  const { getMessage } = useEmailContext();
   const [email, setEmail] = useState<EmailMessage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && emailMessageId) {
+    async function fetchEmail() {
+      if (!open || !emailMessageId) {
+        setEmail(null);
+        setError(null);
+        return;
+      }
+
       setLoading(true);
       setError(null);
-      getMessage(emailMessageId)
-        .then((msg) => {
-          if (msg) {
-            setEmail(msg);
-          } else {
-            setError('이메일 원본을 불러올 수 없습니다.');
-          }
-        })
-        .catch(() => {
+
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('email_messages')
+          .select('*')
+          .eq('id', emailMessageId)
+          .single();
+
+        if (fetchError || !data) {
           setError('이메일 원본을 불러올 수 없습니다.');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-      setEmail(null);
-      setError(null);
+        } else {
+          const toEmails = Array.isArray(data.to_emails) 
+            ? (data.to_emails as unknown as string[]) 
+            : [];
+          const ccEmails = Array.isArray(data.cc_emails) 
+            ? (data.cc_emails as unknown as string[]) 
+            : [];
+          const bccEmails = Array.isArray(data.bcc_emails) 
+            ? (data.bcc_emails as unknown as string[]) 
+            : [];
+
+          setEmail({
+            id: data.id,
+            subject: data.subject,
+            body: data.body,
+            from_email: data.from_email,
+            from_name: data.from_name,
+            to_emails: toEmails,
+            cc_emails: ccEmails,
+            bcc_emails: bccEmails,
+            direction: data.direction as 'inbound' | 'outbound',
+            is_logged_to_crm: data.is_logged_to_crm,
+            created_at: data.created_at,
+          });
+        }
+      } catch {
+        setError('이메일 원본을 불러올 수 없습니다.');
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [open, emailMessageId, getMessage]);
+
+    fetchEmail();
+  }, [open, emailMessageId]);
 
   const handleOpenInEmail = () => {
     if (emailMessageId) {
