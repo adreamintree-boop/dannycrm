@@ -112,18 +112,14 @@ const BLSearch: React.FC = () => {
         return false;
       }
 
-      // Show toast only if credits were actually charged
+      // Show toast only if credits were actually charged (deductionCount > 0)
       if (result.chargedCount && result.chargedCount > 0) {
         toast({
           title: '크레딧 차감',
           description: `이번 페이지 신규 조회: ${result.chargedCount}건 / 차감: ${result.chargedCount} credit`,
         });
-      } else if (result.chargedCount === 0) {
-        toast({
-          title: '추가 차감 없음',
-          description: '이미 조회한 페이지입니다.',
-        });
       }
+      // No toast when chargedCount === 0 (previously viewed rows)
 
       // Update viewed rows in history if we have a history ID
       if (currentHistoryIdRef.current) {
