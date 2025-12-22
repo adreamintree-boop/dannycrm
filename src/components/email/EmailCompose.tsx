@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ChevronDown, ChevronUp, Send, Save, X, Search, Building2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Send, Save, X, Search, Building2, Lock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEmailContext, ComposeData } from '@/context/EmailContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,6 +22,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface Buyer {
   id: string;
@@ -65,6 +71,7 @@ export default function EmailCompose() {
   const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
   const [buyerOpen, setBuyerOpen] = useState(false);
   const [buyerSearch, setBuyerSearch] = useState('');
+  const [buyerLocked, setBuyerLocked] = useState(false); // Lock buyer when replying to CRM-linked email
 
   // Fetch buyers
   useEffect(() => {
@@ -98,6 +105,21 @@ export default function EmailCompose() {
   useEffect(() => {
     const replyTo = searchParams.get('replyTo');
     const forwardFrom = searchParams.get('forward');
+    
+    // Check for buyer context from URL params
+    const buyerIdParam = searchParams.get('buyerId');
+    const buyerNameParam = searchParams.get('buyerName');
+    const buyerStageParam = searchParams.get('buyerStage');
+    
+    if (buyerIdParam && buyerNameParam) {
+      setSelectedBuyer({
+        id: buyerIdParam,
+        company_name: buyerNameParam,
+        stage: buyerStageParam || 'list',
+        country: null,
+      });
+      setBuyerLocked(true);
+    }
 
     const loadOriginal = async (id: string, isForward: boolean) => {
       const msg = await getMessage(id);
@@ -169,68 +191,92 @@ export default function EmailCompose() {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label className="w-20 text-right text-muted-foreground shrink-0">바이어 선택</Label>
-            <Popover open={buyerOpen} onOpenChange={setBuyerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={buyerOpen}
-                  className="flex-1 justify-between font-normal"
-                >
-                  {selectedBuyer ? (
-                    <div className="flex items-center gap-2">
+            {buyerLocked ? (
+              // Locked buyer display (from reply)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/50 cursor-not-allowed">
                       <Building2 className="w-4 h-4 text-muted-foreground" />
-                      <span>{selectedBuyer.company_name}</span>
-                      <Badge variant="secondary" className={stageBadgeColors[selectedBuyer.stage]}>
-                        {stageLabels[selectedBuyer.stage]}
-                      </Badge>
-                      {selectedBuyer.country && (
-                        <span className="text-muted-foreground text-sm">{selectedBuyer.country}</span>
+                      <span>{selectedBuyer?.company_name}</span>
+                      {selectedBuyer && (
+                        <Badge variant="secondary" className={stageBadgeColors[selectedBuyer.stage]}>
+                          {stageLabels[selectedBuyer.stage]}
+                        </Badge>
                       )}
+                      <Lock className="w-3 h-3 ml-auto text-muted-foreground" />
                     </div>
-                  ) : (
-                    <span className="text-muted-foreground">CRM에 기록할 바이어를 선택하세요 (선택)</span>
-                  )}
-                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0 z-50 bg-popover" align="start">
-                <Command>
-                  <CommandInput
-                    placeholder="회사명 검색..."
-                    value={buyerSearch}
-                    onValueChange={setBuyerSearch}
-                  />
-                  <CommandList>
-                    <CommandEmpty>바이어를 찾을 수 없습니다.</CommandEmpty>
-                    <CommandGroup>
-                      {filteredBuyers.map((buyer) => (
-                        <CommandItem
-                          key={buyer.id}
-                          value={buyer.company_name}
-                          onSelect={() => {
-                            setSelectedBuyer(buyer);
-                            setBuyerOpen(false);
-                            setBuyerSearch('');
-                          }}
-                          className="flex items-center gap-2 cursor-pointer"
-                        >
-                          <Building2 className="w-4 h-4 text-muted-foreground" />
-                          <span className="flex-1">{buyer.company_name}</span>
-                          <Badge variant="secondary" className={stageBadgeColors[buyer.stage]}>
-                            {stageLabels[buyer.stage]}
-                          </Badge>
-                          {buyer.country && (
-                            <span className="text-muted-foreground text-sm">{buyer.country}</span>
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {selectedBuyer && (
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>이 이메일과 연결된 바이어입니다</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              // Regular buyer selector
+              <Popover open={buyerOpen} onOpenChange={setBuyerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={buyerOpen}
+                    className="flex-1 justify-between font-normal"
+                  >
+                    {selectedBuyer ? (
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-muted-foreground" />
+                        <span>{selectedBuyer.company_name}</span>
+                        <Badge variant="secondary" className={stageBadgeColors[selectedBuyer.stage]}>
+                          {stageLabels[selectedBuyer.stage]}
+                        </Badge>
+                        {selectedBuyer.country && (
+                          <span className="text-muted-foreground text-sm">{selectedBuyer.country}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">CRM에 기록할 바이어를 선택하세요 (선택)</span>
+                    )}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0 z-50 bg-popover" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="회사명 검색..."
+                      value={buyerSearch}
+                      onValueChange={setBuyerSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>바이어를 찾을 수 없습니다.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredBuyers.map((buyer) => (
+                          <CommandItem
+                            key={buyer.id}
+                            value={buyer.company_name}
+                            onSelect={() => {
+                              setSelectedBuyer(buyer);
+                              setBuyerOpen(false);
+                              setBuyerSearch('');
+                            }}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <Building2 className="w-4 h-4 text-muted-foreground" />
+                            <span className="flex-1">{buyer.company_name}</span>
+                            <Badge variant="secondary" className={stageBadgeColors[buyer.stage]}>
+                              {stageLabels[buyer.stage]}
+                            </Badge>
+                            {buyer.country && (
+                              <span className="text-muted-foreground text-sm">{buyer.country}</span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
+            {selectedBuyer && !buyerLocked && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -245,6 +291,12 @@ export default function EmailCompose() {
             <div className="ml-24 text-sm text-primary flex items-center gap-1">
               <span className="inline-block w-2 h-2 rounded-full bg-primary" />
               이 메일은 발신 후 CRM 영업활동일지에 자동 기록됩니다
+            </div>
+          )}
+          {!selectedBuyer && searchParams.get('replyTo') && !buyerLocked && (
+            <div className="ml-24 text-sm text-amber-600 flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+              이 이메일은 아직 바이어와 연결되지 않았습니다
             </div>
           )}
         </div>

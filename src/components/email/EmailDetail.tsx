@@ -6,6 +6,13 @@ import { useEmailContext, EmailMessage } from '@/context/EmailContext';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+
+interface LinkedBuyer {
+  id: string;
+  company_name: string;
+  stage: string;
+}
 
 export default function EmailDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +20,7 @@ export default function EmailDetail() {
   const { getMessage, markAsRead, toggleStar, deleteMessage, logActivity } = useEmailContext();
   const [message, setMessage] = useState<EmailMessage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [linkedBuyer, setLinkedBuyer] = useState<LinkedBuyer | null>(null);
   const hasLoggedRef = useRef(false);
 
   useEffect(() => {
@@ -35,6 +43,25 @@ export default function EmailDetail() {
           hasLoggedRef.current = true;
           logActivity('open', id, msg.thread_id || undefined);
         }
+        
+        // Check if email is linked to a buyer via sales_activity_logs
+        const { data: logData } = await supabase
+          .from('sales_activity_logs')
+          .select('buyer_id')
+          .eq('email_message_id', id)
+          .maybeSingle();
+        
+        if (logData?.buyer_id && isMounted) {
+          const { data: buyerData } = await supabase
+            .from('crm_buyers')
+            .select('id, company_name, stage')
+            .eq('id', logData.buyer_id)
+            .single();
+          
+          if (buyerData && isMounted) {
+            setLinkedBuyer(buyerData);
+          }
+        }
       }
       setLoading(false);
     };
@@ -48,7 +75,13 @@ export default function EmailDetail() {
 
   const handleReply = () => {
     if (id) {
-      navigate(`/email/compose?replyTo=${id}`);
+      const params = new URLSearchParams({ replyTo: id });
+      if (linkedBuyer) {
+        params.set('buyerId', linkedBuyer.id);
+        params.set('buyerName', linkedBuyer.company_name);
+        params.set('buyerStage', linkedBuyer.stage);
+      }
+      navigate(`/email/compose?${params.toString()}`);
     }
   };
 
