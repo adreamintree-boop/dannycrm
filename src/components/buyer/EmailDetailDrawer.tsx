@@ -26,6 +26,7 @@ interface EmailDetailDrawerProps {
   open: boolean;
   onClose: () => void;
   emailMessageId: string | null;
+  buyerId?: string;
   buyerName?: string;
   buyerStage?: string;
 }
@@ -34,6 +35,7 @@ export default function EmailDetailDrawer({
   open,
   onClose,
   emailMessageId,
+  buyerId,
   buyerName,
   buyerStage,
 }: EmailDetailDrawerProps) {
@@ -106,7 +108,11 @@ export default function EmailDetailDrawer({
 
   const handleReply = () => {
     if (emailMessageId) {
-      navigate(`/email/compose?replyTo=${emailMessageId}`);
+      const params = new URLSearchParams({ replyTo: emailMessageId });
+      if (buyerId) params.set('buyerId', buyerId);
+      if (buyerName) params.set('buyerName', buyerName);
+      if (buyerStage) params.set('buyerStage', buyerStage);
+      navigate(`/email/compose?${params.toString()}`);
       onClose();
     }
   };

@@ -411,6 +411,7 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
           setSelectedEmailId(null);
         }}
         emailMessageId={selectedEmailId}
+        buyerId={buyer.id}
         buyerName={buyer.name}
         buyerStage={buyer.status}
       />
