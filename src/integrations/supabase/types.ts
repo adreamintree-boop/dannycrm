@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_requests: {
+        Row: {
+          buyer_id: string | null
+          created_at: string
+          credit_cost: number
+          error_message: string | null
+          id: string
+          input_json: Json | null
+          output_json: Json | null
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          buyer_id?: string | null
+          created_at?: string
+          credit_cost?: number
+          error_message?: string | null
+          id?: string
+          input_json?: Json | null
+          output_json?: Json | null
+          status?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          buyer_id?: string | null
+          created_at?: string
+          credit_cost?: number
+          error_message?: string | null
+          id?: string
+          input_json?: Json | null
+          output_json?: Json | null
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_requests_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_buyers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bl_search_charged_rows: {
         Row: {
           charged_at: string
