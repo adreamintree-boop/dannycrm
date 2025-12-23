@@ -62,6 +62,18 @@ const BLSearch: React.FC = () => {
   
   // CRITICAL: Guard flag - credit deduction only happens after explicit search action
   const searchInitiatedRef = useRef(false);
+  
+  // Load Excel data on mount
+  const [dataLoaded, setDataLoaded] = useState(false);
+  
+  useEffect(() => {
+    loadBLDataFromExcel().then((records) => {
+      if (records.length > 0) {
+        setDataLoaded(true);
+        console.log(`B/L data loaded: ${records.length} records`);
+      }
+    });
+  }, []);
 
   // Tab change is UI-only - NO search, NO credit deduction
   const handleSearchCategoryChange = (category: SearchCategory) => {
