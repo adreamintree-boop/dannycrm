@@ -110,6 +110,15 @@ serve(async (req) => {
       console.log("Calling external AI Gateway:", `${aiGatewayUrl}/buyer-enrich`);
       
       try {
+        const gatewayInput = {
+          buyerId,
+          buyerName,
+          buyerCountry,
+          existingFields,
+          hints,
+        };
+
+        // NOTE: This gateway currently forwards to the OpenAI Responses API, which requires `model` + `input`.
         const aiResponse = await fetch(`${aiGatewayUrl}/buyer-enrich`, {
           method: "POST",
           headers: {
@@ -117,19 +126,15 @@ serve(async (req) => {
             "Authorization": authHeader,
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini", // Add model parameter for external gateway
-            buyerId,
-            buyerName,
-            buyerCountry,
-            existingFields,
-            hints,
+            model: "gpt-4o-mini",
+            input: `Return ONLY valid JSON with keys: country,address,website,phone,email,facebook_url,linkedin_url,youtube_url,notes,confidence(address,website,phone,email in 0-1).\n\nBuyer context JSON:\n${JSON.stringify(gatewayInput)}`,
           }),
         });
 
         if (!aiResponse.ok) {
           const errorText = await aiResponse.text();
           console.error("External AI Gateway error:", aiResponse.status, errorText);
-          throw new Error(`AI Gateway returned ${aiResponse.status}`);
+          throw new Error(`AI Gateway returned ${aiResponse.status}: ${errorText}`);
         }
 
         enrichedData = await aiResponse.json();
