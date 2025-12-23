@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { CountrySelect } from '@/components/ui/country-select';
 import {
   Tooltip,
   TooltipContent,
@@ -282,31 +283,29 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <label className="text-sm font-medium text-foreground">
               대륙 - 세부지역 - 국가 <span className="text-destructive">*</span>
             </label>
-            <Select
+            <CountrySelect
+              countries={countryList}
               value={formData.countryCode}
-              onValueChange={(value) => {
-                const country = countryList.find(c => c.code === value);
-                if (country) {
+              onValueChange={(country) => {
+              if (country) {
                   setFormData({
                     ...formData,
-                    countryCode: value,
+                    countryCode: country.code,
                     country: country.nameKo,
                     region: getRegion(country.code),
                   });
+                } else {
+                  setFormData({
+                    ...formData,
+                    countryCode: undefined,
+                    country: '',
+                    region: undefined,
+                  });
                 }
               }}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder={formData.country || "국가 선택"} />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {countryList.map((country) => (
-                  <SelectItem key={country.code} value={country.code}>
-                    {getFlagEmoji(country.code)} {country.nameKo}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="국가 선택"
+              className="mt-1"
+            />
             {selectedCountry && (
               <div className="mt-2 text-xs text-muted-foreground">
                 {(() => {
