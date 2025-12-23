@@ -13,6 +13,115 @@ const normalizeBaseUrl = (url?: string | null) => {
   return trimmed ? trimmed.replace(/\/+$/, "") : null;
 };
 
+// B2B Company Enrichment Agent system prompt
+const ENRICHMENT_SYSTEM_PROMPT = `You are a "B2B Company Enrichment Agent" for a trade CRM.
+
+Goal: enrich missing buyer company fields (address, website, phone, email, social links, short company description, industry, products, employee size, revenue range if possible).
+
+Input may be incomplete or noisy. Never invent facts.
+
+Prefer official sources (company website, official social profiles, business registries). If unsure, leave field null.
+
+Use strict JSON output only with the exact schema below. Do not add any extra keys or text.
+
+Do not overwrite existing non-empty values unless the user explicitly asks to replace them.
+
+Confidence scoring:
+- 100 = verified on official company website or verified social profile.
+- 90 = consistent across multiple reputable business directories.
+- 70 = appears plausible but only one non-official source.
+- 50 or below = weak/ambiguous → return null.
+
+Email policy:
+- Only return an email if it is explicitly shown on an official site/contact page or reliable directory.
+- Never guess patterns like info@domain.com.
+
+Matching policy:
+- If multiple candidate companies could match the name, return status="needs_confirmation" and provide 2–5 candidates with differentiators (website/domain, country, city).
+
+Output must include:
+- status: one of "ok", "needs_confirmation", "no_data"
+- recommended_fields: list of enriched field suggestions with confidence and evidence
+- analysis_note: 1–3 sentences summary of how you decided (no chain-of-thought).
+- credits_to_charge: always 5 when status="ok" and at least one field has confidence>=70; otherwise 0.`;
+
+// JSON schema for the enrichment tool
+const ENRICHMENT_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    status: {
+      type: "string",
+      enum: ["ok", "needs_confirmation", "no_data"],
+      description: "Result status of the enrichment attempt",
+    },
+    credits_to_charge: {
+      type: "number",
+      description: "5 if status=ok and at least one field has confidence>=70; otherwise 0",
+    },
+    company_identity: {
+      type: "object",
+      properties: {
+        input_name: { type: "string", description: "Original company name provided" },
+        normalized_name: { type: "string", description: "Cleaned/normalized company name" },
+        country_hint: { type: "string", description: "Country hint provided or inferred" },
+        matched_name: { type: "string", description: "Official company name found" },
+        match_confidence: { type: "number", description: "0-100 confidence in company match" },
+      },
+      required: ["input_name", "normalized_name", "country_hint", "matched_name", "match_confidence"],
+    },
+    recommended_fields: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          field: {
+            type: "string",
+            enum: ["address", "website", "phone", "email", "facebook_url", "linkedin_url", "youtube_url", "company_description", "industry", "products", "employee_size", "revenue_range"],
+          },
+          current_value: { type: ["string", "null"], description: "Current value if exists" },
+          suggested_value: { type: ["string", "null"], description: "New suggested value or null" },
+          confidence: { type: "number", description: "0-100 confidence score" },
+          evidence: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                source_type: {
+                  type: "string",
+                  enum: ["official_website", "linkedin", "facebook", "business_directory", "government_registry", "other"],
+                },
+                source: { type: "string", description: "URL or name of source" },
+                quote: { type: "string", description: "Relevant excerpt from source" },
+              },
+              required: ["source_type", "source"],
+            },
+          },
+        },
+        required: ["field", "current_value", "suggested_value", "confidence", "evidence"],
+      },
+    },
+    candidates: {
+      type: "array",
+      description: "Only populated when status=needs_confirmation",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          website: { type: "string" },
+          country: { type: "string" },
+          why_candidate: { type: "string", description: "Why this might be the company" },
+        },
+        required: ["name", "website", "country", "why_candidate"],
+      },
+    },
+    analysis_note: {
+      type: "string",
+      description: "1-3 sentence summary of enrichment decision",
+    },
+  },
+  required: ["status", "credits_to_charge", "company_identity", "recommended_fields", "candidates", "analysis_note"],
+};
+
 async function enrichBuyerWithLovableAI(args: {
   buyerName: string;
   buyerCountry?: string;
@@ -25,29 +134,26 @@ async function enrichBuyerWithLovableAI(args: {
     throw new Error("LOVABLE_API_KEY is not configured");
   }
 
-  const systemPrompt = `You are a business intelligence assistant that finds publicly available company information.
-Given a company name and country, return:
-- Company address
-- Official website
-- Phone number
-- Email address
-- Social media URLs (Facebook, LinkedIn, YouTube)
+  // Build existing fields context
+  const existing = args.existingFields || {};
+  const existingFieldsText = Object.entries(existing)
+    .filter(([_, v]) => v && String(v).trim() !== "")
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join("\n");
 
-Rules:
-- Only include information you are confident about.
-- Use confidence scores (0-1) for address, website, phone, email.
-- If you cannot find reliable information, return empty strings and low confidence.
-- Return structured data via the enrich_company tool.`;
-
-  const userPrompt = `Find public information about this company:
+  const userPrompt = `Enrich this B2B company:
 
 Company Name: ${args.buyerName}
 Country: ${args.buyerCountry || "Unknown"}
-${(args.existingFields as any)?.website ? `Known Website: ${(args.existingFields as any).website}` : ""}
+
+${existingFieldsText ? `Current known fields (do not overwrite unless empty):\n${existingFieldsText}` : "No existing fields."}
+
 ${(args.hints as any)?.hs_code ? `Product HS Code: ${(args.hints as any).hs_code}` : ""}
 ${(args.hints as any)?.product_desc ? `Product Description: ${(args.hints as any).product_desc}` : ""}
 
-Use the enrich_company tool to return the information you find.`;
+Use the enrich_company tool to return the structured enrichment result.`;
+
+  console.log("Lovable AI user prompt:", userPrompt);
 
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -58,7 +164,7 @@ Use the enrich_company tool to return the information you find.`;
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: ENRICHMENT_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
       tools: [
@@ -66,32 +172,8 @@ Use the enrich_company tool to return the information you find.`;
           type: "function",
           function: {
             name: "enrich_company",
-            description: "Return structured company information",
-            parameters: {
-              type: "object",
-              properties: {
-                country: { type: "string", description: "Full country name" },
-                address: { type: "string", description: "Full street address" },
-                website: { type: "string", description: "Official website URL" },
-                phone: { type: "string", description: "Phone number with country code" },
-                email: { type: "string", description: "General or sales email" },
-                facebook_url: { type: "string", description: "Facebook page URL" },
-                linkedin_url: { type: "string", description: "LinkedIn company page URL" },
-                youtube_url: { type: "string", description: "YouTube channel URL" },
-                notes: { type: "string", description: "Brief reasoning about findings" },
-                confidence: {
-                  type: "object",
-                  properties: {
-                    address: { type: "number", description: "Confidence 0-1" },
-                    website: { type: "number", description: "Confidence 0-1" },
-                    phone: { type: "number", description: "Confidence 0-1" },
-                    email: { type: "number", description: "Confidence 0-1" },
-                  },
-                  required: ["address", "website", "phone", "email"],
-                },
-              },
-              required: ["notes", "confidence"],
-            },
+            description: "Return structured B2B company enrichment result with confidence scores and evidence",
+            parameters: ENRICHMENT_TOOL_SCHEMA,
           },
         },
       ],
@@ -102,18 +184,24 @@ Use the enrich_company tool to return the information you find.`;
   if (!aiResponse.ok) {
     const errorText = await aiResponse.text();
     const status = aiResponse.status;
+    console.error("Lovable AI error:", status, errorText);
     if (status === 429) throw new Error("RATE_LIMITED");
     if (status === 402) throw new Error("PAYMENT_REQUIRED");
     throw new Error(`AI API error (${status}): ${errorText}`);
   }
 
   const aiData = await aiResponse.json();
+  console.log("Lovable AI raw response:", JSON.stringify(aiData, null, 2));
+
   const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
   if (!toolCall || toolCall.function?.name !== "enrich_company") {
     throw new Error("No valid tool call received");
   }
 
-  return JSON.parse(toolCall.function.arguments);
+  const result = JSON.parse(toolCall.function.arguments);
+  console.log("Parsed enrichment result:", JSON.stringify(result, null, 2));
+
+  return result;
 }
 
 serve(async (req) => {
@@ -303,38 +391,47 @@ serve(async (req) => {
       }
     }
 
-    // AI succeeded - now deduct credits
-    const { data: deductResult, error: deductError } = await supabase.rpc("deduct_credits", {
-      p_user_id: user.id,
-      p_amount: ENRICH_CREDIT_COST,
-      p_action_type: "AI_ENRICH",
-      p_request_id: aiRequestId,
-      p_meta: { buyer_id: buyerId, buyer_name: buyerName },
-    });
+    // Determine actual credits to charge based on AI response
+    const creditsToCharge = enrichedData?.credits_to_charge ?? ENRICH_CREDIT_COST;
+    let newBalance = creditData.balance;
 
-    if (deductError || !deductResult?.[0]?.success) {
-      console.error("Credit deduction failed:", deductError, deductResult);
-      
-      await supabase
-        .from("ai_requests")
-        .update({ status: "failed", error_message: "Credit deduction failed" })
-        .eq("id", aiRequestId);
+    // Only deduct credits if AI found useful data
+    if (creditsToCharge > 0) {
+      const { data: deductResult, error: deductError } = await supabase.rpc("deduct_credits", {
+        p_user_id: user.id,
+        p_amount: creditsToCharge,
+        p_action_type: "AI_ENRICH",
+        p_request_id: aiRequestId,
+        p_meta: { buyer_id: buyerId, buyer_name: buyerName },
+      });
 
-      return new Response(
-        JSON.stringify({ error: "크레딧 차감에 실패했습니다.", requestId: aiRequestId }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (deductError || !deductResult?.[0]?.success) {
+        console.error("Credit deduction failed:", deductError, deductResult);
+        
+        await supabase
+          .from("ai_requests")
+          .update({ status: "failed", error_message: "Credit deduction failed" })
+          .eq("id", aiRequestId);
+
+        return new Response(
+          JSON.stringify({ error: "크레딧 차감에 실패했습니다.", requestId: aiRequestId }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      newBalance = deductResult[0].new_balance;
+      console.log(`Credits deducted (${creditsToCharge}). New balance: ${newBalance}`);
+    } else {
+      console.log("No credits charged - AI did not find useful data");
     }
-
-    const newBalance = deductResult[0].new_balance;
-    console.log(`Credits deducted. New balance: ${newBalance}`);
 
     // Update ai_requests with success
     await supabase
       .from("ai_requests")
       .update({
-        status: "success",
+        status: enrichedData?.status === "no_data" ? "no_data" : "success",
         output_json: enrichedData,
+        credit_cost: creditsToCharge,
       })
       .eq("id", aiRequestId);
 
@@ -343,7 +440,7 @@ serve(async (req) => {
         success: true,
         enrichedData,
         newBalance,
-        creditCost: ENRICH_CREDIT_COST,
+        creditCost: creditsToCharge,
         requestId: aiRequestId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
