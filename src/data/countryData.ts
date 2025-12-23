@@ -180,8 +180,8 @@ const alternativeNames: Record<string, string[]> = {
 interface ExcelRow {
   '나라 이름'?: string;
   '숫자'?: string | number;
-  'alpha-3'?: string;
-  'alpha-2'?: string;
+  'alpha-3'?: string;  // This column contains ISO alpha-2 codes (e.g., GH)
+  'alpha-2'?: string;  // This column contains ISO alpha-3 codes (e.g., GHA)
 }
 
 // Load country data from Excel file
@@ -203,21 +203,36 @@ export async function loadCountryData(): Promise<Country[]> {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
-    // Convert to JSON
-    const rawData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet);
+    // Convert to JSON with header row detection
+    const rawData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    
+    console.log('Raw Excel data sample:', rawData.slice(0, 5));
     
     // Transform to Country format
+    // Filter out header rows and empty rows
     countryList = rawData
-      .filter(row => row['나라 이름'] && row['alpha-3'] && row['alpha-2'])
+      .filter(row => {
+        const nameKo = row['나라 이름'];
+        const alpha3Col = row['alpha-3']; // This is actually alpha-2 code
+        // Skip header rows and empty rows
+        return nameKo && 
+               alpha3Col && 
+               typeof nameKo === 'string' && 
+               nameKo !== '나라 이름' && 
+               nameKo !== '검색국가명' &&
+               alpha3Col !== 'alpha-3';
+      })
       .map(row => {
         const nameKo = String(row['나라 이름']).trim();
-        const code = String(row['alpha-3']).trim(); // alpha-2 is in the alpha-3 column based on parsed data
-        const code3 = String(row['alpha-2']).trim(); // alpha-3 is in the alpha-2 column
+        // Column 'alpha-3' contains ISO alpha-2 codes (e.g., GH, KR, US)
+        const code = String(row['alpha-3']).trim();
+        // Column 'alpha-2' contains ISO alpha-3 codes (e.g., GHA, KOR, USA)
+        const code3 = String(row['alpha-2'] || '').trim();
         const numericCode = String(row['숫자'] || '').trim();
         
         return {
-          code,
-          code3,
+          code,       // ISO alpha-2 (e.g., US, KR)
+          code3,      // ISO alpha-3 (e.g., USA, KOR)
           numericCode,
           nameKo,
           nameEn: englishNameMap[nameKo] || nameKo,
@@ -226,6 +241,9 @@ export async function loadCountryData(): Promise<Country[]> {
 
     isLoaded = true;
     console.log(`Loaded ${countryList.length} countries from Excel`);
+    if (countryList.length > 0) {
+      console.log('Sample countries:', countryList.slice(0, 3));
+    }
     
     return countryList;
   } catch (error) {
