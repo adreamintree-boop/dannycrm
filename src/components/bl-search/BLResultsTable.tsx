@@ -276,6 +276,14 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
                               <span className="text-muted-foreground">수출자</span>
                               <p className="font-medium">{formatValue(record.exporter)}</p>
                             </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">수입자 주소</span>
+                              <p className="font-medium">{formatValue(record.importerAddress)}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">수출자 주소</span>
+                              <p className="font-medium">{formatValue(record.exporterAddress)}</p>
+                            </div>
                             <div>
                               <span className="text-muted-foreground">수량</span>
                               <p className="font-medium">{formatValue(record.quantity)}</p>
@@ -296,16 +304,26 @@ const BLResultsTable: React.FC<BLResultsTableProps> = ({
                               <span className="text-muted-foreground">목적지 국가</span>
                               <p className="font-medium">{formatValue(record.destinationCountry)}</p>
                             </div>
+                            <div>
+                              <span className="text-muted-foreground">경유 국가</span>
+                              <p className="font-medium">{formatValue(record.transitCountry)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">선적 항구</span>
+                              <p className="font-medium">{formatValue(record.portOfLoading)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">하역 항구</span>
+                              <p className="font-medium">{formatValue(record.portOfDischarge)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">인코텀즈</span>
+                              <p className="font-medium">{formatValue(record.incoterms)}</p>
+                            </div>
                           </div>
                           <div>
                             <span className="text-muted-foreground text-sm">제품 설명</span>
                             <p className="font-medium mt-1">{formatValue(record.productName)}</p>
-                          </div>
-                          <div className="pt-4 border-t border-border">
-                            <span className="text-xs text-muted-foreground">Raw JSON</span>
-                            <pre className="mt-2 p-3 bg-muted rounded-lg text-xs overflow-auto max-h-[200px]">
-                              {JSON.stringify(record, null, 2)}
-                            </pre>
                           </div>
                         </div>
                       </SheetContent>

@@ -11,6 +11,7 @@ import { useCreditsContext } from '@/context/CreditsContext';
 import { toast } from '@/hooks/use-toast';
 import { BLRecord } from '@/data/blMockData';
 import { generateRowFingerprint, generateSearchKey } from '@/lib/blSearchUtils';
+import { loadBLDataFromExcel } from '@/data/blExcelLoader';
 
 const BLSearch: React.FC = () => {
   const {
