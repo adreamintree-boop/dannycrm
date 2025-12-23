@@ -8,6 +8,114 @@ const corsHeaders = {
 
 const ENRICH_CREDIT_COST = 5;
 
+const normalizeBaseUrl = (url?: string | null) => {
+  const trimmed = (url ?? "").trim();
+  return trimmed ? trimmed.replace(/\/+$/, "") : null;
+};
+
+async function enrichBuyerWithLovableAI(args: {
+  buyerName: string;
+  buyerCountry?: string;
+  existingFields?: Record<string, unknown>;
+  hints?: Record<string, unknown>;
+}) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY is not configured");
+  }
+
+  const systemPrompt = `You are a business intelligence assistant that finds publicly available company information.
+Given a company name and country, return:
+- Company address
+- Official website
+- Phone number
+- Email address
+- Social media URLs (Facebook, LinkedIn, YouTube)
+
+Rules:
+- Only include information you are confident about.
+- Use confidence scores (0-1) for address, website, phone, email.
+- If you cannot find reliable information, return empty strings and low confidence.
+- Return structured data via the enrich_company tool.`;
+
+  const userPrompt = `Find public information about this company:
+
+Company Name: ${args.buyerName}
+Country: ${args.buyerCountry || "Unknown"}
+${(args.existingFields as any)?.website ? `Known Website: ${(args.existingFields as any).website}` : ""}
+${(args.hints as any)?.hs_code ? `Product HS Code: ${(args.hints as any).hs_code}` : ""}
+${(args.hints as any)?.product_desc ? `Product Description: ${(args.hints as any).product_desc}` : ""}
+
+Use the enrich_company tool to return the information you find.`;
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "enrich_company",
+            description: "Return structured company information",
+            parameters: {
+              type: "object",
+              properties: {
+                country: { type: "string", description: "Full country name" },
+                address: { type: "string", description: "Full street address" },
+                website: { type: "string", description: "Official website URL" },
+                phone: { type: "string", description: "Phone number with country code" },
+                email: { type: "string", description: "General or sales email" },
+                facebook_url: { type: "string", description: "Facebook page URL" },
+                linkedin_url: { type: "string", description: "LinkedIn company page URL" },
+                youtube_url: { type: "string", description: "YouTube channel URL" },
+                notes: { type: "string", description: "Brief reasoning about findings" },
+                confidence: {
+                  type: "object",
+                  properties: {
+                    address: { type: "number", description: "Confidence 0-1" },
+                    website: { type: "number", description: "Confidence 0-1" },
+                    phone: { type: "number", description: "Confidence 0-1" },
+                    email: { type: "number", description: "Confidence 0-1" },
+                  },
+                  required: ["address", "website", "phone", "email"],
+                },
+              },
+              required: ["notes", "confidence"],
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "enrich_company" } },
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errorText = await aiResponse.text();
+    const status = aiResponse.status;
+    if (status === 429) throw new Error("RATE_LIMITED");
+    if (status === 402) throw new Error("PAYMENT_REQUIRED");
+    throw new Error(`AI API error (${status}): ${errorText}`);
+  }
+
+  const aiData = await aiResponse.json();
+  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall || toolCall.function?.name !== "enrich_company") {
+    throw new Error("No valid tool call received");
+  }
+
+  return JSON.parse(toolCall.function.arguments);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -24,7 +132,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const aiGatewayUrl = Deno.env.get("AI_GATEWAY_URL");
+    const aiGatewayUrl = normalizeBaseUrl(Deno.env.get("AI_GATEWAY_URL"));
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify user
@@ -102,13 +210,12 @@ serve(async (req) => {
     const aiRequestId = requestData.id;
     console.log("Created ai_request:", aiRequestId);
 
-    // Determine which AI endpoint to use
-    let enrichedData;
+    // Determine which AI endpoint to use (external gateway if available, otherwise Lovable AI)
+    let enrichedData: any | undefined;
 
     if (aiGatewayUrl) {
-      // Use external AI Gateway
       console.log("Calling external AI Gateway:", `${aiGatewayUrl}/buyer-enrich`);
-      
+
       try {
         const gatewayInput = {
           buyerId,
@@ -123,7 +230,7 @@ serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": authHeader,
+            Authorization: authHeader,
           },
           body: JSON.stringify({
             model: "gpt-4o-mini",
@@ -133,140 +240,30 @@ serve(async (req) => {
 
         if (!aiResponse.ok) {
           const errorText = await aiResponse.text();
-          console.error("External AI Gateway error:", aiResponse.status, errorText);
           throw new Error(`AI Gateway returned ${aiResponse.status}: ${errorText}`);
         }
 
         enrichedData = await aiResponse.json();
         console.log("External AI Gateway response:", enrichedData);
       } catch (aiError) {
-        console.error("External AI Gateway failed:", aiError);
-        
-        await supabase
-          .from("ai_requests")
-          .update({
-            status: "failed",
-            error_message: aiError instanceof Error ? aiError.message : "Unknown error",
-          })
-          .eq("id", aiRequestId);
-
-        return new Response(
-          JSON.stringify({ 
-            error: "AI 추천 정보를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.",
-            requestId: aiRequestId
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.warn("External AI Gateway failed; falling back to Lovable AI.", aiError);
       }
-    } else {
-      // Fallback to Lovable AI
-      console.log("Using Lovable AI (no AI_GATEWAY_URL configured)");
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      
-      if (!LOVABLE_API_KEY) {
-        await supabase
-          .from("ai_requests")
-          .update({ status: "failed", error_message: "No AI service configured" })
-          .eq("id", aiRequestId);
+    }
 
-        return new Response(
-          JSON.stringify({ error: "AI service not configured" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const systemPrompt = `You are a business intelligence assistant that finds publicly available company information.
-Given a company name and country, search your knowledge for:
-- Company address
-- Official website
-- Phone number
-- Email address
-- Social media URLs (Facebook, LinkedIn, YouTube)
-
-IMPORTANT:
-- Only return information you are confident about
-- Set confidence scores (0-1) for each field
-- If you cannot find reliable information, return empty strings and low confidence
-- Always use the tool to return structured data`;
-
-      const userPrompt = `Find public information about this company:
-
-Company Name: ${buyerName}
-Country: ${buyerCountry || "Unknown"}
-${existingFields?.website ? `Known Website: ${existingFields.website}` : ""}
-${hints?.hs_code ? `Product HS Code: ${hints.hs_code}` : ""}
-${hints?.product_desc ? `Product Description: ${hints.product_desc}` : ""}
-
-Use the enrich_company tool to return the information you find.`;
+    if (!enrichedData) {
+      console.log(aiGatewayUrl ? "Using Lovable AI fallback" : "Using Lovable AI (no AI_GATEWAY_URL configured)");
 
       try {
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            tools: [
-              {
-                type: "function",
-                function: {
-                  name: "enrich_company",
-                  description: "Return structured company information",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      country: { type: "string", description: "Full country name" },
-                      address: { type: "string", description: "Full street address" },
-                      website: { type: "string", description: "Official website URL" },
-                      phone: { type: "string", description: "Phone number with country code" },
-                      email: { type: "string", description: "General or sales email" },
-                      facebook_url: { type: "string", description: "Facebook page URL" },
-                      linkedin_url: { type: "string", description: "LinkedIn company page URL" },
-                      youtube_url: { type: "string", description: "YouTube channel URL" },
-                      notes: { type: "string", description: "Brief reasoning about findings" },
-                      confidence: {
-                        type: "object",
-                        properties: {
-                          address: { type: "number", description: "Confidence 0-1" },
-                          website: { type: "number", description: "Confidence 0-1" },
-                          phone: { type: "number", description: "Confidence 0-1" },
-                          email: { type: "number", description: "Confidence 0-1" },
-                        },
-                        required: ["address", "website", "phone", "email"],
-                      },
-                    },
-                    required: ["notes", "confidence"],
-                  },
-                },
-              },
-            ],
-            tool_choice: { type: "function", function: { name: "enrich_company" } },
-          }),
+        enrichedData = await enrichBuyerWithLovableAI({
+          buyerName,
+          buyerCountry,
+          existingFields,
+          hints,
         });
-
-        if (!aiResponse.ok) {
-          console.error("Lovable AI error:", aiResponse.status);
-          throw new Error("AI API error");
-        }
-
-        const aiData = await aiResponse.json();
-        const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-
-        if (!toolCall || toolCall.function.name !== "enrich_company") {
-          throw new Error("No valid tool call received");
-        }
-
-        enrichedData = JSON.parse(toolCall.function.arguments);
         console.log("Lovable AI enrichment:", enrichedData);
       } catch (aiError) {
         console.error("Lovable AI failed:", aiError);
-        
+
         await supabase
           .from("ai_requests")
           .update({
@@ -275,10 +272,31 @@ Use the enrich_company tool to return the information you find.`;
           })
           .eq("id", aiRequestId);
 
+        const errMsg = aiError instanceof Error ? aiError.message : "";
+        if (errMsg === "RATE_LIMITED") {
+          return new Response(
+            JSON.stringify({
+              error: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+              requestId: aiRequestId,
+            }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (errMsg === "PAYMENT_REQUIRED") {
+          return new Response(
+            JSON.stringify({
+              error: "AI 사용 한도를 초과했습니다. 관리자에게 문의해주세요.",
+              requestId: aiRequestId,
+            }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "AI 추천 정보를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.",
-            requestId: aiRequestId
+            requestId: aiRequestId,
           }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
