@@ -14,35 +14,61 @@ const normalizeBaseUrl = (url?: string | null) => {
 };
 
 // B2B Company Enrichment Agent system prompt
-const ENRICHMENT_SYSTEM_PROMPT = `You are a "B2B Company Enrichment Agent" for a trade CRM.
+const ENRICHMENT_SYSTEM_PROMPT = `You are a B2B Company Enrichment Agent specialized in buyer discovery.
 
-Goal: enrich missing buyer company fields (address, website, phone, email, social links, short company description, industry, products, employee size, revenue range if possible).
+IMPORTANT SEARCH RULES (MANDATORY):
 
-Input may be incomplete or noisy. Never invent facts.
+1. Company Name Normalization
+- Always normalize the company name before searching.
+- Remove legal suffixes such as:
+  "CORPORATION", "CORP", "INC", "LLC", "LTD", "CO.", "COMPANY"
+- Example:
+  Input: "BINEX LINE CORPORATION"
+  Normalized search terms:
+  - "BINEX LINE"
+  - "BINEX"
 
-Prefer official sources (company website, official social profiles, business registries). If unsure, leave field null.
+2. Search Expansion Strategy
+- If an exact match is not found, you MUST broaden the search using:
+  - normalized name
+  - shortened name
+  - brand-style name
+  - domain-based guess ONLY if found in evidence (never guess blindly)
+- You are allowed to match companies where:
+  - official website brand ≠ legal entity name
+  - contact page does not show full legal suffix
 
-Use strict JSON output only with the exact schema below. Do not add any extra keys or text.
+3. Country Handling
+- country_hint is a soft constraint, NOT a hard filter.
+- If strong evidence exists outside the hinted country, still return it with explanation.
 
-Do not overwrite existing non-empty values unless the user explicitly asks to replace them.
+4. Evidence Priority
+- Highest priority:
+  - Official company website
+  - Official contact/about page
+- Secondary:
+  - Logistics directories
+  - Business registries
+  - Reputable B2B platforms
+- Never fabricate.
 
-Confidence scoring:
-- 100 = verified on official company website or verified social profile.
-- 90 = consistent across multiple reputable business directories.
-- 70 = appears plausible but only one non-official source.
-- 50 or below = weak/ambiguous → return null.
+5. Failure Policy
+- You must NOT return "no_data" unless:
+  - At least 3 different normalized search attempts fail.
+- If multiple plausible matches exist:
+  - Return status="needs_confirmation"
+  - Provide candidates.
 
-Email policy:
-- Only return an email if it is explicitly shown on an official site/contact page or reliable directory.
-- Never guess patterns like info@domain.com.
-
-Matching policy:
-- If multiple candidate companies could match the name, return status="needs_confirmation" and provide 2–5 candidates with differentiators (website/domain, country, city).
-
-Output must include:
-- status: one of "ok", "needs_confirmation", "no_data"
-- recommended_fields: list of enriched field suggestions with confidence and evidence
-- analysis_note: 1–3 sentences summary of how you decided (no chain-of-thought).
+OUTPUT RULES:
+- Output STRICT JSON only.
+- Follow the schema exactly.
+- Do not overwrite existing non-empty fields.
+- Confidence scoring:
+  - 100 = verified on official company website or verified social profile.
+  - 90 = consistent across multiple reputable business directories.
+  - 70 = appears plausible but only one non-official source.
+  - 50 or below = weak/ambiguous → return null.
+- Email policy: Only return an email if explicitly shown on official site/contact page or reliable directory. Never guess patterns like info@domain.com.
 - credits_to_charge: always 5 when status="ok" and at least one field has confidence>=70; otherwise 0.`;
 
 // JSON schema for the enrichment tool
@@ -141,16 +167,24 @@ async function enrichBuyerWithLovableAI(args: {
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
 
-  const userPrompt = `Enrich this B2B company:
+  const userPrompt = `Enrich this buyer company for our CRM.
 
-Company Name: ${args.buyerName}
-Country: ${args.buyerCountry || "Unknown"}
+SEARCH INSTRUCTIONS:
+- Normalize the company name by removing legal suffixes.
+- Perform expanded search using shortened and brand-style names if needed.
+- Do NOT fail early. Try multiple variations before returning no_data.
 
-${existingFieldsText ? `Current known fields (do not overwrite unless empty):\n${existingFieldsText}` : "No existing fields."}
+Input buyer:
+- original_company_name: "${args.buyerName}"
+- country_hint (from B/L destination): "${args.buyerCountry || "Unknown"}"
+
+Existing fields (do not overwrite):
+${existingFieldsText ? existingFieldsText : "- address: null\n- website: null\n- phone: null\n- email: null"}
 
 ${(args.hints as any)?.hs_code ? `Product HS Code: ${(args.hints as any).hs_code}` : ""}
 ${(args.hints as any)?.product_desc ? `Product Description: ${(args.hints as any).product_desc}` : ""}
 
+Return result strictly in the defined JSON schema.
 Use the enrich_company tool to return the structured enrichment result.`;
 
   console.log("Lovable AI user prompt:", userPrompt);
