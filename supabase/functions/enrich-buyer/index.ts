@@ -117,6 +117,7 @@ serve(async (req) => {
             "Authorization": authHeader,
           },
           body: JSON.stringify({
+            model: "gpt-4o-mini", // Add model parameter for external gateway
             buyerId,
             buyerName,
             buyerCountry,
