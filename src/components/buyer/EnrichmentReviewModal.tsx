@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -132,6 +133,9 @@ const EnrichmentReviewModal: React.FC<EnrichmentReviewModalProps> = ({
             <Check className="w-5 h-5 text-green-500" />
             AI 추천 정보 검토
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            AI가 찾은 회사 정보 후보를 검토하고 적용할 필드를 선택합니다.
+          </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[50vh] pr-4">

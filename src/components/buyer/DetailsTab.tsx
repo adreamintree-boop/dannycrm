@@ -128,11 +128,32 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     );
 
     if (result.success && result.enrichedData) {
+      const currentSnapshot = {
+        country: formData.country,
+        address: formData.address,
+        website: formData.websiteUrl,
+        phone: formData.phone,
+        email: formData.email,
+        facebook_url: formData.facebookUrl,
+        linkedin_url: formData.linkedinUrl,
+        youtube_url: formData.youtubeUrl,
+      };
+
+      const fieldsToCompare = ['country', 'address', 'website', 'phone', 'email', 'facebook_url', 'linkedin_url', 'youtube_url'] as const;
+      const hasAnyNewValue = fieldsToCompare.some((field) => {
+        const newValue = (result.enrichedData as any)?.[field];
+        const currentValue = (currentSnapshot as any)?.[field];
+        return typeof newValue === 'string' && newValue.trim() !== '' && newValue !== currentValue;
+      });
+
       setEnrichedData(result.enrichedData);
       setShowReviewModal(true);
+
       toast({
-        title: 'AI 추천 정보 조회 완료',
-        description: `${creditCost} 크레딧이 차감되었습니다.`,
+        title: hasAnyNewValue ? 'AI 추천 정보 조회 완료' : '새로운 정보를 찾지 못했습니다',
+        description: hasAnyNewValue
+          ? `${creditCost} 크레딧이 차감되었습니다.`
+          : '공개적으로 확인 가능한 정보가 부족해 추천 필드가 없었습니다.',
       });
     }
   };
