@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, ExternalLink, User, Sparkles, Loader2 } from 'lucide-react';
-import { Buyer, BuyerContact, countries, getFlagEmoji } from '@/data/mockData';
+import { Buyer, BuyerContact } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,15 @@ import { toast } from '@/hooks/use-toast';
 import { useBuyerEnrichment } from '@/hooks/useBuyerEnrichment';
 import { useCreditsContext } from '@/context/CreditsContext';
 import EnrichmentReviewModal from './EnrichmentReviewModal';
+import { 
+  loadCountryData, 
+  getCountries, 
+  isCountryDataLoaded, 
+  findCountry, 
+  getFlagEmoji,
+  getRegion,
+  Country
+} from '@/data/countryData';
 
 interface DetailsTabProps {
   buyer: Buyer;
@@ -54,28 +63,33 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
   const [activeContactTab, setActiveContactTab] = useState<number>(0);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [enrichedData, setEnrichedData] = useState<EnrichedData | null>(null);
+  const [countryList, setCountryList] = useState<Country[]>([]);
+
+  // Load country data on mount
+  useEffect(() => {
+    loadCountryData().then(countries => {
+      setCountryList(countries);
+    });
+  }, []);
 
   // Auto-fill country from BL destination country if empty
   useEffect(() => {
-    if (!formData.country && buyer.blDestinationCountry) {
-      // Try to find matching country code
-      const matchedCountry = countries.find(
-        c => c.name.toLowerCase().includes(buyer.blDestinationCountry?.toLowerCase() || '') ||
-             buyer.blDestinationCountry?.toLowerCase().includes(c.name.toLowerCase())
-      );
+    if (!formData.country && buyer.blDestinationCountry && countryList.length > 0) {
+      // Try to find matching country using the new matching function
+      const matchedCountry = findCountry(buyer.blDestinationCountry);
       
       if (matchedCountry) {
         setFormData(prev => ({
           ...prev,
-          country: matchedCountry.name,
+          country: matchedCountry.nameKo,
           countryCode: matchedCountry.code,
-          region: matchedCountry.region,
+          region: getRegion(matchedCountry.code),
         }));
       } else {
-        // Just set the country name without code
+        // Just set the country name without code - flag for manual review
         setFormData(prev => ({
           ...prev,
-          country: buyer.blDestinationCountry || '',
+          country: 'Unmapped',
         }));
       }
     }
@@ -168,15 +182,14 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
       if (value && typeof value === 'string') {
         switch (field) {
           case 'country':
-            updates.country = value;
-            // Try to match country code
-            const matchedCountry = countries.find(
-              c => c.name.toLowerCase().includes(value.toLowerCase()) ||
-                   value.toLowerCase().includes(c.name.toLowerCase())
-            );
+            // Use the new country matching function
+            const matchedCountry = findCountry(value);
             if (matchedCountry) {
+              updates.country = matchedCountry.nameKo;
               updates.countryCode = matchedCountry.code;
-              updates.region = matchedCountry.region;
+              updates.region = getRegion(matchedCountry.code);
+            } else {
+              updates.country = 'Unmapped';
             }
             break;
           case 'address':
@@ -215,7 +228,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     setEnrichedData(null);
   };
 
-  const selectedCountry = countries.find(c => c.code === formData.countryCode);
+  const selectedCountry = countryList.find(c => c.code === formData.countryCode);
 
   const currencyOptions = ['USD', 'KRW', 'SGD', 'MYR', 'VND', 'AED', 'HKD', 'CAD', 'AUD', 'EUR'];
 
@@ -272,13 +285,13 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <Select
               value={formData.countryCode}
               onValueChange={(value) => {
-                const country = countries.find(c => c.code === value);
+                const country = countryList.find(c => c.code === value);
                 if (country) {
                   setFormData({
                     ...formData,
                     countryCode: value,
-                    country: country.name,
-                    region: country.region,
+                    country: country.nameKo,
+                    region: getRegion(country.code),
                   });
                 }
               }}
@@ -286,18 +299,25 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder={formData.country || "국가 선택"} />
               </SelectTrigger>
-              <SelectContent>
-                {countries.map((country) => (
+              <SelectContent className="max-h-[300px]">
+                {countryList.map((country) => (
                   <SelectItem key={country.code} value={country.code}>
-                    {getFlagEmoji(country.code)} {country.name}
+                    {getFlagEmoji(country.code)} {country.nameKo}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {selectedCountry && (
               <div className="mt-2 text-xs text-muted-foreground">
-                <div>대륙 : {selectedCountry.region === 'asia' ? '아시아' : selectedCountry.region === 'america' ? '아메리카' : selectedCountry.region === 'europe' ? '유럽' : selectedCountry.region === 'africa' ? '아프리카' : '오세아니아'}</div>
-                <div>세부지역 : {selectedCountry.region === 'asia' ? '동남아시아' : '-'}</div>
+                {(() => {
+                  const region = getRegion(selectedCountry.code);
+                  return (
+                    <>
+                      <div>대륙 : {region === 'asia' ? '아시아' : region === 'america' ? '아메리카' : region === 'europe' ? '유럽' : region === 'africa' ? '아프리카' : '오세아니아'}</div>
+                      <div>세부지역 : {region === 'asia' ? '동남아시아' : '-'}</div>
+                    </>
+                  );
+                })()}
               </div>
             )}
             {buyer.blDestinationCountry && !selectedCountry && (

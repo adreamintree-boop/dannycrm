@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Building2, Calendar, Database, Plus, Check } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { toast } from '@/hooks/use-toast';
-import { countries } from '@/data/mockData';
+import { loadCountryData, findCountry, normalizeCountryValue, getRegion } from '@/data/countryData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockBLData, BLRecord } from '@/data/blMockData';
@@ -30,6 +30,14 @@ const CompanyAggregation: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { buyers, addBuyer, activeProjectId } = useApp();
   const [isAdding, setIsAdding] = useState(false);
+  const [countryDataLoaded, setCountryDataLoaded] = useState(false);
+
+  // Load country data on mount
+  useEffect(() => {
+    loadCountryData().then(() => {
+      setCountryDataLoaded(true);
+    });
+  }, []);
 
   const searchContext: SearchContext = useMemo(() => {
     const state = location.state as SearchContext | null;
@@ -145,29 +153,28 @@ const CompanyAggregation: React.FC = () => {
     
     setIsAdding(true);
     
-    // Determine country from filtered data
-    const topCountry = filteredData.length > 0 
+    // Determine country from filtered data using normalization
+    const topCountryValue = filteredData.length > 0 
       ? (searchContext.companyType === 'importer' 
           ? filteredData[0].destinationCountry 
           : filteredData[0].originCountry)
       : '';
     
-    const countryData = countries.find(c => 
-      c.name === topCountry || c.code === topCountry
-    ) || { code: 'US', name: topCountry || 'Unknown', region: 'america' as const };
-
+    // Use the new country normalization function
+    const normalizedCountry = normalizeCountryValue(topCountryValue);
+    
     const today = new Date().toISOString().slice(2, 10).replace(/-/g, '.');
 
     addBuyer({
       projectId: activeProjectId,
       name: searchContext.companyName,
-      country: countryData.name,
-      countryCode: countryData.code,
+      country: normalizedCountry.nameKo || 'Unmapped',
+      countryCode: normalizedCountry.code || '',
       status: 'list',
       bookmarked: false,
       websiteUrl: '',
       address: '',
-      region: countryData.region,
+      region: normalizedCountry.code ? getRegion(normalizedCountry.code) : 'asia',
       phone: '',
       email: '',
       revenue: kpis.totalValue > 0 ? `$${(kpis.totalValue / 1000000).toFixed(1)}M` : '',
