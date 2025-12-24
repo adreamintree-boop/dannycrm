@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { User, Lock, Mail } from 'lucide-react';
 import authHeroImage from '@/assets/auth-hero.png';
+import taasLogo from '@/assets/taas-logo.png';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('올바른 이메일 주소를 입력해주세요');
@@ -147,10 +148,11 @@ const Auth: React.FC = () => {
         <div className="flex-1 flex flex-col justify-center max-w-[400px] mx-auto w-full">
           {/* Logo */}
           <div className="mb-10">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-primary">ts</span>
-              <span className="text-2xl font-bold text-foreground">taas</span>
-            </div>
+            <img 
+              src={taasLogo} 
+              alt="TaaS Logo" 
+              className="h-10 w-auto"
+            />
           </div>
 
           {/* Form */}
