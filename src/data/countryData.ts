@@ -1,7 +1,7 @@
 // Country Data Loader and Matching Utilities
-// Uses Excel file as single source of truth for country data
+// Uses Supabase country_master table as single source of truth
 
-import * as XLSX from 'xlsx';
+import { supabase } from "@/integrations/supabase/client";
 
 // Country interface - standardized structure
 export interface Country {
@@ -9,247 +9,116 @@ export interface Country {
   code3: string;       // ISO alpha-3 code (e.g., USA, KOR)
   numericCode: string; // ISO numeric code (e.g., 840, 410)
   nameKo: string;      // Korean name (e.g., 미국)
-  nameEn: string;      // English name (derived/mapped)
+  nameEn: string;      // English name
+  searchText: string;  // Combined search text
 }
 
 // Storage for loaded countries
 let countryList: Country[] = [];
 let isLoaded = false;
 
-// Common English name mappings for countries
-const englishNameMap: Record<string, string> = {
-  '미국': 'United States',
-  '대한민국': 'South Korea',
-  '중화인민공화국': 'China',
-  '중화민국 (대만)': 'Taiwan',
-  '일본': 'Japan',
-  '영국': 'United Kingdom',
-  '독일': 'Germany',
-  '프랑스': 'France',
-  '이탈리아': 'Italy',
-  '캐나다': 'Canada',
-  '호주': 'Australia',
-  '오스트레일리아 (호주)': 'Australia',
-  '뉴질랜드': 'New Zealand',
-  '싱가포르': 'Singapore',
-  '말레이시아': 'Malaysia',
-  '인도네시아': 'Indonesia',
-  '베트남': 'Vietnam',
-  '태국': 'Thailand',
-  '필리핀': 'Philippines',
-  '인도': 'India',
-  '러시아': 'Russia',
-  '브라질': 'Brazil',
-  '멕시코': 'Mexico',
-  '아르헨티나': 'Argentina',
-  '남아프리카 공화국': 'South Africa',
-  '이집트': 'Egypt',
-  '네덜란드': 'Netherlands',
-  '벨기에': 'Belgium',
-  '스위스': 'Switzerland',
-  '스웨덴': 'Sweden',
-  '노르웨이': 'Norway',
-  '덴마크': 'Denmark',
-  '핀란드': 'Finland',
-  '폴란드': 'Poland',
-  '오스트리아': 'Austria',
-  '그리스': 'Greece',
-  '터키': 'Turkey',
-  '아랍에미리트': 'United Arab Emirates',
-  '사우디아라비아': 'Saudi Arabia',
-  '이스라엘': 'Israel',
-  '홍콩': 'Hong Kong',
-  '마카오': 'Macau',
-  '타이': 'Thailand',
-  '라오스': 'Laos',
-  '캄보디아': 'Cambodia',
-  '미얀마': 'Myanmar',
-  '방글라데시': 'Bangladesh',
-  '파키스탄': 'Pakistan',
-  '스리랑카': 'Sri Lanka',
-  '네팔': 'Nepal',
-  '몽골': 'Mongolia',
-  '카자흐스탄': 'Kazakhstan',
-  '우즈베키스탄': 'Uzbekistan',
-  '조선민주주의인민공화국': 'North Korea',
-  '칠레': 'Chile',
-  '콜롬비아': 'Colombia',
-  '페루': 'Peru',
-  '에콰도르': 'Ecuador',
-  '베네수엘라': 'Venezuela',
-  '쿠바': 'Cuba',
-  '푸에르토리코': 'Puerto Rico',
-  '도미니카 공화국': 'Dominican Republic',
-  '과테말라': 'Guatemala',
-  '코스타리카': 'Costa Rica',
-  '파나마': 'Panama',
-  '케냐': 'Kenya',
-  '나이지리아': 'Nigeria',
-  '가나': 'Ghana',
-  '모로코': 'Morocco',
-  '튀니지': 'Tunisia',
-  '알제리': 'Algeria',
-  '에티오피아': 'Ethiopia',
-  '탄자니아': 'Tanzania',
-  '우간다': 'Uganda',
-  '아일랜드': 'Ireland',
-  '포르투갈': 'Portugal',
-  '스페인': 'Spain',
-  '체코': 'Czech Republic',
-  '헝가리': 'Hungary',
-  '루마니아': 'Romania',
-  '불가리아': 'Bulgaria',
-  '우크라이나': 'Ukraine',
-  '벨라루스': 'Belarus',
-  '크로아티아': 'Croatia',
-  '슬로베니아': 'Slovenia',
-  '슬로바키아': 'Slovakia',
-  '세르비아 몬테네그로': 'Serbia and Montenegro',
-  '리투아니아': 'Lithuania',
-  '라트비아': 'Latvia',
-  '에스토니아': 'Estonia',
-  '아이슬란드': 'Iceland',
-  '룩셈부르크': 'Luxembourg',
-  '모나코': 'Monaco',
-  '키프로스': 'Cyprus',
-  '몰타': 'Malta',
-  '이란': 'Iran',
-  '이라크': 'Iraq',
-  '시리아': 'Syria',
-  '레바논': 'Lebanon',
-  '요르단': 'Jordan',
-  '쿠웨이트': 'Kuwait',
-  '바레인': 'Bahrain',
-  '카타르': 'Qatar',
-  '오만': 'Oman',
-  '예멘': 'Yemen',
-  '아프가니스탄': 'Afghanistan',
-};
-
-// Common alternative names for fuzzy matching
-const alternativeNames: Record<string, string[]> = {
-  'US': ['USA', 'United States', 'United States of America', 'America', '미국', '미합중국'],
-  'KR': ['South Korea', 'Korea', 'Republic of Korea', 'ROK', '한국', '대한민국', '남한'],
-  'CN': ['China', 'PRC', "People's Republic of China", '중국', '중화인민공화국'],
-  'JP': ['Japan', '일본'],
-  'GB': ['UK', 'United Kingdom', 'Great Britain', 'England', '영국', '잉글랜드'],
-  'DE': ['Germany', 'Deutschland', '독일'],
-  'FR': ['France', '프랑스'],
-  'VN': ['Vietnam', 'Viet Nam', '베트남'],
-  'TH': ['Thailand', 'Siam', '태국', '타이'],
-  'SG': ['Singapore', '싱가포르'],
-  'MY': ['Malaysia', '말레이시아'],
-  'ID': ['Indonesia', '인도네시아'],
-  'PH': ['Philippines', '필리핀'],
-  'IN': ['India', '인도'],
-  'AU': ['Australia', 'Oz', '호주', '오스트레일리아'],
-  'NZ': ['New Zealand', '뉴질랜드'],
-  'CA': ['Canada', '캐나다'],
-  'MX': ['Mexico', '멕시코'],
-  'BR': ['Brazil', '브라질'],
-  'AE': ['UAE', 'United Arab Emirates', '아랍에미리트', 'Dubai', '두바이'],
-  'SA': ['Saudi Arabia', 'KSA', '사우디아라비아', '사우디'],
-  'HK': ['Hong Kong', '홍콩'],
-  'TW': ['Taiwan', 'Republic of China', 'ROC', '대만', '타이완', '중화민국'],
-  'RU': ['Russia', 'Russian Federation', '러시아'],
-  'NL': ['Netherlands', 'Holland', '네덜란드', '홀란드'],
-  'BE': ['Belgium', '벨기에'],
-  'CH': ['Switzerland', '스위스'],
-  'SE': ['Sweden', '스웨덴'],
-  'NO': ['Norway', '노르웨이'],
-  'DK': ['Denmark', '덴마크'],
-  'FI': ['Finland', '핀란드'],
-  'PL': ['Poland', '폴란드'],
-  'AT': ['Austria', '오스트리아'],
-  'GR': ['Greece', 'Hellas', '그리스'],
-  'TR': ['Turkey', 'Türkiye', '터키'],
-  'IT': ['Italy', '이탈리아'],
-  'ES': ['Spain', 'España', '스페인'],
-  'PT': ['Portugal', '포르투갈'],
-  'IE': ['Ireland', 'Eire', '아일랜드'],
-  'ZA': ['South Africa', '남아프리카', '남아공'],
-  'EG': ['Egypt', '이집트'],
-  'NG': ['Nigeria', '나이지리아'],
-  'KE': ['Kenya', '케냐'],
-  'CL': ['Chile', '칠레'],
-  'AR': ['Argentina', '아르헨티나'],
-  'CO': ['Colombia', '콜롬비아'],
-  'PE': ['Peru', '페루'],
-};
-
-interface ExcelRow {
-  '나라 이름'?: string;
-  '숫자'?: string | number;
-  'alpha-3'?: string;  // This column contains ISO alpha-2 codes (e.g., GH)
-  'alpha-2'?: string;  // This column contains ISO alpha-3 codes (e.g., GHA)
-}
-
-// Load country data from Excel file
+// Load country data from Supabase
 export async function loadCountryData(): Promise<Country[]> {
   if (isLoaded && countryList.length > 0) {
     return countryList;
   }
 
   try {
-    const response = await fetch('/data/country-list.xlsx');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch country list: ${response.status}`);
+    const { data, error } = await supabase
+      .from('country_master')
+      .select('iso2, iso3, name_ko, name_en, search_text')
+      .order('name_ko', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching countries from Supabase:', error);
+      // Fallback to static data if Supabase fails
+      return loadStaticCountryData();
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    
-    // Get the first sheet
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    
-    // Convert to JSON with header row detection
-    const rawData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-    
-    console.log('Raw Excel data sample:', rawData.slice(0, 5));
-    
-    // Transform to Country format
-    // Filter out header rows and empty rows
-    countryList = rawData
-      .filter(row => {
-        const nameKo = row['나라 이름'];
-        const alpha3Col = row['alpha-3']; // This is actually alpha-2 code
-        // Skip header rows and empty rows
-        return nameKo && 
-               alpha3Col && 
-               typeof nameKo === 'string' && 
-               nameKo !== '나라 이름' && 
-               nameKo !== '검색국가명' &&
-               alpha3Col !== 'alpha-3';
-      })
-      .map(row => {
-        const nameKo = String(row['나라 이름']).trim();
-        // Column 'alpha-3' contains ISO alpha-2 codes (e.g., GH, KR, US)
-        const code = String(row['alpha-3']).trim();
-        // Column 'alpha-2' contains ISO alpha-3 codes (e.g., GHA, KOR, USA)
-        const code3 = String(row['alpha-2'] || '').trim();
-        const numericCode = String(row['숫자'] || '').trim();
-        
-        return {
-          code,       // ISO alpha-2 (e.g., US, KR)
-          code3,      // ISO alpha-3 (e.g., USA, KOR)
-          numericCode,
-          nameKo,
-          nameEn: englishNameMap[nameKo] || nameKo,
-        };
-      });
+    if (!data || data.length === 0) {
+      console.log('No countries in database, using static data');
+      return loadStaticCountryData();
+    }
+
+    countryList = data.map(row => ({
+      code: row.iso2,
+      code3: row.iso3 || '',
+      numericCode: '',
+      nameKo: row.name_ko,
+      nameEn: row.name_en,
+      searchText: row.search_text,
+    }));
 
     isLoaded = true;
-    console.log(`Loaded ${countryList.length} countries from Excel`);
-    if (countryList.length > 0) {
-      console.log('Sample countries:', countryList.slice(0, 3));
-    }
+    console.log(`Loaded ${countryList.length} countries from Supabase`);
     
     return countryList;
   } catch (error) {
     console.error('Error loading country data:', error);
-    return [];
+    return loadStaticCountryData();
   }
+}
+
+// Static country data as fallback (seed data)
+export const STATIC_COUNTRIES: Country[] = [
+  { code: 'KR', code3: 'KOR', numericCode: '410', nameKo: '대한민국', nameEn: 'South Korea', searchText: '대한민국 South Korea KR KOR 한국' },
+  { code: 'US', code3: 'USA', numericCode: '840', nameKo: '미국', nameEn: 'United States', searchText: '미국 United States US USA America' },
+  { code: 'CN', code3: 'CHN', numericCode: '156', nameKo: '중국', nameEn: 'China', searchText: '중국 China CN CHN 중화인민공화국' },
+  { code: 'JP', code3: 'JPN', numericCode: '392', nameKo: '일본', nameEn: 'Japan', searchText: '일본 Japan JP JPN' },
+  { code: 'DE', code3: 'DEU', numericCode: '276', nameKo: '독일', nameEn: 'Germany', searchText: '독일 Germany DE DEU Deutschland' },
+  { code: 'GB', code3: 'GBR', numericCode: '826', nameKo: '영국', nameEn: 'United Kingdom', searchText: '영국 United Kingdom GB GBR UK England' },
+  { code: 'FR', code3: 'FRA', numericCode: '250', nameKo: '프랑스', nameEn: 'France', searchText: '프랑스 France FR FRA' },
+  { code: 'IT', code3: 'ITA', numericCode: '380', nameKo: '이탈리아', nameEn: 'Italy', searchText: '이탈리아 Italy IT ITA' },
+  { code: 'CA', code3: 'CAN', numericCode: '124', nameKo: '캐나다', nameEn: 'Canada', searchText: '캐나다 Canada CA CAN' },
+  { code: 'AU', code3: 'AUS', numericCode: '036', nameKo: '호주', nameEn: 'Australia', searchText: '호주 Australia AU AUS 오스트레일리아' },
+  { code: 'NZ', code3: 'NZL', numericCode: '554', nameKo: '뉴질랜드', nameEn: 'New Zealand', searchText: '뉴질랜드 New Zealand NZ NZL' },
+  { code: 'SG', code3: 'SGP', numericCode: '702', nameKo: '싱가포르', nameEn: 'Singapore', searchText: '싱가포르 Singapore SG SGP' },
+  { code: 'MY', code3: 'MYS', numericCode: '458', nameKo: '말레이시아', nameEn: 'Malaysia', searchText: '말레이시아 Malaysia MY MYS' },
+  { code: 'ID', code3: 'IDN', numericCode: '360', nameKo: '인도네시아', nameEn: 'Indonesia', searchText: '인도네시아 Indonesia ID IDN' },
+  { code: 'VN', code3: 'VNM', numericCode: '704', nameKo: '베트남', nameEn: 'Vietnam', searchText: '베트남 Vietnam VN VNM' },
+  { code: 'TH', code3: 'THA', numericCode: '764', nameKo: '태국', nameEn: 'Thailand', searchText: '태국 Thailand TH THA 타이' },
+  { code: 'PH', code3: 'PHL', numericCode: '608', nameKo: '필리핀', nameEn: 'Philippines', searchText: '필리핀 Philippines PH PHL' },
+  { code: 'IN', code3: 'IND', numericCode: '356', nameKo: '인도', nameEn: 'India', searchText: '인도 India IN IND' },
+  { code: 'RU', code3: 'RUS', numericCode: '643', nameKo: '러시아', nameEn: 'Russia', searchText: '러시아 Russia RU RUS' },
+  { code: 'BR', code3: 'BRA', numericCode: '076', nameKo: '브라질', nameEn: 'Brazil', searchText: '브라질 Brazil BR BRA' },
+  { code: 'MX', code3: 'MEX', numericCode: '484', nameKo: '멕시코', nameEn: 'Mexico', searchText: '멕시코 Mexico MX MEX' },
+  { code: 'AR', code3: 'ARG', numericCode: '032', nameKo: '아르헨티나', nameEn: 'Argentina', searchText: '아르헨티나 Argentina AR ARG' },
+  { code: 'ZA', code3: 'ZAF', numericCode: '710', nameKo: '남아프리카공화국', nameEn: 'South Africa', searchText: '남아프리카공화국 South Africa ZA ZAF 남아공' },
+  { code: 'EG', code3: 'EGY', numericCode: '818', nameKo: '이집트', nameEn: 'Egypt', searchText: '이집트 Egypt EG EGY' },
+  { code: 'NL', code3: 'NLD', numericCode: '528', nameKo: '네덜란드', nameEn: 'Netherlands', searchText: '네덜란드 Netherlands NL NLD Holland' },
+  { code: 'BE', code3: 'BEL', numericCode: '056', nameKo: '벨기에', nameEn: 'Belgium', searchText: '벨기에 Belgium BE BEL' },
+  { code: 'CH', code3: 'CHE', numericCode: '756', nameKo: '스위스', nameEn: 'Switzerland', searchText: '스위스 Switzerland CH CHE' },
+  { code: 'SE', code3: 'SWE', numericCode: '752', nameKo: '스웨덴', nameEn: 'Sweden', searchText: '스웨덴 Sweden SE SWE' },
+  { code: 'NO', code3: 'NOR', numericCode: '578', nameKo: '노르웨이', nameEn: 'Norway', searchText: '노르웨이 Norway NO NOR' },
+  { code: 'DK', code3: 'DNK', numericCode: '208', nameKo: '덴마크', nameEn: 'Denmark', searchText: '덴마크 Denmark DK DNK' },
+  { code: 'FI', code3: 'FIN', numericCode: '246', nameKo: '핀란드', nameEn: 'Finland', searchText: '핀란드 Finland FI FIN' },
+  { code: 'PL', code3: 'POL', numericCode: '616', nameKo: '폴란드', nameEn: 'Poland', searchText: '폴란드 Poland PL POL' },
+  { code: 'AT', code3: 'AUT', numericCode: '040', nameKo: '오스트리아', nameEn: 'Austria', searchText: '오스트리아 Austria AT AUT' },
+  { code: 'GR', code3: 'GRC', numericCode: '300', nameKo: '그리스', nameEn: 'Greece', searchText: '그리스 Greece GR GRC' },
+  { code: 'TR', code3: 'TUR', numericCode: '792', nameKo: '터키', nameEn: 'Turkey', searchText: '터키 Turkey TR TUR Türkiye' },
+  { code: 'AE', code3: 'ARE', numericCode: '784', nameKo: '아랍에미리트', nameEn: 'United Arab Emirates', searchText: '아랍에미리트 United Arab Emirates AE ARE UAE Dubai 두바이' },
+  { code: 'SA', code3: 'SAU', numericCode: '682', nameKo: '사우디아라비아', nameEn: 'Saudi Arabia', searchText: '사우디아라비아 Saudi Arabia SA SAU 사우디' },
+  { code: 'IL', code3: 'ISR', numericCode: '376', nameKo: '이스라엘', nameEn: 'Israel', searchText: '이스라엘 Israel IL ISR' },
+  { code: 'HK', code3: 'HKG', numericCode: '344', nameKo: '홍콩', nameEn: 'Hong Kong', searchText: '홍콩 Hong Kong HK HKG' },
+  { code: 'TW', code3: 'TWN', numericCode: '158', nameKo: '대만', nameEn: 'Taiwan', searchText: '대만 Taiwan TW TWN 타이완 중화민국' },
+  { code: 'ES', code3: 'ESP', numericCode: '724', nameKo: '스페인', nameEn: 'Spain', searchText: '스페인 Spain ES ESP España' },
+  { code: 'PT', code3: 'PRT', numericCode: '620', nameKo: '포르투갈', nameEn: 'Portugal', searchText: '포르투갈 Portugal PT PRT' },
+  { code: 'IE', code3: 'IRL', numericCode: '372', nameKo: '아일랜드', nameEn: 'Ireland', searchText: '아일랜드 Ireland IE IRL Eire' },
+  { code: 'CZ', code3: 'CZE', numericCode: '203', nameKo: '체코', nameEn: 'Czech Republic', searchText: '체코 Czech Republic CZ CZE Czechia' },
+  { code: 'HU', code3: 'HUN', numericCode: '348', nameKo: '헝가리', nameEn: 'Hungary', searchText: '헝가리 Hungary HU HUN' },
+  { code: 'RO', code3: 'ROU', numericCode: '642', nameKo: '루마니아', nameEn: 'Romania', searchText: '루마니아 Romania RO ROU' },
+  { code: 'UA', code3: 'UKR', numericCode: '804', nameKo: '우크라이나', nameEn: 'Ukraine', searchText: '우크라이나 Ukraine UA UKR' },
+  { code: 'CL', code3: 'CHL', numericCode: '152', nameKo: '칠레', nameEn: 'Chile', searchText: '칠레 Chile CL CHL' },
+  { code: 'CO', code3: 'COL', numericCode: '170', nameKo: '콜롬비아', nameEn: 'Colombia', searchText: '콜롬비아 Colombia CO COL' },
+  { code: 'PE', code3: 'PER', numericCode: '604', nameKo: '페루', nameEn: 'Peru', searchText: '페루 Peru PE PER' },
+];
+
+// Load static country data as fallback
+function loadStaticCountryData(): Country[] {
+  countryList = [...STATIC_COUNTRIES];
+  isLoaded = true;
+  console.log(`Loaded ${countryList.length} countries from static data`);
+  return countryList;
 }
 
 // Get all countries (sync, requires loadCountryData to be called first)
@@ -296,35 +165,27 @@ export function findCountry(input: string | undefined | null): Country | null {
   );
   if (byNameEn) return byNameEn;
 
-  // 4. Case-insensitive partial match on Korean name
+  // 4. Search in searchText field
+  const bySearchText = countryList.find(c => 
+    c.searchText.toLowerCase().includes(normalizedSearch)
+  );
+  if (bySearchText) return bySearchText;
+
+  // 5. Case-insensitive partial match on Korean name
   const byPartialKo = countryList.find(c => 
     normalizeString(c.nameKo).includes(normalizedSearch) ||
     normalizedSearch.includes(normalizeString(c.nameKo))
   );
   if (byPartialKo) return byPartialKo;
 
-  // 5. Case-insensitive partial match on English name
+  // 6. Case-insensitive partial match on English name
   const byPartialEn = countryList.find(c => 
     normalizeString(c.nameEn).includes(normalizedSearch) ||
     normalizedSearch.includes(normalizeString(c.nameEn))
   );
   if (byPartialEn) return byPartialEn;
 
-  // 6. Check alternative names
-  for (const [code, alternatives] of Object.entries(alternativeNames)) {
-    const matches = alternatives.some(alt => 
-      normalizeString(alt) === normalizedSearch ||
-      normalizeString(alt).includes(normalizedSearch) ||
-      normalizedSearch.includes(normalizeString(alt))
-    );
-    if (matches) {
-      const country = countryList.find(c => c.code === code);
-      if (country) return country;
-    }
-  }
-
-  // 7. Try to match by common patterns
-  // Handle "UNITED STATES" → "US"
+  // 7. Common pattern matching
   if (/united\s*states/i.test(searchTerm)) {
     return countryList.find(c => c.code === 'US') || null;
   }
@@ -410,4 +271,43 @@ export function getRegion(countryCode: string): 'asia' | 'america' | 'europe' | 
   if (europeCountries.includes(countryCode)) return 'europe';
   if (oceaniaCountries.includes(countryCode)) return 'oceania';
   return 'africa'; // Default for remaining countries
+}
+
+// Seed country data to Supabase (call once to populate database)
+export async function seedCountryData(): Promise<boolean> {
+  try {
+    // Check if data already exists
+    const { count } = await supabase
+      .from('country_master')
+      .select('*', { count: 'exact', head: true });
+    
+    if (count && count > 0) {
+      console.log('Country data already exists in database');
+      return true;
+    }
+
+    // Insert static countries
+    const insertData = STATIC_COUNTRIES.map(c => ({
+      iso2: c.code,
+      iso3: c.code3,
+      name_ko: c.nameKo,
+      name_en: c.nameEn,
+      search_text: c.searchText,
+    }));
+
+    const { error } = await supabase
+      .from('country_master')
+      .upsert(insertData, { onConflict: 'iso2' });
+
+    if (error) {
+      console.error('Error seeding country data:', error);
+      return false;
+    }
+
+    console.log(`Seeded ${insertData.length} countries to database`);
+    return true;
+  } catch (error) {
+    console.error('Error seeding country data:', error);
+    return false;
+  }
 }

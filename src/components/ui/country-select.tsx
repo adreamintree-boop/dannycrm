@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,12 +19,14 @@ import { Country, getFlagEmoji } from "@/data/countryData";
 
 interface CountrySelectProps {
   countries: Country[];
-  value?: string; // country code
+  value?: string; // country code (iso2)
   onValueChange: (country: Country | null) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
+
+const DEFAULT_DISPLAY_COUNT = 50;
 
 export function CountrySelect({
   countries,
@@ -42,17 +44,24 @@ export function CountrySelect({
     [countries, value]
   );
 
-  // Filter countries based on search query (Korean name, English name, or code)
+  // Filter countries based on search query
+  // When search is empty, show first 50 countries
   const filteredCountries = React.useMemo(() => {
-    if (!searchQuery.trim()) return countries;
+    if (!searchQuery.trim()) {
+      // Return first 50 countries when no search query
+      return countries.slice(0, DEFAULT_DISPLAY_COUNT);
+    }
     
     const query = searchQuery.toLowerCase().trim();
+    
     return countries.filter((country) => {
+      // Search in Korean name, English name, ISO2, ISO3, and searchText
       return (
         country.nameKo.toLowerCase().includes(query) ||
         country.nameEn.toLowerCase().includes(query) ||
         country.code.toLowerCase().includes(query) ||
-        country.code3?.toLowerCase().includes(query)
+        country.code3?.toLowerCase().includes(query) ||
+        country.searchText?.toLowerCase().includes(query)
       );
     });
   }, [countries, searchQuery]);
@@ -64,8 +73,16 @@ export function CountrySelect({
     setSearchQuery("");
   };
 
+  // Handle open state change - reset search when opening
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      setSearchQuery("");
+    }
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -89,13 +106,14 @@ export function CountrySelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0 z-50" align="start">
+      <PopoverContent className="w-[300px] p-0 z-50 bg-popover" align="start">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="국가명 또는 코드 검색..."
             value={searchQuery}
             onValueChange={setSearchQuery}
             className="h-9"
+            autoFocus
           />
           <CommandList>
             <CommandEmpty>일치하는 국가가 없습니다.</CommandEmpty>
@@ -115,11 +133,13 @@ export function CountrySelect({
                   />
                   <span>{getFlagEmoji(country.code)}</span>
                   <span>{country.nameKo}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {country.code}
-                  </span>
                 </CommandItem>
               ))}
+              {!searchQuery.trim() && countries.length > DEFAULT_DISPLAY_COUNT && (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+                  검색하여 더 많은 국가를 찾으세요
+                </div>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

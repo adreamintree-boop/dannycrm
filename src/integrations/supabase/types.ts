@@ -251,6 +251,45 @@ export type Database = {
         }
         Relationships: []
       }
+      country_master: {
+        Row: {
+          created_at: string
+          id: string
+          iso2: string
+          iso3: string | null
+          name_en: string
+          name_ko: string
+          region: string | null
+          search_text: string
+          subregion: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          iso2: string
+          iso3?: string | null
+          name_en: string
+          name_ko: string
+          region?: string | null
+          search_text: string
+          subregion?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          iso2?: string
+          iso3?: string | null
+          name_en?: string
+          name_ko?: string
+          region?: string | null
+          search_text?: string
+          subregion?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_ledger: {
         Row: {
           action_type: Database["public"]["Enums"]["credit_action_type"]
