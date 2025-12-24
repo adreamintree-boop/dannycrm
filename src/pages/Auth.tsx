@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { User, Lock, Mail } from 'lucide-react';
+import authHeroImage from '@/assets/auth-hero.png';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('올바른 이메일 주소를 입력해주세요');
@@ -312,72 +313,11 @@ const Auth: React.FC = () => {
 
       {/* Right side - Blue illustration area */}
       <div className="hidden lg:flex lg:w-[55%] bg-primary items-center justify-center relative overflow-hidden">
-        {/* 3D cube decorative elements */}
-        <div className="absolute inset-0 opacity-80">
-          <svg viewBox="0 0 800 600" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
-            {/* Background gradient */}
-            <defs>
-              <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(214, 89%, 52%)" />
-                <stop offset="100%" stopColor="hsl(214, 89%, 45%)" />
-              </linearGradient>
-              <linearGradient id="cubeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.95)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.85)" />
-              </linearGradient>
-              <linearGradient id="cubeSide" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.7)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.5)" />
-              </linearGradient>
-            </defs>
-            
-            {/* Large cube group */}
-            <g transform="translate(400, 300)">
-              {/* Main cube */}
-              <g transform="rotate(-15)">
-                <rect x="-80" y="-80" width="160" height="160" fill="url(#cubeGradient)" rx="8" />
-                <rect x="-80" y="-80" width="160" height="160" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" rx="8" />
-              </g>
-              
-              {/* Floating cubes */}
-              <g transform="translate(-150, -120) rotate(-20)">
-                <rect x="-30" y="-30" width="60" height="60" fill="url(#cubeSide)" rx="4" />
-              </g>
-              <g transform="translate(180, 80) rotate(-10)">
-                <rect x="-40" y="-40" width="80" height="80" fill="url(#cubeGradient)" rx="6" />
-              </g>
-              <g transform="translate(-200, 100) rotate(-25)">
-                <rect x="-25" y="-25" width="50" height="50" fill="url(#cubeSide)" rx="4" />
-              </g>
-              <g transform="translate(120, -150) rotate(-5)">
-                <rect x="-35" y="-35" width="70" height="70" fill="url(#cubeGradient)" rx="5" />
-              </g>
-              
-              {/* Small accent cubes */}
-              <g transform="translate(-250, -50)">
-                <rect x="-15" y="-15" width="30" height="30" fill="rgba(255,255,255,0.4)" rx="3" />
-              </g>
-              <g transform="translate(250, -100)">
-                <rect x="-20" y="-20" width="40" height="40" fill="rgba(255,255,255,0.5)" rx="3" />
-              </g>
-              <g transform="translate(200, 180)">
-                <rect x="-18" y="-18" width="36" height="36" fill="rgba(255,255,255,0.45)" rx="3" />
-              </g>
-              
-              {/* Glowing accents */}
-              <circle cx="-100" cy="50" r="8" fill="rgba(100,200,255,0.8)" />
-              <circle cx="50" cy="-100" r="6" fill="rgba(100,200,255,0.6)" />
-              <circle cx="150" cy="30" r="5" fill="rgba(100,200,255,0.7)" />
-            </g>
-            
-            {/* Platform lines */}
-            <g stroke="rgba(255,255,255,0.2)" strokeWidth="1">
-              <line x1="150" y1="500" x2="650" y2="500" />
-              <line x1="100" y1="520" x2="700" y2="520" />
-              <line x1="200" y1="480" x2="600" y2="480" />
-            </g>
-          </svg>
-        </div>
+        <img 
+          src={authHeroImage} 
+          alt="TaaS Platform Illustration" 
+          className="w-full h-full object-cover"
+        />
       </div>
     </div>
   );
