@@ -3,6 +3,7 @@ import { FileText, Search, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ProfileDropdown from './ProfileDropdown';
+import taasHeaderLogo from '@/assets/taas-header-logo.png';
 
 const TopHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -20,12 +21,11 @@ const TopHeader: React.FC = () => {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-50">
       {/* Left: Logo */}
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-primary-foreground font-bold text-sm">ts</span>
-        </div>
-        <span className="font-semibold text-foreground">taas</span>
-      </div>
+      <img 
+        src={taasHeaderLogo} 
+        alt="TaaS Logo" 
+        style={{ width: '148px', height: '56px' }}
+      />
 
       {/* Center: Navigation */}
       <nav className="flex items-center gap-1">
