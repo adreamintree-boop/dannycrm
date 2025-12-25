@@ -136,8 +136,6 @@ Return ONLY valid JSON matching the specified format. Use null for any field you
       search_parameters: {
         mode: "auto",
         return_citations: true,
-        from_date: "",
-        to_date: "",
         max_search_results: 10,
       },
       temperature: 0.1,
