@@ -26,7 +26,7 @@ interface CountrySelectProps {
   className?: string;
 }
 
-const DEFAULT_DISPLAY_COUNT = 50;
+// Show all countries - no limit
 
 export function CountrySelect({
   countries,
@@ -44,12 +44,10 @@ export function CountrySelect({
     [countries, value]
   );
 
-  // Filter countries based on search query
-  // When search is empty, show first 50 countries
+  // Filter countries based on search query - show all when empty
   const filteredCountries = React.useMemo(() => {
     if (!searchQuery.trim()) {
-      // Return first 50 countries when no search query
-      return countries.slice(0, DEFAULT_DISPLAY_COUNT);
+      return countries; // Show all countries
     }
     
     const query = searchQuery.toLowerCase().trim();
@@ -135,11 +133,6 @@ export function CountrySelect({
                   <span>{country.nameKo}</span>
                 </CommandItem>
               ))}
-              {!searchQuery.trim() && countries.length > DEFAULT_DISPLAY_COUNT && (
-                <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
-                  검색하여 더 많은 국가를 찾으세요
-                </div>
-              )}
             </CommandGroup>
           </CommandList>
         </Command>
