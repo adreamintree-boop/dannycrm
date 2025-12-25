@@ -128,7 +128,7 @@ Return ONLY valid JSON matching the specified format. Use null for any field you
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "grok-3-latest",
+      model: "grok-4-1-fast-reasoning",
       messages: [
         { role: "system", content: ENRICHMENT_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
