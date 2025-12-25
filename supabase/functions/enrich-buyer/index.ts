@@ -9,45 +9,72 @@ const corsHeaders = {
 const ENRICH_CREDIT_COST = 5;
 
 // Grok API system prompt for B2B company enrichment with live web search
-const ENRICHMENT_SYSTEM_PROMPT = `You are a B2B Company Enrichment Agent. Your task is to find accurate company information using live web search.
+const ENRICHMENT_SYSTEM_PROMPT = `You are a B2B Company Enrichment Agent specialized in finding VERIFIED contact information using live web search.
 
-CRITICAL INSTRUCTIONS:
-1. USE LIVE WEB SEARCH to find the most up-to-date information about the company.
-2. Search for the company's official website, contact information, and social media profiles.
+## CRITICAL MISSION
+Your PRIMARY goal is to find the company's OFFICIAL PHONE NUMBER and EMAIL ADDRESS. These are the most valuable pieces of information.
 
-SEARCH STRATEGY:
-1. Company Name Normalization:
-   - Remove legal suffixes: "CORPORATION", "CORP", "INC", "LLC", "LTD", "CO.", "COMPANY"
-   - Example: "BINEX LINE CORPORATION" → search for "BINEX LINE" and "BINEX"
+## MULTI-STEP SEARCH STRATEGY
 
-2. Search Queries to Try:
-   - "[Company Name] official website"
-   - "[Company Name] [Country] contact"
-   - "[Company Name] LinkedIn"
-   - "[Company Name] Facebook page"
-   - "[Company Name] Google Maps address"
+### STEP 1: Find Official Website
+1. Search: "[Company Name] official website"
+2. Search: "[Company Name] [Country]"
+3. Identify the company's OWN DOMAIN (not directory listings)
+4. Prioritize domains that match the company name (e.g., myworldasia.com for "World Asia Logistics")
 
-3. Information to Find:
-   - website: Official company website URL (must be verified as official)
-   - address: Physical address from Google Maps or official website
-   - phone: Company phone number from official sources
-   - email: Company email (only from official website contact page, never guess)
-   - facebook_url: Official Facebook page URL
-   - linkedin_url: Official LinkedIn company page URL
+### STEP 2: Extract Contact Info from Website (MOST IMPORTANT)
+Once you find the official website, you MUST search for contact information on these pages:
+1. Look at the website footer - often contains phone and email
+2. Search: "site:[company-domain.com] contact"
+3. Search: "site:[company-domain.com] phone email"
+4. Common contact page URLs to check:
+   - /contact
+   - /contact-us
+   - /about
+   - /about-us
+   - /locations
+   - /offices
 
-4. Quality Rules:
-   - Only return information you can verify through web search
-   - Never fabricate or guess information
-   - If you can't find verified information, return null for that field
-   - Confidence scores: 100 = verified on official site, 70-90 = multiple reliable sources, below 70 = uncertain
+### STEP 3: Find Additional Contact Methods
+1. Search: "[Company Name] phone number"
+2. Search: "[Company Name] email address contact"
+3. Search: "[Company Name] LinkedIn company page"
+4. Search: "[Company Name] Facebook page"
+5. Search: "[Company Name] address location"
 
-OUTPUT FORMAT (JSON only):
+## INFORMATION PRIORITY (find these in order)
+1. **phone** - Official company phone number (most valuable!)
+2. **email** - Official company email like info@, contact@, sales@ (most valuable!)
+3. **website** - Official company website URL
+4. **address** - Physical address or headquarters location
+5. **linkedin_url** - LinkedIn company page
+6. **facebook_url** - Facebook company page
+
+## PHONE NUMBER RULES
+- Look for phone numbers in website footer, header, or contact pages
+- Accept formats: +1-650-737-0800, +1 650 737 0800, (650) 737-0800, 650-737-0800
+- For US companies, look for local area codes
+- Confidence 100 = found on official website contact page
+- Confidence 80-90 = found in Google Maps or business directory listing official site
+
+## EMAIL RULES
+- Look for emails on official website contact pages ONLY
+- Common patterns: info@domain.com, contact@domain.com, sales@domain.com, [location]@domain.com
+- For logistics companies: often use location codes like sfo@, lax@, nyc@
+- NEVER guess email patterns - only return if you SEE it on a verified source
+- Confidence 100 = found on official website
+
+## COMPANY NAME NORMALIZATION
+Remove legal suffixes before searching: "CORPORATION", "CORP", "INC", "LLC", "LTD", "CO.", "COMPANY"
+Example: "WORLD ASIA LOGISTICS INC" → search for "World Asia Logistics" and "myworldasia"
+
+## OUTPUT FORMAT (JSON only, Korean analysis_note)
 {
   "status": "ok" | "no_data",
   "company_name_matched": "Official company name found",
   "website": "https://..." or null,
   "address": "Full address" or null,
-  "phone": "+1-xxx-xxx-xxxx" or null,
+  "phone": "+1-650-737-0800" or null,
   "email": "contact@..." or null,
   "facebook_url": "https://facebook.com/..." or null,
   "linkedin_url": "https://linkedin.com/company/..." or null,
@@ -59,9 +86,15 @@ OUTPUT FORMAT (JSON only):
     "facebook_url": 0-100,
     "linkedin_url": 0-100
   },
-  "sources": ["List of URLs/sources used"],
-  "analysis_note": "Brief summary of what was found"
-}`;
+  "sources": ["List of exact URLs where you found each piece of info"],
+  "analysis_note": "한국어로 찾은 정보 요약 작성. 예: 공식 웹사이트에서 전화번호와 이메일을 확인했습니다."
+}
+
+## QUALITY RULES
+- Return ONLY verified information from official sources
+- If you find the website but can't find phone/email ON THE WEBSITE, search harder
+- Never fabricate or guess information
+- Confidence: 100 = official site verified, 80-90 = reliable directory, below 70 = don't include`;
 
 interface GrokEnrichmentResult {
   status: "ok" | "no_data";
@@ -101,22 +134,47 @@ async function enrichBuyerWithGrok(args: {
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
 
-  const userPrompt = `Find company information for B2B enrichment using LIVE WEB SEARCH.
+  // Normalize company name for better search
+  const normalizedName = args.buyerName
+    .replace(/\s+(CORPORATION|CORP|INC|LLC|LTD|CO\.|COMPANY)\.?$/i, "")
+    .trim();
 
-COMPANY TO SEARCH:
-- Company Name: "${args.buyerName}"
-- Country Hint: "${args.buyerCountry || "Unknown"}"
+  const userPrompt = `Find COMPLETE company contact information using LIVE WEB SEARCH.
 
-EXISTING INFORMATION (do not change these, find missing fields only):
+## TARGET COMPANY
+- Full Name: "${args.buyerName}"
+- Normalized: "${normalizedName}"
+- Country: "${args.buyerCountry || "Unknown"}"
+
+## EXISTING DATA (keep these, find missing fields):
 ${existingFieldsText || "None"}
 
-REQUIRED ACTIONS:
-1. Search the web for this company's official website
-2. Find their Google Maps listing for address
-3. Look for official contact information (phone, email)
-4. Find their Facebook and LinkedIn company pages
+## YOUR MISSION (follow these steps IN ORDER):
 
-Return ONLY valid JSON matching the specified format. Use null for any field you cannot verify.`;
+### Step 1: Find Official Website
+- Search for "${normalizedName} official website"
+- Search for "${normalizedName} ${args.buyerCountry || ""}"
+- Identify the company's own domain
+
+### Step 2: Extract Contact from Website
+- Once you find the website, search: "site:[domain] contact phone email"
+- Look for /contact, /about, /locations pages
+- Check website footer for phone and email
+
+### Step 3: Find Social Profiles
+- Search for "${normalizedName} LinkedIn company"
+- Search for "${normalizedName} Facebook page"
+
+### Step 4: Verify Address
+- Search for "${normalizedName} ${args.buyerCountry || ""} address headquarters"
+
+## IMPORTANT
+- Phone and email are the MOST IMPORTANT fields to find
+- Look at website footer - usually contains contact info
+- For logistics companies, check for location-specific emails (sfo@, lax@, etc.)
+- Return analysis_note in Korean
+
+Return ONLY valid JSON. Use null for unverified fields.`;
 
   console.log("Calling Grok API with web search for:", args.buyerName);
 
