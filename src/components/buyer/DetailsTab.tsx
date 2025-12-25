@@ -52,6 +52,8 @@ interface EnrichedData {
     website?: number;
     phone?: number;
     email?: number;
+    facebook_url?: number;
+    linkedin_url?: number;
   };
 }
 
