@@ -24,7 +24,7 @@ const TopHeader: React.FC = () => {
       <img 
         src={taasHeaderLogo} 
         alt="TaaS Logo" 
-        style={{ width: '148px', height: '56px' }}
+        className="h-[50px] w-auto"
       />
 
       {/* Center: Navigation */}
