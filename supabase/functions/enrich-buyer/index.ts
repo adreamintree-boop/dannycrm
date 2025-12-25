@@ -117,6 +117,227 @@ interface GrokEnrichmentResult {
   analysis_note?: string;
 }
 
+// --- Official contact extraction (server-side browsing) ---
+const OFFICIAL_CONTACT_PATHS = [
+  "",
+  "/contact",
+  "/contact-us",
+  "/about",
+  "/about-us",
+  "/locations",
+  "/global-offices",
+  "/offices",
+];
+
+type ContactCandidate = {
+  value: string;
+  score: number;
+  sourceUrl: string;
+};
+
+function uniq<T>(arr: T[]): T[] {
+  return Array.from(new Set(arr));
+}
+
+function normalizeUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  try {
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return new URL(`https://${trimmed}`).toString();
+    }
+    return new URL(trimmed).toString();
+  } catch {
+    return null;
+  }
+}
+
+function getHost(urlStr: string): string | null {
+  try {
+    return new URL(urlStr).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+function scoreBoostFromUrl(urlStr: string): number {
+  const u = urlStr.toLowerCase();
+  if (u.includes("/contact")) return 60;
+  if (u.includes("global-offices") || u.includes("/locations") || u.includes("/offices")) return 45;
+  return 20;
+}
+
+function extractEmailsFromText(text: string, officialHost: string | null, sourceUrl: string): ContactCandidate[] {
+  const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  const raw = text.match(emailRe) ?? [];
+  const cleaned = uniq(raw.map((e) => e.trim().toLowerCase())).filter(Boolean);
+
+  const results: ContactCandidate[] = [];
+  for (const email of cleaned) {
+    if (!officialHost) continue;
+    // High confidence only: require the official domain.
+    if (!email.endsWith(`@${officialHost}`) && !email.endsWith(`.${officialHost}`)) continue;
+
+    const score = scoreBoostFromUrl(sourceUrl) + 30;
+    results.push({ value: email, score, sourceUrl });
+  }
+  return results;
+}
+
+function normalizePhone(raw: string, buyerCountry?: string): string {
+  const country = (buyerCountry || "").toLowerCase();
+  const isUS = country.includes("usa") || country.includes("united states") || country === "us";
+  const digits = raw.replace(/\D/g, "");
+
+  if (isUS) {
+    if (digits.length === 11 && digits.startsWith("1")) {
+      return `+1-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 10) {
+      return `+1-${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+  }
+
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+function extractPhonesFromText(text: string, buyerCountry: string | undefined, sourceUrl: string): ContactCandidate[] {
+  const lower = text.toLowerCase();
+
+  const usRe = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g;
+  const intlRe = /\+\d{1,3}[\s.-]?(?:\d[\s.-]?){7,14}\d/g;
+
+  const usMatches: string[] = text.match(usRe) ?? [];
+  const intlMatches: string[] = text.match(intlRe) ?? [];
+  const rawMatches: string[] = [...usMatches, ...intlMatches];
+  const deduped = uniq(rawMatches.map((m) => m.trim())).filter(Boolean);
+
+  const results: ContactCandidate[] = [];
+  for (const raw of deduped) {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length < 10 || digits.length > 15) continue;
+
+    const idx = lower.indexOf(raw.toLowerCase());
+    const window = idx >= 0 ? lower.slice(Math.max(0, idx - 24), Math.min(lower.length, idx + raw.length + 24)) : "";
+
+    if (window.includes("fax")) continue;
+
+    let score = scoreBoostFromUrl(sourceUrl);
+    if (window.includes("tel")) score += 15;
+    if (window.includes("phone")) score += 15;
+
+    results.push({ value: normalizePhone(raw, buyerCountry), score, sourceUrl });
+  }
+
+  const country = (buyerCountry || "").toLowerCase();
+  const isUS = country.includes("usa") || country.includes("united states") || country === "us";
+  if (isUS) {
+    const usOnly = results.filter((c) => c.value.startsWith("+1-"));
+    if (usOnly.length) return usOnly;
+  }
+
+  return results;
+}
+
+async function fetchPageText(url: string): Promise<{ finalUrl: string; text: string } | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const resp = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LovableEnrichmentBot/1.0)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+
+    if (!resp.ok) return null;
+
+    const contentType = resp.headers.get("content-type") || "";
+    if (!contentType.includes("text/html") && !contentType.includes("text/plain")) return null;
+
+    const html = await resp.text();
+
+    const withoutScripts = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ");
+    const textOnly = withoutScripts.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    // Keep both html + text-only for regex extraction.
+    return { finalUrl: resp.url || url, text: `${html}\n\n${textOnly}` };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function extractOfficialPhoneEmail(opts: {
+  websiteUrl: string;
+  buyerCountry?: string;
+  facebookUrl?: string | null;
+  linkedinUrl?: string | null;
+}): Promise<{
+  phone?: { value: string; confidence: number; sourceUrl: string };
+  email?: { value: string; confidence: number; sourceUrl: string };
+  sources: string[];
+  noteLines: string[];
+}> {
+  const website = normalizeUrl(opts.websiteUrl);
+  if (!website) return { sources: [], noteLines: [] };
+
+  const origin = new URL(website).origin;
+  const officialHost = getHost(website);
+
+  const candidateUrls = uniq(OFFICIAL_CONTACT_PATHS.map((p) => new URL(p || "/", origin).toString()));
+
+  const pageResults = await Promise.allSettled(candidateUrls.map((u) => fetchPageText(u)));
+
+  const emailCandidates: ContactCandidate[] = [];
+  const phoneCandidates: ContactCandidate[] = [];
+  const usedSources: string[] = [];
+
+  for (const r of pageResults) {
+    const page = r.status === "fulfilled" ? r.value : null;
+    if (!page) continue;
+
+    usedSources.push(page.finalUrl);
+    emailCandidates.push(...extractEmailsFromText(page.text, officialHost, page.finalUrl));
+    phoneCandidates.push(...extractPhonesFromText(page.text, opts.buyerCountry, page.finalUrl));
+  }
+
+  // Best-effort: try social pages too (often blocked). We only use them as a fallback.
+  const socialUrls = [opts.facebookUrl, opts.linkedinUrl].filter(Boolean) as string[];
+  const socialResults = await Promise.allSettled(socialUrls.slice(0, 2).map((u) => fetchPageText(u)));
+  for (const r of socialResults) {
+    const page = r.status === "fulfilled" ? r.value : null;
+    if (!page) continue;
+
+    usedSources.push(page.finalUrl);
+    emailCandidates.push(...extractEmailsFromText(page.text, officialHost, page.finalUrl).map((c) => ({ ...c, score: c.score - 10 })));
+    phoneCandidates.push(...extractPhonesFromText(page.text, opts.buyerCountry, page.finalUrl).map((c) => ({ ...c, score: c.score - 10 })));
+  }
+
+  emailCandidates.sort((a, b) => b.score - a.score);
+  phoneCandidates.sort((a, b) => b.score - a.score);
+
+  const phoneTop = phoneCandidates[0];
+  const emailTop = emailCandidates[0];
+
+  const sources = uniq(usedSources);
+  const noteLines: string[] = [];
+
+  const phone = phoneTop ? { value: phoneTop.value, confidence: 100, sourceUrl: phoneTop.sourceUrl } : undefined;
+  const email = emailTop ? { value: emailTop.value, confidence: 100, sourceUrl: emailTop.sourceUrl } : undefined;
+
+  if (phone) noteLines.push(`- 공식 사이트에서 전화번호 확인: ${phone.value}`);
+  if (email) noteLines.push(`- 공식 사이트에서 이메일 확인: ${email.value}`);
+
+  return { phone, email, sources, noteLines };
+}
+
 async function enrichBuyerWithGrok(args: {
   buyerName: string;
   buyerCountry?: string;
