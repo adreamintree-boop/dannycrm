@@ -237,9 +237,31 @@ ${survey_data.core_strengths || '미입력'}
 
     console.log('Strategy generated successfully');
 
+    // Save the report to database
+    const { data: reportData, error: reportError } = await supabase
+      .from('strategy_reports')
+      .insert({
+        user_id: user.id,
+        survey_id: survey_data.id || null,
+        content: strategyContent,
+        product_name: survey_data.products?.[0]?.product_name || null,
+        target_regions: survey_data.target_regions || [],
+        credit_cost: STRATEGY_CREDIT_COST,
+      })
+      .select('id')
+      .single();
+
+    if (reportError) {
+      console.error('Error saving report:', reportError);
+      // Continue anyway - report was generated successfully
+    }
+
+    console.log('Report saved with id:', reportData?.id);
+
     return new Response(JSON.stringify({ 
       success: true, 
       strategy: strategyContent,
+      report_id: reportData?.id,
       new_balance: creditResult.new_balance,
       deducted: STRATEGY_CREDIT_COST
     }), {

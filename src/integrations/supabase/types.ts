@@ -682,6 +682,47 @@ export type Database = {
           },
         ]
       }
+      strategy_reports: {
+        Row: {
+          content: string
+          created_at: string
+          credit_cost: number
+          id: string
+          product_name: string | null
+          survey_id: string | null
+          target_regions: string[] | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          credit_cost?: number
+          id?: string
+          product_name?: string | null
+          survey_id?: string | null
+          target_regions?: string[] | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          credit_cost?: number
+          id?: string
+          product_name?: string | null
+          survey_id?: string | null
+          target_regions?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_reports_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "company_surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       survey_files: {
         Row: {
           file_size: number
