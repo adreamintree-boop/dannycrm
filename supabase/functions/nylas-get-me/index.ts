@@ -29,13 +29,23 @@ serve(async (req) => {
 
     // Use anon client with user token to verify the user
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Extract token and get user
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
-    
+    // Extract JWT from Authorization header (robust against casing/spacing)
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const jwt = tokenMatch?.[1]?.trim();
+
+    if (!jwt) {
+      return new Response(
+        JSON.stringify({ error: "Missing bearer token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(jwt);
+
     if (userError || !user) {
       console.error("Auth error:", userError);
       return new Response(
