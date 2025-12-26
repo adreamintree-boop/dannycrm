@@ -5,15 +5,45 @@ import EmailSidebar from '@/components/email/EmailSidebar';
 import EmailList from '@/components/email/EmailList';
 import EmailDetail from '@/components/email/EmailDetail';
 import EmailCompose from '@/components/email/EmailCompose';
+import EmailSettings from '@/components/email/EmailSettings';
 import { EmailProvider, useEmailContext } from '@/context/EmailContext';
+import { NylasEmailProvider, useNylasEmailContext } from '@/context/NylasEmailContext';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+
+function ConnectionBanner() {
+  const navigate = useNavigate();
+  return (
+    <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+        <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
+          이메일이 아직 연동되지 않았습니다. 설정에서 연동을 완료해주세요.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => navigate('/email/settings')}>
+          설정으로 이동
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function EmailListView({ mailbox }: { mailbox: string }) {
   const { messages, loading, fetchMessages, toggleStar, seedSampleEmails } = useEmailContext();
+  const { isConnected, checkConnection, accountLoading } = useNylasEmailContext();
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasCheckedConnection, setHasCheckedConnection] = useState(false);
 
   useEffect(() => {
+    if (!hasCheckedConnection) {
+      checkConnection().then(() => setHasCheckedConnection(true));
+    }
+  }, [checkConnection, hasCheckedConnection]);
+
+  useEffect(() => {
+    // For now, use the existing mock system until Nylas is connected
     fetchMessages(mailbox);
     if (mailbox === 'inbox') {
       seedSampleEmails();
@@ -28,8 +58,17 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     trash: '휴지통',
   };
 
+  if (accountLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col">
+      {!isConnected && hasCheckedConnection && <ConnectionBanner />}
       <div className="border-b border-border p-4">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold">{mailboxLabels[mailbox] || mailbox}</h2>
@@ -60,12 +99,7 @@ function EmailListView({ mailbox }: { mailbox: string }) {
 }
 
 function EmailSettingsView() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-      <p className="text-lg">이메일 설정</p>
-      <p className="text-sm mt-2">설정 기능은 준비 중입니다.</p>
-    </div>
-  );
+  return <EmailSettings />;
 }
 
 function EmailContent() {
@@ -100,7 +134,9 @@ function EmailContent() {
 export default function Email() {
   return (
     <EmailProvider>
-      <EmailContent />
+      <NylasEmailProvider>
+        <EmailContent />
+      </NylasEmailProvider>
     </EmailProvider>
   );
 }

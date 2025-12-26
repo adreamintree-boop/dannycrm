@@ -406,6 +406,39 @@ export type Database = {
           },
         ]
       }
+      email_accounts: {
+        Row: {
+          created_at: string
+          email_address: string
+          grant_id: string
+          id: string
+          provider: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_address: string
+          grant_id: string
+          id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_address?: string
+          grant_id?: string
+          id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_activity_log: {
         Row: {
           action: string
@@ -620,43 +653,70 @@ export type Database = {
       }
       sales_activity_logs: {
         Row: {
+          bcc_emails: Json | null
+          body_html: string | null
+          body_text: string | null
           buyer_id: string | null
+          cc_emails: Json | null
           content: string | null
           created_at: string
           created_by: string
           direction: string
           email_message_id: string | null
+          from_email: string | null
           id: string
+          nylas_message_id: string | null
+          nylas_thread_id: string | null
           occurred_at: string
           project_id: string | null
+          snippet: string | null
           source: string
           title: string
+          to_emails: Json | null
         }
         Insert: {
+          bcc_emails?: Json | null
+          body_html?: string | null
+          body_text?: string | null
           buyer_id?: string | null
+          cc_emails?: Json | null
           content?: string | null
           created_at?: string
           created_by: string
           direction: string
           email_message_id?: string | null
+          from_email?: string | null
           id?: string
+          nylas_message_id?: string | null
+          nylas_thread_id?: string | null
           occurred_at?: string
           project_id?: string | null
+          snippet?: string | null
           source?: string
           title: string
+          to_emails?: Json | null
         }
         Update: {
+          bcc_emails?: Json | null
+          body_html?: string | null
+          body_text?: string | null
           buyer_id?: string | null
+          cc_emails?: Json | null
           content?: string | null
           created_at?: string
           created_by?: string
           direction?: string
           email_message_id?: string | null
+          from_email?: string | null
           id?: string
+          nylas_message_id?: string | null
+          nylas_thread_id?: string | null
           occurred_at?: string
           project_id?: string | null
+          snippet?: string | null
           source?: string
           title?: string
+          to_emails?: Json | null
         }
         Relationships: [
           {

@@ -14,3 +14,18 @@ verify_jwt = true
 
 [functions.generate-strategy]
 verify_jwt = true
+
+[functions.nylas-get-me]
+verify_jwt = true
+
+[functions.nylas-list-messages]
+verify_jwt = true
+
+[functions.nylas-get-message]
+verify_jwt = true
+
+[functions.nylas-send]
+verify_jwt = true
+
+[functions.nylas-log-to-crm]
+verify_jwt = true
