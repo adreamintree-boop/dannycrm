@@ -38,9 +38,18 @@ export default function EmailDetail() {
   const [loggingToCRM, setLoggingToCRM] = useState(false);
   const hasLoggedRef = useRef(false);
 
+  const fetchedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     let isMounted = true;
+    
+    // Skip if already fetched this id
+    if (fetchedIdRef.current === id) {
+      return;
+    }
+    
     hasLoggedRef.current = false;
+    fetchedIdRef.current = id || null;
     
     const load = async () => {
       if (!id) return;
@@ -102,7 +111,9 @@ export default function EmailDetail() {
           }
         }
       }
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     };
     
     load();
@@ -110,7 +121,7 @@ export default function EmailDetail() {
     return () => {
       isMounted = false;
     };
-  }, [id, isNylas, isConnected, getMessage, markAsRead, logActivity, fetchMessage]);
+  }, [id, isNylas, isConnected]);
 
   const handleReply = () => {
     if (id) {

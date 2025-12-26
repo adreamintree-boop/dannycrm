@@ -66,6 +66,7 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
 
   // Request deduplication refs
   const fetchMessagesInFlight = useRef<string | null>(null);
+  const fetchMessageInFlight = useRef<string | null>(null);
   const checkConnectionInFlight = useRef(false);
 
   const isConnected = emailAccount?.connected ?? false;
@@ -138,6 +139,17 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
   const fetchMessage = useCallback(async (messageId: string): Promise<NylasMessageDetail | null> => {
     if (!user || !emailAccount?.connected) return null;
     
+    // Prevent duplicate calls for the same message
+    if (fetchMessageInFlight.current === messageId) {
+      console.log('[NylasEmailContext] Skipping duplicate fetchMessage call:', messageId);
+      // Return current message if it matches
+      if (currentMessage?.id === messageId) {
+        return currentMessage;
+      }
+      return null;
+    }
+    
+    fetchMessageInFlight.current = messageId;
     setMessageLoading(true);
     setError(null);
     
@@ -151,8 +163,9 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
       return null;
     } finally {
       setMessageLoading(false);
+      fetchMessageInFlight.current = null;
     }
-  }, [user, emailAccount, nylas]);
+  }, [user, emailAccount, nylas, currentMessage]);
 
   const sendEmail = useCallback(async (payload: {
     to: string[];
