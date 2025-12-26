@@ -94,7 +94,7 @@ serve(async (req) => {
     }
 
     const grantUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages?${params.toString()}`;
-    const meUrl = `${NYLAS_API_BASE_URL}/v3/me/messages?${params.toString()}`;
+    const meUrl = `${NYLAS_API_BASE_URL}/v3/grants/me/messages?${params.toString()}`;
 
     const requestInit: RequestInit = {
       method: "GET",
