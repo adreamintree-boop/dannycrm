@@ -128,9 +128,10 @@ const EmailList: React.FC<EmailListProps> = ({
     return (
       <>
         <div className="divide-y divide-border">
-          {filteredNylasMessages.map((msg) => {
-            const isInbox = msg.folder.toLowerCase().includes('inbox');
-            const displayName = isInbox
+        {filteredNylasMessages.map((msg) => {
+            // Use mailbox prop to determine display: inbox shows sender, sent shows recipient
+            const isInboxView = mailbox === 'inbox' || (mailbox === 'all' && msg.folder.toLowerCase().includes('inbox'));
+            const displayName = isInboxView
               ? msg.from.name || msg.from.email
               : msg.to[0]?.email || '(수신자 없음)';
 
