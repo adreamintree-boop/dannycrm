@@ -101,18 +101,21 @@ serve(async (req) => {
     });
 
     // Map folder names to Nylas folder queries
-    const folderMap: Record<string, string> = {
-      inbox: "INBOX",
-      sent: "SENT",
-      draft: "DRAFTS",
-      trash: "TRASH",
-      all: "",
-    };
-
-    const nylasFolder = folderMap[folder.toLowerCase()] || folder;
-    if (nylasFolder) {
+    // "all" means no folder filter - fetch from all folders
+    const folderLower = folder.toLowerCase();
+    
+    if (folderLower !== "all") {
+      const folderMap: Record<string, string> = {
+        inbox: "INBOX",
+        sent: "SENT",
+        draft: "DRAFTS",
+        drafts: "DRAFTS",
+        trash: "TRASH",
+      };
+      const nylasFolder = folderMap[folderLower] || folder.toUpperCase();
       params.append("in", nylasFolder);
     }
+    // When folder is "all", we don't add the "in" parameter to get all messages
 
     if (search) {
       params.append("search_query_native", search);
