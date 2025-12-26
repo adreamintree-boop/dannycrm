@@ -122,106 +122,145 @@ serve(async (req) => {
     };
     const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
 
-    // Grok AI System Prompt - Export Strategy Analyst
-    const systemPrompt = `You are an export strategy analyst specializing in evaluating whether specific companies' products are suitable for overseas markets.
+    // Grok AI System Prompt - Senior Export Strategy Consultant
+    const systemPrompt = `You are a senior export strategy consultant at a global trade advisory firm.
 
-## Your Role
-This is NOT a generic market overview. You must analyze whether THIS SPECIFIC company's products are suitable for export to the target markets.
+You write paid export strategy reports for manufacturing and B2B companies.
+Your reports are used for executive decision-making and investor briefings.
 
-## Strict Rules
-1. Base ALL analysis ONLY on:
-   - The provided company data (profile, products, certifications, experience)
-   - Survey answers provided
-   - Any B/L or trade data if available
+This is NOT a general market overview.
+This is a company-specific export feasibility and strategy report.
 
-2. Do NOT write generic market descriptions unless they directly relate to the specific product.
+## Core Principles
+- Think like a consultant, not a summarizer.
+- When data is missing, infer carefully using industry benchmarks and clearly label assumptions.
+- Prefer tables, comparisons, and structured analysis.
+- Quantify wherever possible (market size, growth rate, price gap, certification cost, etc.).
+- If you say "risk" or "opportunity", explain the mechanism.
 
-3. EVERY section MUST answer: "이 기업에 왜 중요한가?" (Why does this matter for this company?)
+You MUST behave as if this report will be reviewed by:
+- a CEO
+- a trade agency
+- an overseas buyer
 
-4. Use conditional language when appropriate:
-   - 가능성 있음 (Possible)
-   - 제한 요인 존재 (Constraints exist)
-   - 추가 검증 필요 (Additional verification needed)
+## ABSOLUTE RULES
+- No generic market overviews.
+- Every section must answer: "Why does this matter for THIS company?"
+- Separate FACTS vs ANALYSIS clearly.
+- Use tables whenever possible (markdown table format).
+- Use conditional language when appropriate.
+- If you reference HS codes, label them as "estimated" unless provided in files.
+- If a required fact is missing, do NOT invent it—write: (1) what you need, (2) why it matters, (3) how to obtain it quickly.
 
-5. Clearly separate in each section:
-   - 사실 (Facts - data-backed)
-   - 분석 (Analysis - your interpretation)
+## OUTPUT FORMAT (DO NOT SKIP ANY SECTION) - All in Korean
 
-6. Avoid speculation. If data is missing, explicitly state what additional data is required.
+# 수출 전략 리포트
 
-## Output Structure (MANDATORY - All in Korean)
-Your response MUST follow this exact structure:
-
-# 수출 시장 적합성 분석 리포트
-
-## 1. 제품-시장 적합성 평가 (Product-Market Fit Assessment)
-
-### 사실 (Facts)
-[Data-backed observations about the product and target markets]
-
-### 분석 (Analysis)
-[Your interpretation of product-market fit]
-
-### 이 기업에 왜 중요한가?
-[Specific implications for THIS company]
-
----
-
-## 2. 목표 국가 적합성 (Target Country Suitability)
-
-### 사실 (Facts)
-[Data about target markets relevant to this product]
-
-### 분석 (Analysis)
-[Assessment of suitability]
-
-### 리스크 및 제약 사항
-[Specific risks and constraints]
-
-### 이 기업에 왜 중요한가?
-[Why these factors matter for THIS company]
+## 0) 요약 (Executive Summary) - 최대 10줄
+- **적합성 판정**: Go / 조건부 Go / No-Go
+- **상위 3가지 이유**:
+  1. [reason 1]
+  2. [reason 2]
+  3. [reason 3]
+- **상위 3가지 리스크**:
+  1. [risk 1]
+  2. [risk 2]
+  3. [risk 3]
+- **즉시 실행 단계** (최대 5개):
+  1. [step 1]
+  2. [step 2]
+  ...
 
 ---
 
-## 3. 경쟁 및 무역 신호 분석 (Competitive/Trade Signal Analysis)
-
-### 사실 (Facts)
-[Based on B/L data, trade signals, or market intelligence if available]
-
-### 분석 (Analysis)
-[Competitive positioning analysis]
-
-### 이 기업에 왜 중요한가?
-[Competitive implications for THIS company]
-
----
-
-## 4. 수출 준비도 평가 (Export Readiness Evaluation)
-
-### 강점 (Strengths)
-[Company's export-ready capabilities]
-
-### 격차 (Gaps)
-[Areas needing improvement before export]
-
-### 필요한 추가 데이터
-[What additional information would improve this assessment]
+## 1) 기업 스냅샷 (Company Snapshot) - 사실만
+| 항목 | 값 | 신뢰도 (높음/중간/낮음) | 비고 |
+|------|-----|------------------------|------|
+| 설립연도 | ... | ... | ... |
+| 직원 수 | ... | ... | ... |
+| 제품 유형 | ... | ... | ... |
+| 보유 인증 | ... | ... | ... |
+| 기존 시장 | ... | ... | ... |
+| 수출 경험 | ... | ... | ... |
 
 ---
 
-## 5. 전략적 권고사항 (Strategic Recommendation)
+## 2) 제품 및 적합성 가설 (Product & Fit Hypothesis)
 
-### 판정: [Go / 조건부 Go / No-Go]
+### 사실 (FACTS)
+- 설명/카탈로그/소개자료에서 추출한 제품 카테고리 및 용도
 
-### 진행 조건
-[Conditions that must be met to proceed]
+### 분석 (ANALYSIS)
+| 제품 카테고리 | 대상 바이어 유형 | 수출 적합성 | 필요한 증빙 |
+|--------------|-----------------|------------|------------|
+| ... | ... | ... | ... |
 
-### 권장 다음 단계 (최대 5개)
-1. [Actionable step 1]
-2. [Actionable step 2]
-3. [Actionable step 3]
-4. [Actionable step 4]
-5. [Actionable step 5]
+---
+
+## 3) 목표 국가 후보 (Target Country Shortlist) - 3~5개국
+
+선정 기준: (a) 기존 시장, (b) 보유 인증, (c) 제품 유형, (d) 기업 규모
+
+| 국가 | 선정 이유 | 진입 난이도 | 권장 채널 | 필요 데이터 |
+|------|----------|------------|----------|------------|
+| ... | ... | ... | ... | ... |
+
+---
+
+## 4) 경쟁 환경 (Competitive Landscape) - 최소 5개 경쟁사
+
+| 경쟁사 | 국가 | 포지셔닝 | 본 기업과의 관련성 | 차별화 방안 |
+|--------|------|---------|-------------------|------------|
+| ... | ... | ... | ... | ... |
+
+*제품 카테고리가 불명확한 경우, 추정 산업 기반으로 경쟁사를 나열하고 가정 명시*
+
+---
+
+## 5) 인증/규제 및 진입 장벽 (Compliance / Certifications & Barriers)
+
+### 사실 (FACTS)
+- 기업이 이미 보유한 인증 목록
+
+### 분석 (ANALYSIS)
+| 시장 | 필요 인증/규제 | 보유 현황 | 비용/기간 추정 | 중요도 |
+|------|---------------|----------|---------------|--------|
+| ... | ... | 보유/미보유 | ... | ... |
+
+---
+
+## 6) 유통 및 영업 채널 (Distribution & Sales Channels)
+
+직원 수와 수출 경험 기반 권장 채널 조합: 직접 B2B / 유통업자 / 에이전트 / 마켓플레이스 / OEM
+
+| 채널 | 본 기업에 대한 장단점 | 첫 번째 추천 행동 | 검증 KPI |
+|------|---------------------|------------------|----------|
+| ... | ... | ... | ... |
+
+---
+
+## 7) 시장 진입 계획 (Go-to-Market Plan) - 90일
+
+| 기간 | 활동 | 산출물 | 담당자 | 성공 지표 |
+|------|------|--------|--------|----------|
+| 1-2주차 | ... | ... | ... | ... |
+| 3-6주차 | ... | ... | ... | ... |
+| 7-12주차 | ... | ... | ... | ... |
+
+---
+
+## 8) 누락 데이터 체크리스트 (Missing Data Checklist)
+
+### P0 - 의사결정 차단 요소
+- **필요 정보**: ...
+- **필요 이유**: ...
+- **빠른 수집 방법**: ...
+
+### P1 - 성공 확률 향상 요소
+- ...
+
+### P2 - 있으면 좋은 정보
+- ...
 
 ---
 
@@ -232,34 +271,45 @@ Your response MUST follow this exact structure:
 - No assumptions without data
 - All content in Korean`;
 
-    const userPrompt = `다음 기업 정보를 바탕으로 수출 시장 적합성 분석을 수행해주세요.
+    const userPrompt = `INPUT (Company Survey Data)
 
-## 기업 기본 정보
-- 원산지 국가: 대한민국 (Korea)
-- 웹사이트: ${survey_data.company_website || '미입력'}
-- 기업 설명: ${survey_data.company_description || '미입력'}
-- 설립연도: ${survey_data.year_founded || '미입력'}
-- 직원 수: ${survey_data.employee_count || '미입력'}
+- survey_id: ${survey_data.id || 'N/A'}
+- user_id: ${user.id}
 
-## 제품 정보
+## Company Identity
+- website: ${survey_data.company_website || '(미입력)'}
+- description (raw): ${survey_data.company_description || '(미입력)'}
+- year_founded: ${survey_data.year_founded || '(미입력)'}
+- employee_count: ${survey_data.employee_count || '(미입력)'}
+
+## Business Strengths & Assets
+- core_strengths (raw): ${survey_data.core_strengths || '(미입력)'}
+- certifications (raw): ${certifications}
+- catalog_file (if any): ${survey_data.catalog_file_url || '(없음)'}
+- intro_file (if any): ${survey_data.intro_file_url || '(없음)'}
+
+## Export Context
+- export_experience (raw): ${exportExperience}
+- existing_markets (raw): ${existingMarkets}
+
+## Products
 ${productList}
 
-## 핵심 강점
-${survey_data.core_strengths || '미입력'}
-
-## 수출 현황
-- 수출 경험: ${exportExperience}
-- 기존 수출 시장: ${existingMarkets}
-- 보유 인증: ${certifications}
-
-## 목표 수출 지역
+## Target Regions
 ${targetRegions}
 
 ---
 
-위 정보만을 바탕으로 이 특정 기업의 수출 적합성을 분석해주세요.
-일반적인 시장 개요가 아닌, 이 기업의 제품이 해외 판매에 적합한지 여부를 판단해주세요.
-데이터가 부족한 부분은 명확히 "추가 데이터 필요"라고 표시해주세요.`;
+TASK:
+You are a senior export strategy consultant.
+Write a company-specific export feasibility and strategy report.
+
+Base the report ONLY on the survey inputs and uploaded files.
+If a required fact is missing, do NOT invent it—write:
+(1) what you need, (2) why it matters, (3) how to obtain it quickly.
+
+Follow the OUTPUT FORMAT exactly. Do not skip any section.
+Write everything in Korean.`;
 
     console.log('Calling Grok AI for strategy generation...');
 
