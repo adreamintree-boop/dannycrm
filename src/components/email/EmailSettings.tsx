@@ -49,19 +49,30 @@ export default function EmailSettings() {
 
     setConnecting(true);
     try {
+      // First, delete any existing record for this user
+      await supabase
+        .from('email_accounts')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Then insert new record
       const { error } = await supabase
         .from('email_accounts')
-        .upsert({
+        .insert({
           user_id: user.id,
           grant_id: grantId.trim(),
           email_address: emailAddress.trim(),
           provider: provider,
           status: 'connected',
-        }, {
-          onConflict: 'user_id',
         });
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate grant_id error
+        if (error.code === '23505' && error.message.includes('grant_id')) {
+          throw new Error('이 Grant ID는 이미 다른 계정에서 사용 중입니다. Nylas Dashboard에서 새 Grant를 생성해주세요.');
+        }
+        throw error;
+      }
 
       toast({
         title: '연동 완료',
