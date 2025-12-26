@@ -8,29 +8,48 @@ const corsHeaders = {
 
 const NYLAS_API_BASE_URL = "https://api.us.nylas.com";
 
+function getJwtFromAuthHeader(authHeader: string | null): string | null {
+  if (!authHeader) return null;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+function getUserIdFromJwt(jwt: string): string | null {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length < 2) return null;
+
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = payload.length % 4;
+    if (pad) payload += "=".repeat(4 - pad);
+
+    const json = atob(payload);
+    const parsed = JSON.parse(json);
+    return typeof parsed?.sub === "string" ? parsed.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 // Retry with exponential backoff for rate limits
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3
-): Promise<Response> {
-  let lastError: Error | null = null;
-  
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 3): Promise<Response> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = await fetch(url, options);
-    
+
     if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After');
+      const retryAfter = response.headers.get("Retry-After");
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
-      console.log(`[nylas-list-messages] Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log(
+        `[nylas-list-messages] Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
       continue;
     }
-    
+
     return response;
   }
-  
-  throw new Error('Max retries exceeded for rate limit');
+
+  throw new Error("Max retries exceeded for rate limit");
 }
 
 serve(async (req) => {
@@ -41,10 +60,19 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const jwt = getJwtFromAuthHeader(authHeader);
+    const userId = jwt ? getUserIdFromJwt(jwt) : null;
+    if (!jwt || !userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -53,42 +81,35 @@ serve(async (req) => {
 
     if (!nylasApiKey) {
       console.error("TaaS_CRM_Email_Nylas_Test not configured");
-      return new Response(
-        JSON.stringify({ error: "Nylas API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Nylas API key not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: authHeader } },
     });
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Parse request body
     const { folder = "INBOX", page = 1, page_size = 20, search } = await req.json();
 
-    console.log(`[nylas-list-messages] User: ${user.id}, Folder: ${folder}, Page: ${page}`);
+    console.log(`[nylas-list-messages] User: ${userId}, Folder: ${folder}, Page: ${page}`);
 
     // Get user's email account
     const { data: emailAccount, error: dbError } = await supabase
       .from("email_accounts")
       .select("grant_id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (dbError || !emailAccount) {
       console.error("No email account found:", dbError);
-      return new Response(
-        JSON.stringify({ error: "No email account connected", items: [], page, page_size }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No email account connected", items: [], page, page_size }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const grantId = emailAccount.grant_id;
@@ -102,8 +123,8 @@ serve(async (req) => {
 
     // Map folder names to Nylas folder queries
     // "all" means no folder filter - fetch from all folders
-    const folderLower = folder.toLowerCase();
-    
+    const folderLower = String(folder).toLowerCase();
+
     if (folderLower !== "all") {
       const folderMap: Record<string, string> = {
         inbox: "INBOX",
@@ -112,10 +133,9 @@ serve(async (req) => {
         drafts: "DRAFTS",
         trash: "TRASH",
       };
-      const nylasFolder = folderMap[folderLower] || folder.toUpperCase();
+      const nylasFolder = folderMap[folderLower] || String(folder).toUpperCase();
       params.append("in", nylasFolder);
     }
-    // When folder is "all", we don't add the "in" parameter to get all messages
 
     if (search) {
       params.append("search_query_native", search);
@@ -138,30 +158,26 @@ serve(async (req) => {
 
     if (!nylasResponse.ok) {
       let errorText = await nylasResponse.text();
-      
+
       // Handle invalid grant - the grant may have expired or been revoked
       if (nylasResponse.status === 404 && errorText.includes("grant.not_found")) {
         console.error(`[nylas-list-messages] Grant not found - grant may be expired or revoked`);
-        
-        // Update the email account status to disconnected
-        await supabase
-          .from("email_accounts")
-          .update({ status: "disconnected" })
-          .eq("user_id", user.id);
-        
+
+        await supabase.from("email_accounts").update({ status: "disconnected" }).eq("user_id", userId);
+
         return new Response(
-          JSON.stringify({ 
-            error: "Email account connection expired", 
+          JSON.stringify({
+            error: "Email account connection expired",
             details: "Please reconnect your email account in settings.",
             reconnect_required: true,
-            items: [], 
-            page, 
-            page_size 
+            items: [],
+            page,
+            page_size,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
+
       const shouldRetryWithMe =
         nylasResponse.status === 401 &&
         errorText.includes("replace the user's grant_id in the path with /me/");
@@ -173,17 +189,17 @@ serve(async (req) => {
         if (!nylasResponse.ok) {
           errorText = await nylasResponse.text();
           console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }),
-            { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return new Response(JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }), {
+            status: nylasResponse.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       } else {
         console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
-        return new Response(
-          JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }),
-          { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }), {
+          status: nylasResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
@@ -219,9 +235,9 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error("Unexpected error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

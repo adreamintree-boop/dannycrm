@@ -8,6 +8,29 @@ const corsHeaders = {
 
 const NYLAS_API_BASE_URL = "https://api.us.nylas.com";
 
+function getJwtFromAuthHeader(authHeader: string | null): string | null {
+  if (!authHeader) return null;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+function getUserIdFromJwt(jwt: string): string | null {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length < 2) return null;
+
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = payload.length % 4;
+    if (pad) payload += "=".repeat(4 - pad);
+
+    const json = atob(payload);
+    const parsed = JSON.parse(json);
+    return typeof parsed?.sub === "string" ? parsed.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,10 +39,19 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const jwt = getJwtFromAuthHeader(authHeader);
+    const userId = jwt ? getUserIdFromJwt(jwt) : null;
+    if (!jwt || !userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -28,47 +60,40 @@ serve(async (req) => {
 
     if (!nylasApiKey) {
       console.error("TaaS_CRM_Email_Nylas_Test not configured");
-      return new Response(
-        JSON.stringify({ error: "Nylas API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Nylas API key not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const { message_id } = await req.json();
     if (!message_id) {
-      return new Response(
-        JSON.stringify({ error: "message_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "message_id is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    console.log(`[nylas-get-message] User: ${user.id}, Message: ${message_id}`);
+    console.log(`[nylas-get-message] User: ${userId}, Message: ${message_id}`);
 
     // Get user's email account
     const { data: emailAccount, error: dbError } = await supabase
       .from("email_accounts")
       .select("grant_id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (dbError || !emailAccount) {
       console.error("No email account found:", dbError);
-      return new Response(
-        JSON.stringify({ error: "No email account connected" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No email account connected" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const grantId = emailAccount.grant_id;
@@ -102,14 +127,20 @@ serve(async (req) => {
           console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
           return new Response(
             JSON.stringify({ error: "Failed to fetch message from Nylas", details: errorText }),
-            { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            {
+              status: nylasResponse.status,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
           );
         }
       } else {
         console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
         return new Response(
           JSON.stringify({ error: "Failed to fetch message from Nylas", details: errorText }),
-          { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: nylasResponse.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
         );
       }
     }
@@ -124,7 +155,7 @@ serve(async (req) => {
       .from("sales_activity_logs")
       .select("id, buyer_id")
       .eq("nylas_message_id", message_id)
-      .eq("created_by", user.id)
+      .eq("created_by", userId)
       .maybeSingle();
 
     // Normalize response
@@ -153,16 +184,15 @@ serve(async (req) => {
       crm_buyer_id: existingLog?.buyer_id || null,
     };
 
-    return new Response(
-      JSON.stringify(normalizedMessage),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify(normalizedMessage), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error: unknown) {
     console.error("Unexpected error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
