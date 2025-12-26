@@ -36,39 +36,39 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     isConnected, 
     checkConnection, 
     accountLoading, 
+    emailAccount,
     messages: nylasMessages, 
     messagesLoading, 
     fetchMessages: fetchNylasMessages 
   } = useNylasEmailContext();
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasCheckedConnection, setHasCheckedConnection] = useState(false);
-  const [hasFetchedMessages, setHasFetchedMessages] = useState(false);
-  const lastMailbox = React.useRef<string | null>(null);
+  const lastFetchKey = React.useRef<string | null>(null);
+
+  // Check connection on mount (always run once per EmailListView mount)
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
 
   useEffect(() => {
-    if (!hasCheckedConnection) {
-      checkConnection().then(() => setHasCheckedConnection(true));
-    }
-  }, [checkConnection, hasCheckedConnection]);
-
-  useEffect(() => {
-    // Only fetch when connection status is known and mailbox changes
-    if (hasCheckedConnection && (!hasFetchedMessages || lastMailbox.current !== mailbox)) {
-      lastMailbox.current = mailbox;
-      setHasFetchedMessages(true);
-      
-      if (isConnected) {
-        // Fetch from Nylas
-        fetchNylasMessages(mailbox);
-      } else {
-        // Use mock data
-        fetchMessages(mailbox);
-        if (mailbox === 'inbox') {
-          seedSampleEmails();
-        }
+    // Wait until connection check is complete
+    if (accountLoading) return;
+    
+    // Create a unique key for this fetch to prevent duplicates
+    const fetchKey = `${mailbox}-${isConnected}`;
+    if (lastFetchKey.current === fetchKey) return;
+    lastFetchKey.current = fetchKey;
+    
+    if (isConnected) {
+      // Fetch from Nylas
+      fetchNylasMessages(mailbox);
+    } else {
+      // Use mock data
+      fetchMessages(mailbox);
+      if (mailbox === 'inbox') {
+        seedSampleEmails();
       }
     }
-  }, [mailbox, hasCheckedConnection, isConnected, hasFetchedMessages, fetchMessages, seedSampleEmails, fetchNylasMessages]);
+  }, [mailbox, accountLoading, isConnected, fetchMessages, seedSampleEmails, fetchNylasMessages]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: '받은편지함',
@@ -78,7 +78,7 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     trash: '휴지통',
   };
 
-  if (accountLoading || !hasCheckedConnection) {
+  if (accountLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -86,11 +86,12 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     );
   }
 
+  const connectionChecked = emailAccount !== null;
   const isLoading = isConnected ? messagesLoading : loading;
 
   return (
     <div className="flex-1 flex flex-col">
-      {!isConnected && hasCheckedConnection && <ConnectionBanner />}
+      {!isConnected && connectionChecked && <ConnectionBanner />}
       <div className="border-b border-border p-4">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold">{mailboxLabels[mailbox] || mailbox}</h2>

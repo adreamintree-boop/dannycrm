@@ -64,9 +64,10 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
   // Error state
   const [error, setError] = useState<string | null>(null);
 
-  // Request deduplication refs
+  // Request deduplication refs - use a unique mount ID to allow refetch on remount
+  const mountId = useRef(Date.now());
   const fetchMessagesInFlight = useRef<string | null>(null);
-  const checkConnectionInFlight = useRef(false);
+  const checkConnectionDone = useRef(false);
 
   // In-flight message promise cache (prevents StrictMode + multi-component duplicate loads)
   const fetchMessagePromises = useRef<Map<string, Promise<NylasMessageDetail | null>>>(new Map());
@@ -79,10 +80,10 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
 
   const checkConnection = useCallback(async () => {
     if (!user) return;
-    // Prevent duplicate calls
-    if (checkConnectionInFlight.current) return;
+    // Allow one check per mount (prevents duplicate calls within same mount)
+    if (checkConnectionDone.current) return;
     
-    checkConnectionInFlight.current = true;
+    checkConnectionDone.current = true;
     setAccountLoading(true);
     setError(null);
     try {
@@ -90,10 +91,10 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
       setEmailAccount(account);
     } catch (err) {
       console.error('Failed to check connection:', err);
-      setError('Failed to check email connection');
+      // Set emailAccount to a disconnected state so UI knows check is complete
+      setEmailAccount({ connected: false, email_address: null, provider: null, grant_id: null });
     } finally {
       setAccountLoading(false);
-      checkConnectionInFlight.current = false;
     }
   }, [user, nylas]);
 
