@@ -24,7 +24,15 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const grokApiKey = Deno.env.get('TaaS_CRM_Strategy_Test');
+    
+    if (!grokApiKey) {
+      console.error('Missing TaaS_CRM_Strategy_Test secret');
+      return new Response(JSON.stringify({ error: 'AI 서비스 설정이 필요합니다.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -56,7 +64,7 @@ serve(async (req) => {
       p_action_type: 'STRATEGY',
       p_request_id: request_id,
       p_meta: { 
-        type: 'market_research',
+        type: 'export_market_analysis',
         product_name: survey_data?.products?.[0]?.product_name || 'Unknown'
       }
     });
@@ -84,7 +92,7 @@ serve(async (req) => {
 
     console.log(`Credits deducted for user ${user.id}: -${STRATEGY_CREDIT_COST}, new balance: ${creditResult.new_balance}`);
 
-    // Build the AI prompt with survey data
+    // Build context from survey data
     const regionMap: Record<string, string> = {
       north_america: '북미',
       europe: '유럽',
@@ -114,59 +122,126 @@ serve(async (req) => {
     };
     const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
 
-    const systemPrompt = `당신은 한국 중소기업의 수출 전략을 전문으로 분석하는 시장조사 전문가입니다.
-주어진 기업 정보를 바탕으로 구체적이고 실행 가능한 수출 전략 리포트를 작성해야 합니다.
+    // Grok AI System Prompt - Export Strategy Analyst
+    const systemPrompt = `You are an export strategy analyst specializing in evaluating whether specific companies' products are suitable for overseas markets.
 
-리포트는 반드시 다음 9개 섹션을 포함해야 합니다:
+## Your Role
+This is NOT a generic market overview. You must analyze whether THIS SPECIFIC company's products are suitable for export to the target markets.
 
-1. 제품 개요 및 수출 가능성 진단
-   - 제품 특성, 기술적 강점, 수출 가능성 평가
+## Strict Rules
+1. Base ALL analysis ONLY on:
+   - The provided company data (profile, products, certifications, experience)
+   - Survey answers provided
+   - Any B/L or trade data if available
 
-2. 경쟁사 관련 정보
-   - 해당 산업 분야의 글로벌 주요 경쟁사 분석 (실제 기업명 포함)
-   - 표 형식: 기업명, 국가, 주요 제품, 특징
+2. Do NOT write generic market descriptions unless they directly relate to the specific product.
 
-3. 목표 수출 시장 개요
-   - 타겟 지역별 시장 특성 및 진출 전략
-   - 표 형식: 지역, 시장 규모, 특징, 진입 난이도
+3. EVERY section MUST answer: "이 기업에 왜 중요한가?" (Why does this matter for this company?)
 
-4. 수입 통계 및 HS CODE 분석
-   - 관련 HS CODE 추정 및 설명
-   - 주요국 수입 통계 트렌드 분석
+4. Use conditional language when appropriate:
+   - 가능성 있음 (Possible)
+   - 제한 요인 존재 (Constraints exist)
+   - 추가 검증 필요 (Additional verification needed)
 
-5. 진입 장벽 및 리스크 요소
-   - 국가별 필수 인증 및 규제
-   - 기술/가격 장벽, 시장 진입 리스크
+5. Clearly separate in each section:
+   - 사실 (Facts - data-backed)
+   - 분석 (Analysis - your interpretation)
 
-6. 현지 유통 구조 및 유통 채널 분석
-   - 직접 수출 vs 유통상 활용 전략
-   - 권장 유통 채널 및 바이어 발굴 경로
+6. Avoid speculation. If data is missing, explicitly state what additional data is required.
 
-7. 잠재 바이어 유형 제안
-   - 타겟 바이어 유형별 특성 및 접근 전략
-   - 표 형식: 바이어 유형, 설명, 접근 방법
+## Output Structure (MANDATORY - All in Korean)
+Your response MUST follow this exact structure:
 
-8. 마케팅·세일즈 전략 제안
-   - 차별화 포인트 및 USP
-   - 추천 전시회, 온라인 플랫폼, 아웃리치 전략
+# 수출 시장 적합성 분석 리포트
 
-9. 요약 및 제안
-   - 핵심 경쟁력 요약
-   - 단계별 수출 전략 로드맵
+## 1. 제품-시장 적합성 평가 (Product-Market Fit Assessment)
 
-모든 내용은 한국어로 작성하고, 마크다운 형식을 사용하세요.
-표는 마크다운 테이블 형식으로 작성하세요.
-구체적인 수치와 실제 데이터를 가능한 한 포함하세요.`;
+### 사실 (Facts)
+[Data-backed observations about the product and target markets]
 
-    const userPrompt = `다음 기업 정보를 바탕으로 수출 전략 리포트를 작성해주세요:
+### 분석 (Analysis)
+[Your interpretation of product-market fit]
+
+### 이 기업에 왜 중요한가?
+[Specific implications for THIS company]
+
+---
+
+## 2. 목표 국가 적합성 (Target Country Suitability)
+
+### 사실 (Facts)
+[Data about target markets relevant to this product]
+
+### 분석 (Analysis)
+[Assessment of suitability]
+
+### 리스크 및 제약 사항
+[Specific risks and constraints]
+
+### 이 기업에 왜 중요한가?
+[Why these factors matter for THIS company]
+
+---
+
+## 3. 경쟁 및 무역 신호 분석 (Competitive/Trade Signal Analysis)
+
+### 사실 (Facts)
+[Based on B/L data, trade signals, or market intelligence if available]
+
+### 분석 (Analysis)
+[Competitive positioning analysis]
+
+### 이 기업에 왜 중요한가?
+[Competitive implications for THIS company]
+
+---
+
+## 4. 수출 준비도 평가 (Export Readiness Evaluation)
+
+### 강점 (Strengths)
+[Company's export-ready capabilities]
+
+### 격차 (Gaps)
+[Areas needing improvement before export]
+
+### 필요한 추가 데이터
+[What additional information would improve this assessment]
+
+---
+
+## 5. 전략적 권고사항 (Strategic Recommendation)
+
+### 판정: [Go / 조건부 Go / No-Go]
+
+### 진행 조건
+[Conditions that must be met to proceed]
+
+### 권장 다음 단계 (최대 5개)
+1. [Actionable step 1]
+2. [Actionable step 2]
+3. [Actionable step 3]
+4. [Actionable step 4]
+5. [Actionable step 5]
+
+---
+
+## Tone & Style
+- Professional and analytical
+- Concise - no filler content
+- No marketing language
+- No assumptions without data
+- All content in Korean`;
+
+    const userPrompt = `다음 기업 정보를 바탕으로 수출 시장 적합성 분석을 수행해주세요.
 
 ## 기업 기본 정보
+- 원산지 국가: 대한민국 (Korea)
 - 웹사이트: ${survey_data.company_website || '미입력'}
 - 기업 설명: ${survey_data.company_description || '미입력'}
 - 설립연도: ${survey_data.year_founded || '미입력'}
 - 직원 수: ${survey_data.employee_count || '미입력'}
 
-## 주요 제품
+## 제품 정보
 ${productList}
 
 ## 핵심 강점
@@ -177,33 +252,38 @@ ${survey_data.core_strengths || '미입력'}
 - 기존 수출 시장: ${existingMarkets}
 - 보유 인증: ${certifications}
 
-## 타겟 시장
-- 목표 수출 지역: ${targetRegions}
+## 목표 수출 지역
+${targetRegions}
 
-이 정보를 바탕으로 구체적이고 실행 가능한 수출 전략 리포트를 작성해주세요.`;
+---
 
-    console.log('Calling Lovable AI for strategy generation...');
+위 정보만을 바탕으로 이 특정 기업의 수출 적합성을 분석해주세요.
+일반적인 시장 개요가 아닌, 이 기업의 제품이 해외 판매에 적합한지 여부를 판단해주세요.
+데이터가 부족한 부분은 명확히 "추가 데이터 필요"라고 표시해주세요.`;
 
-    // Call Lovable AI
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    console.log('Calling Grok AI for strategy generation...');
+
+    // Call Grok AI API
+    const aiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
+        'Authorization': `Bearer ${grokApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'grok-3-fast',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
+        temperature: 0.3,
         max_tokens: 8000,
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('AI Gateway error:', aiResponse.status, errorText);
+      console.error('Grok AI error:', aiResponse.status, errorText);
       
       if (aiResponse.status === 429) {
         return new Response(JSON.stringify({ error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }), {
@@ -211,9 +291,9 @@ ${survey_data.core_strengths || '미입력'}
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: 'AI 서비스 크레딧이 부족합니다.' }), {
-          status: 402,
+      if (aiResponse.status === 401 || aiResponse.status === 403) {
+        return new Response(JSON.stringify({ error: 'AI 서비스 인증에 실패했습니다.' }), {
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -225,6 +305,8 @@ ${survey_data.core_strengths || '미입력'}
     }
 
     const aiData = await aiResponse.json();
+    console.log('Grok AI response received:', JSON.stringify(aiData).slice(0, 500));
+
     const strategyContent = aiData.choices?.[0]?.message?.content;
 
     if (!strategyContent) {
@@ -235,7 +317,7 @@ ${survey_data.core_strengths || '미입력'}
       });
     }
 
-    console.log('Strategy generated successfully');
+    console.log('Strategy generated successfully, length:', strategyContent.length);
 
     // Save the report to database
     const { data: reportData, error: reportError } = await supabase
