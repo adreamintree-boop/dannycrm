@@ -42,6 +42,8 @@ function EmailListView({ mailbox }: { mailbox: string }) {
   } = useNylasEmailContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [hasCheckedConnection, setHasCheckedConnection] = useState(false);
+  const [hasFetchedMessages, setHasFetchedMessages] = useState(false);
+  const lastMailbox = React.useRef<string | null>(null);
 
   useEffect(() => {
     if (!hasCheckedConnection) {
@@ -50,7 +52,11 @@ function EmailListView({ mailbox }: { mailbox: string }) {
   }, [checkConnection, hasCheckedConnection]);
 
   useEffect(() => {
-    if (hasCheckedConnection) {
+    // Only fetch when connection status is known and mailbox changes
+    if (hasCheckedConnection && (!hasFetchedMessages || lastMailbox.current !== mailbox)) {
+      lastMailbox.current = mailbox;
+      setHasFetchedMessages(true);
+      
       if (isConnected) {
         // Fetch from Nylas
         fetchNylasMessages(mailbox);
@@ -62,7 +68,7 @@ function EmailListView({ mailbox }: { mailbox: string }) {
         }
       }
     }
-  }, [mailbox, hasCheckedConnection, isConnected, fetchMessages, seedSampleEmails, fetchNylasMessages]);
+  }, [mailbox, hasCheckedConnection, isConnected, hasFetchedMessages, fetchMessages, seedSampleEmails, fetchNylasMessages]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: '받은편지함',
