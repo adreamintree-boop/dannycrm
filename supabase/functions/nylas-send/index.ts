@@ -93,26 +93,47 @@ serve(async (req) => {
       nylasPayload.reply_to_message_id = reply_to_message_id;
     }
 
-    const nylasUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages/send`;
-    console.log(`[nylas-send] Calling Nylas: ${nylasUrl}`);
+     const grantUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages/send`;
+     const meUrl = `${NYLAS_API_BASE_URL}/v3/me/messages/send`;
+     console.log(`[nylas-send] Calling Nylas: ${grantUrl}`);
 
-    const nylasResponse = await fetch(nylasUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${nylasApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(nylasPayload),
-    });
+     const requestInit: RequestInit = {
+       method: "POST",
+       headers: {
+         Authorization: `Bearer ${nylasApiKey}`,
+         "Content-Type": "application/json",
+       },
+       body: JSON.stringify(nylasPayload),
+     };
 
-    if (!nylasResponse.ok) {
-      const errorText = await nylasResponse.text();
-      console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
-      return new Response(
-        JSON.stringify({ error: "Failed to send email via Nylas", details: errorText }),
-        { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+     let nylasResponse = await fetch(grantUrl, requestInit);
+
+     if (!nylasResponse.ok) {
+       let errorText = await nylasResponse.text();
+       const shouldRetryWithMe =
+         nylasResponse.status === 401 &&
+         errorText.includes("replace the user's grant_id in the path with /me/");
+
+       if (shouldRetryWithMe) {
+         console.log(`[nylas-send] Retrying Nylas with /me endpoint: ${meUrl}`);
+         nylasResponse = await fetch(meUrl, requestInit);
+
+         if (!nylasResponse.ok) {
+           errorText = await nylasResponse.text();
+           console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
+           return new Response(
+             JSON.stringify({ error: "Failed to send email via Nylas", details: errorText }),
+             { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+           );
+         }
+       } else {
+         console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
+         return new Response(
+           JSON.stringify({ error: "Failed to send email via Nylas", details: errorText }),
+           { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+         );
+       }
+     }
 
     const nylasData = await nylasResponse.json();
     const sentMessage = nylasData.data;
