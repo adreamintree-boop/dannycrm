@@ -8,6 +8,31 @@ const corsHeaders = {
 
 const NYLAS_API_BASE_URL = "https://api.us.nylas.com";
 
+// Retry with exponential backoff for rate limits
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+      console.log(`[nylas-list-messages] Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      continue;
+    }
+    
+    return response;
+  }
+  
+  throw new Error('Max retries exceeded for rate limit');
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -106,17 +131,41 @@ serve(async (req) => {
 
     console.log(`[nylas-list-messages] Calling Nylas: ${grantUrl}`);
 
-    let nylasResponse = await fetch(grantUrl, requestInit);
+    let nylasResponse = await fetchWithRetry(grantUrl, requestInit);
 
     if (!nylasResponse.ok) {
       let errorText = await nylasResponse.text();
+      
+      // Handle invalid grant - the grant may have expired or been revoked
+      if (nylasResponse.status === 404 && errorText.includes("grant.not_found")) {
+        console.error(`[nylas-list-messages] Grant not found - grant may be expired or revoked`);
+        
+        // Update the email account status to disconnected
+        await supabase
+          .from("email_accounts")
+          .update({ status: "disconnected" })
+          .eq("user_id", user.id);
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Email account connection expired", 
+            details: "Please reconnect your email account in settings.",
+            reconnect_required: true,
+            items: [], 
+            page, 
+            page_size 
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       const shouldRetryWithMe =
         nylasResponse.status === 401 &&
         errorText.includes("replace the user's grant_id in the path with /me/");
 
       if (shouldRetryWithMe) {
         console.log(`[nylas-list-messages] Retrying Nylas with /me endpoint: ${meUrl}`);
-        nylasResponse = await fetch(meUrl, requestInit);
+        nylasResponse = await fetchWithRetry(meUrl, requestInit);
 
         if (!nylasResponse.ok) {
           errorText = await nylasResponse.text();
