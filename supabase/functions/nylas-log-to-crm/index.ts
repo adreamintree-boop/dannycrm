@@ -24,10 +24,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const nylasApiKey = Deno.env.get("NYLAS_API_KEY");
+    const nylasApiKey = Deno.env.get("TaaS_CRM_Email_Nylas_Test");
 
     if (!nylasApiKey) {
-      console.error("NYLAS_API_KEY not configured");
+      console.error("TaaS_CRM_Email_Nylas_Test not configured");
       return new Response(
         JSON.stringify({ error: "Nylas API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
