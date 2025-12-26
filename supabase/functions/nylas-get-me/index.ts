@@ -22,15 +22,20 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client with user's token
+    // Create Supabase client with service role for DB operations
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+
+    // Use anon client with user token to verify the user
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Extract token and get user
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
+    
     if (userError || !user) {
       console.error("Auth error:", userError);
       return new Response(
@@ -40,6 +45,9 @@ serve(async (req) => {
     }
 
     console.log(`[nylas-get-me] Fetching email account for user: ${user.id}`);
+
+    // Use service role client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch email account from database
     const { data: emailAccount, error: dbError } = await supabase
