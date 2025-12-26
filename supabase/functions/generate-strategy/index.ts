@@ -271,7 +271,7 @@ ${targetRegions}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'grok-3-fast',
+        model: 'grok-2-latest',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
