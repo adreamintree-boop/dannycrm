@@ -225,7 +225,7 @@ const StrategyResult: React.FC = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">AI 시장조사 분석 중...</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Grok AI 수출 적합성 분석 중...</h2>
             <p className="text-muted-foreground">
               잠시만 기다려주세요. 약 30초~1분 정도 소요됩니다.
             </p>
@@ -245,24 +245,22 @@ const StrategyResult: React.FC = () => {
             <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <Sparkles className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-2xl font-semibold text-foreground mb-3">AI 수출 시장조사</h2>
+            <h2 className="text-2xl font-semibold text-foreground mb-3">AI 수출 시장 적합성 분석</h2>
             <p className="text-muted-foreground mb-2">
-              온보딩 서베이에 입력하신 정보를 바탕으로
+              온보딩 서베이에 입력하신 기업 정보를 바탕으로
             </p>
             <p className="text-muted-foreground mb-6">
-              AI가 맞춤형 수출 시장조사 리포트를 생성합니다.
+              Grok AI가 귀사 제품의 수출 적합성을 분석합니다.
             </p>
             
             <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
               <h3 className="font-medium text-foreground mb-2">분석 내용</h3>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• 제품 수출 가능성 진단</li>
-                <li>• 글로벌 경쟁사 분석</li>
-                <li>• 목표 시장 개요 및 진입 전략</li>
-                <li>• HS CODE 및 수입 통계</li>
-                <li>• 진입 장벽 및 리스크 분석</li>
-                <li>• 유통 채널 및 바이어 유형 제안</li>
-                <li>• 마케팅·세일즈 전략</li>
+                <li>• 제품-시장 적합성 평가</li>
+                <li>• 목표 국가 적합성 분석</li>
+                <li>• 경쟁 및 무역 신호 분석</li>
+                <li>• 수출 준비도 평가</li>
+                <li>• 전략적 권고사항 (Go/No-Go 판정)</li>
               </ul>
             </div>
 
@@ -377,9 +375,9 @@ const StrategyResult: React.FC = () => {
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-semibold text-foreground">수출 시장조사 리포트</h1>
+                  <h1 className="text-2xl font-semibold text-foreground">수출 시장 적합성 분석 리포트</h1>
                   <p className="text-sm text-muted-foreground">
-                    {savedReports.find(r => r.id === selectedReportId)?.product_name || survey.products[0]?.product_name || 'Company'} 수출 전략 분석
+                    {savedReports.find(r => r.id === selectedReportId)?.product_name || survey.products[0]?.product_name || 'Company'} - Grok AI 분석
                   </p>
                 </div>
               </div>
