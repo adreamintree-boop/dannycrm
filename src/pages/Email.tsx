@@ -32,7 +32,14 @@ function ConnectionBanner() {
 
 function EmailListView({ mailbox }: { mailbox: string }) {
   const { messages, loading, fetchMessages, toggleStar, seedSampleEmails } = useEmailContext();
-  const { isConnected, checkConnection, accountLoading } = useNylasEmailContext();
+  const { 
+    isConnected, 
+    checkConnection, 
+    accountLoading, 
+    messages: nylasMessages, 
+    messagesLoading, 
+    fetchMessages: fetchNylasMessages 
+  } = useNylasEmailContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [hasCheckedConnection, setHasCheckedConnection] = useState(false);
 
@@ -43,12 +50,19 @@ function EmailListView({ mailbox }: { mailbox: string }) {
   }, [checkConnection, hasCheckedConnection]);
 
   useEffect(() => {
-    // For now, use the existing mock system until Nylas is connected
-    fetchMessages(mailbox);
-    if (mailbox === 'inbox') {
-      seedSampleEmails();
+    if (hasCheckedConnection) {
+      if (isConnected) {
+        // Fetch from Nylas
+        fetchNylasMessages(mailbox);
+      } else {
+        // Use mock data
+        fetchMessages(mailbox);
+        if (mailbox === 'inbox') {
+          seedSampleEmails();
+        }
+      }
     }
-  }, [mailbox, fetchMessages, seedSampleEmails]);
+  }, [mailbox, hasCheckedConnection, isConnected, fetchMessages, seedSampleEmails, fetchNylasMessages]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: '받은편지함',
@@ -58,13 +72,15 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     trash: '휴지통',
   };
 
-  if (accountLoading) {
+  if (accountLoading || !hasCheckedConnection) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
+
+  const isLoading = isConnected ? messagesLoading : loading;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -89,9 +105,11 @@ function EmailListView({ mailbox }: { mailbox: string }) {
         <EmailList
           messages={messages}
           mailbox={mailbox}
-          loading={loading}
+          loading={isLoading}
           onToggleStar={toggleStar}
           searchQuery={searchQuery}
+          nylasMessages={nylasMessages}
+          useNylas={isConnected}
         />
       </div>
     </div>
