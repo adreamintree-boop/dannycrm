@@ -128,12 +128,25 @@ function EmailSettingsView() {
 }
 
 function EmailContent() {
-  const { unreadCount, fetchUnreadCount } = useEmailContext();
+  const { unreadCount: mockUnreadCount, fetchUnreadCount } = useEmailContext();
+  const { isConnected, messages: nylasMessages, accountLoading } = useNylasEmailContext();
   const location = useLocation();
 
   useEffect(() => {
-    fetchUnreadCount();
-  }, [location.pathname, fetchUnreadCount]);
+    if (!isConnected) {
+      fetchUnreadCount();
+    }
+  }, [location.pathname, fetchUnreadCount, isConnected]);
+
+  // Calculate unread count: use Nylas messages if connected, otherwise use mock data
+  const unreadCount = React.useMemo(() => {
+    if (accountLoading) return 0;
+    if (isConnected) {
+      // Count unread messages from Nylas inbox
+      return nylasMessages.filter(msg => msg.unread).length;
+    }
+    return mockUnreadCount;
+  }, [isConnected, nylasMessages, mockUnreadCount, accountLoading]);
 
   return (
     <div className="h-screen flex flex-col bg-background">
