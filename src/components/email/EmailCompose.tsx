@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ChevronDown, ChevronUp, Send, Save, X, Search, Building2, Lock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Send, Save, X, Building2, Lock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEmailContext, ComposeData } from '@/context/EmailContext';
+import { useNylasEmailContext } from '@/context/NylasEmailContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
@@ -53,8 +54,12 @@ const stageLabels: Record<string, string> = {
 export default function EmailCompose() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { sendEmail, saveDraft, getMessage } = useEmailContext();
+  const { sendEmail: sendMockEmail, saveDraft, getMessage } = useEmailContext();
+  const { isConnected, sendEmail: sendNylasEmail, fetchMessage: fetchNylasMessage } = useNylasEmailContext();
   const { user } = useAuthContext();
+
+  const isNylasReply = searchParams.get('nylas') === 'true';
+  const useNylas = isConnected && isNylasReply;
 
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -65,13 +70,14 @@ export default function EmailCompose() {
   const [showBcc, setShowBcc] = useState(false);
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [replyToMessageId, setReplyToMessageId] = useState<string | null>(null);
 
   // Buyer selection state
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
   const [buyerOpen, setBuyerOpen] = useState(false);
   const [buyerSearch, setBuyerSearch] = useState('');
-  const [buyerLocked, setBuyerLocked] = useState(false); // Lock buyer when replying to CRM-linked email
+  const [buyerLocked, setBuyerLocked] = useState(false);
 
   // Fetch buyers
   useEffect(() => {
@@ -122,15 +128,32 @@ export default function EmailCompose() {
     }
 
     const loadOriginal = async (id: string, isForward: boolean) => {
-      const msg = await getMessage(id);
-      if (msg) {
-        if (isForward) {
-          setSubject(`Fwd: ${msg.subject}`);
-          setBody(`\n\n---------- 전달된 메시지 ----------\n보낸사람: ${msg.from_name || msg.from_email}\n받는사람: ${msg.to_emails.join(', ')}\n제목: ${msg.subject}\n\n${msg.body}`);
-        } else {
-          setTo(msg.from_email);
-          setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
-          setBody(`\n\n${msg.created_at}에 ${msg.from_name || msg.from_email}님이 작성:\n> ${msg.body.split('\n').join('\n> ')}`);
+      if (useNylas) {
+        // Load Nylas message
+        const msg = await fetchNylasMessage(id);
+        if (msg) {
+          if (isForward) {
+            setSubject(`Fwd: ${msg.subject}`);
+            setBody(`\n\n---------- 전달된 메시지 ----------\n보낸사람: ${msg.from.name || msg.from.email}\n받는사람: ${msg.to.map(t => t.email).join(', ')}\n제목: ${msg.subject}\n\n${msg.body_text || msg.body_html?.replace(/<[^>]*>/g, '') || ''}`);
+          } else {
+            setTo(msg.from.email);
+            setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
+            setBody(`\n\n${msg.date}에 ${msg.from.name || msg.from.email}님이 작성:\n> ${(msg.body_text || '').split('\n').join('\n> ')}`);
+            setReplyToMessageId(id);
+          }
+        }
+      } else {
+        // Load mock message
+        const msg = await getMessage(id);
+        if (msg) {
+          if (isForward) {
+            setSubject(`Fwd: ${msg.subject}`);
+            setBody(`\n\n---------- 전달된 메시지 ----------\n보낸사람: ${msg.from_name || msg.from_email}\n받는사람: ${msg.to_emails.join(', ')}\n제목: ${msg.subject}\n\n${msg.body}`);
+          } else {
+            setTo(msg.from_email);
+            setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
+            setBody(`\n\n${msg.created_at}에 ${msg.from_name || msg.from_email}님이 작성:\n> ${msg.body.split('\n').join('\n> ')}`);
+          }
         }
       }
     };
@@ -140,36 +163,61 @@ export default function EmailCompose() {
     } else if (forwardFrom) {
       loadOriginal(forwardFrom, true);
     }
-  }, [searchParams, getMessage]);
+  }, [searchParams, getMessage, fetchNylasMessage, useNylas]);
 
   const handleSend = async () => {
     if (!to.trim()) {
       return;
     }
     setSending(true);
-    const data: ComposeData = {
-      to,
-      cc,
-      bcc,
-      subject,
-      body,
-      buyerId: selectedBuyer?.id,
-      buyerName: selectedBuyer?.company_name,
-    };
-    const success = await sendEmail(data);
-    setSending(false);
-    if (success) {
-      navigate('/email/sent');
+
+    const toEmails = to.split(',').map(e => e.trim()).filter(Boolean);
+    const ccEmails = cc ? cc.split(',').map(e => e.trim()).filter(Boolean) : [];
+    const bccEmails = bcc ? bcc.split(',').map(e => e.trim()).filter(Boolean) : [];
+
+    if (isConnected) {
+      // Send via Nylas
+      const success = await sendNylasEmail({
+        to: toEmails,
+        cc: ccEmails.length > 0 ? ccEmails : undefined,
+        bcc: bccEmails.length > 0 ? bccEmails : undefined,
+        subject,
+        body_html: body.replace(/\n/g, '<br>'),
+        buyer_id: selectedBuyer?.id,
+        reply_to_message_id: replyToMessageId || undefined,
+      });
+      setSending(false);
+      if (success) {
+        navigate('/email/sent');
+      }
+    } else {
+      // Send via mock system
+      const data: ComposeData = {
+        to,
+        cc,
+        bcc,
+        subject,
+        body,
+        buyerId: selectedBuyer?.id,
+        buyerName: selectedBuyer?.company_name,
+      };
+      const success = await sendMockEmail(data);
+      setSending(false);
+      if (success) {
+        navigate('/email/sent');
+      }
     }
   };
 
   const handleSaveDraft = async () => {
-    setSaving(true);
-    const data: ComposeData = { to, cc, bcc, subject, body };
-    const success = await saveDraft(data);
-    setSaving(false);
-    if (success) {
-      navigate('/email/drafts');
+    if (!isConnected) {
+      setSaving(true);
+      const data: ComposeData = { to, cc, bcc, subject, body };
+      const success = await saveDraft(data);
+      setSaving(false);
+      if (success) {
+        navigate('/email/drafts');
+      }
     }
   };
 
@@ -192,7 +240,6 @@ export default function EmailCompose() {
           <div className="flex items-center gap-2">
             <Label className="w-20 text-right text-muted-foreground shrink-0">바이어 선택</Label>
             {buyerLocked ? (
-              // Locked buyer display (from reply)
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -213,7 +260,6 @@ export default function EmailCompose() {
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              // Regular buyer selector
               <Popover open={buyerOpen} onOpenChange={setBuyerOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -376,10 +422,12 @@ export default function EmailCompose() {
           <Send className="w-4 h-4" />
           {sending ? '전송 중...' : '보내기'}
         </Button>
-        <Button variant="outline" onClick={handleSaveDraft} disabled={saving} className="gap-2">
-          <Save className="w-4 h-4" />
-          {saving ? '저장 중...' : '임시저장'}
-        </Button>
+        {!isConnected && (
+          <Button variant="outline" onClick={handleSaveDraft} disabled={saving} className="gap-2">
+            <Save className="w-4 h-4" />
+            {saving ? '저장 중...' : '임시저장'}
+          </Button>
+        )}
         <Button variant="ghost" onClick={() => navigate(-1)}>
           취소
         </Button>

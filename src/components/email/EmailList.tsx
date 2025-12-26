@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Star, FileText, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmailMessage, useEmailContext } from '@/context/EmailContext';
+import { useNylasEmailContext } from '@/context/NylasEmailContext';
+import { NylasMessage } from '@/hooks/useNylas';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +17,9 @@ interface EmailListProps {
   loading: boolean;
   onToggleStar: (id: string) => void;
   searchQuery: string;
+  // Nylas-specific props
+  nylasMessages?: NylasMessage[];
+  useNylas?: boolean;
 }
 
 const EmailList: React.FC<EmailListProps> = ({
@@ -23,13 +28,18 @@ const EmailList: React.FC<EmailListProps> = ({
   loading,
   onToggleStar,
   searchQuery,
+  nylasMessages = [],
+  useNylas = false,
 }) => {
   const navigate = useNavigate();
   const { logEmailToCRM } = useEmailContext();
+  const { logEmailToCRM: nylasLogToCRM } = useNylasEmailContext();
   const [loggingIds, setLoggingIds] = useState<Set<string>>(new Set());
+  const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set());
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
+  // Filter messages based on search query
   const filteredMessages = messages.filter((msg) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -38,6 +48,17 @@ const EmailList: React.FC<EmailListProps> = ({
       msg.body.toLowerCase().includes(query) ||
       msg.from_email.toLowerCase().includes(query) ||
       msg.from_name?.toLowerCase().includes(query)
+    );
+  });
+
+  const filteredNylasMessages = nylasMessages.filter((msg) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      msg.subject.toLowerCase().includes(query) ||
+      msg.snippet.toLowerCase().includes(query) ||
+      msg.from.email.toLowerCase().includes(query) ||
+      msg.from.name?.toLowerCase().includes(query)
     );
   });
 
@@ -53,7 +74,14 @@ const EmailList: React.FC<EmailListProps> = ({
     setLoggingIds(prev => new Set(prev).add(selectedMessageId));
     setModalOpen(false);
     
-    await logEmailToCRM(selectedMessageId, buyerId, companyName);
+    if (useNylas) {
+      const result = await nylasLogToCRM(selectedMessageId, buyerId);
+      if (result.success) {
+        setLoggedIds(prev => new Set(prev).add(selectedMessageId));
+      }
+    } else {
+      await logEmailToCRM(selectedMessageId, buyerId, companyName);
+    }
     
     setLoggingIds(prev => {
       const next = new Set(prev);
@@ -71,7 +99,9 @@ const EmailList: React.FC<EmailListProps> = ({
     );
   }
 
-  if (filteredMessages.length === 0) {
+  const displayMessages = useNylas ? filteredNylasMessages : filteredMessages;
+
+  if (displayMessages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <p>메일이 없습니다</p>
@@ -93,6 +123,127 @@ const EmailList: React.FC<EmailListProps> = ({
   // Only show CRM log button for inbox and sent mailboxes
   const showCRMButton = mailbox === 'inbox' || mailbox === 'sent' || mailbox === 'all';
 
+  // Render Nylas messages
+  if (useNylas) {
+    return (
+      <>
+        <div className="divide-y divide-border">
+          {filteredNylasMessages.map((msg) => {
+            const isInbox = msg.folder.toLowerCase().includes('inbox');
+            const displayName = isInbox
+              ? msg.from.name || msg.from.email
+              : msg.to[0]?.email || '(수신자 없음)';
+
+            const isLogging = loggingIds.has(msg.id);
+            const isLogged = loggedIds.has(msg.id);
+            const canLogToCRM = showCRMButton;
+
+            return (
+              <div
+                key={msg.id}
+                onClick={() => navigate(`/email/${msg.id}?nylas=true`)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50',
+                  msg.unread && 'bg-primary/5 font-medium'
+                )}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Nylas star toggle would go here
+                  }}
+                  className="text-muted-foreground hover:text-yellow-500 transition-colors"
+                >
+                  <Star
+                    className={cn(
+                      'w-4 h-4',
+                      msg.starred && 'fill-yellow-500 text-yellow-500'
+                    )}
+                  />
+                </button>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-sm truncate',
+                      msg.unread && 'font-semibold text-foreground'
+                    )}>
+                      {displayName}
+                    </span>
+                    {isLogged && (
+                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                        <Check className="w-3 h-3" />
+                        CRM
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-sm truncate',
+                      msg.unread ? 'text-foreground' : 'text-muted-foreground'
+                    )}>
+                      {msg.subject}
+                    </span>
+                    {msg.snippet && (
+                      <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                        - {msg.snippet}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {canLogToCRM && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleOpenBuyerModal(e, msg.id)}
+                          disabled={isLogged || isLogging}
+                          className={cn(
+                            'h-7 px-2 text-xs gap-1',
+                            isLogged && 'opacity-50'
+                          )}
+                        >
+                          {isLogging ? (
+                            <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                          ) : isLogged ? (
+                            <Check className="w-3 h-3" />
+                          ) : (
+                            <FileText className="w-3 h-3" />
+                          )}
+                          <span className="hidden sm:inline">
+                            {isLogged ? '기록됨' : 'CRM 기록'}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isLogged ? '이미 CRM에 저장됨' : '바이어 선택 후 CRM에 기록'}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDate(msg.date)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <BuyerSelectModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          onSelect={handleBuyerSelect}
+          loading={loggingIds.size > 0}
+        />
+      </>
+    );
+  }
+
+  // Render regular messages (mock data)
   return (
     <>
       <div className="divide-y divide-border">
