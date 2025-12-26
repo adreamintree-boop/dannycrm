@@ -94,7 +94,7 @@ serve(async (req) => {
     }
 
      const grantUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages/send`;
-     const meUrl = `${NYLAS_API_BASE_URL}/v3/me/messages/send`;
+     const meUrl = `${NYLAS_API_BASE_URL}/v3/grants/me/messages/send`;
      console.log(`[nylas-send] Calling Nylas: ${grantUrl}`);
 
      const requestInit: RequestInit = {

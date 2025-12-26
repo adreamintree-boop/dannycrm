@@ -107,7 +107,7 @@ serve(async (req) => {
     // Fetch full message from Nylas
     const grantId = emailAccount.grant_id;
     const grantUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages/${message_id}`;
-    const meUrl = `${NYLAS_API_BASE_URL}/v3/me/messages/${message_id}`;
+    const meUrl = `${NYLAS_API_BASE_URL}/v3/grants/me/messages/${message_id}`;
     console.log(`[nylas-log-to-crm] Fetching message from Nylas: ${grantUrl}`);
 
     const requestInit: RequestInit = {
