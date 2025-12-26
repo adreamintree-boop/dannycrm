@@ -38,90 +38,94 @@ export default function EmailDetail() {
   const [loggingToCRM, setLoggingToCRM] = useState(false);
   const hasLoggedRef = useRef(false);
 
-  const fetchedIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     let isMounted = true;
-    
-    // Skip if already fetched this id
-    if (fetchedIdRef.current === id) {
-      return;
-    }
-    
+
     hasLoggedRef.current = false;
-    fetchedIdRef.current = id || null;
-    
+
     const load = async () => {
-      if (!id) return;
-      setLoading(true);
-      
-      if (isNylas && isConnected) {
-        // Load Nylas message
-        const msg = await fetchMessage(id);
-        if (!isMounted) return;
-        
-        if (msg) {
-          setNylasMessage(msg);
-          
-          // Check if already logged to CRM
-          if (msg.is_logged_to_crm && msg.crm_buyer_id) {
-            const { data: buyerData } = await supabase
-              .from('crm_buyers')
-              .select('id, company_name, stage')
-              .eq('id', msg.crm_buyer_id)
-              .single();
-            
-            if (buyerData && isMounted) {
-              setLinkedBuyer(buyerData);
-            }
-          }
-        }
-      } else {
-        // Load regular message
-        const msg = await getMessage(id);
-        if (!isMounted) return;
-        
-        if (msg) {
-          setMessage(msg);
-          if (!msg.is_read) {
-            markAsRead(id);
-          }
-          if (!hasLoggedRef.current) {
-            hasLoggedRef.current = true;
-            logActivity('open', id, msg.thread_id || undefined);
-          }
-          
-          // Check if email is linked to a buyer via sales_activity_logs
-          const { data: logData } = await supabase
-            .from('sales_activity_logs')
-            .select('buyer_id')
-            .eq('email_message_id', id)
-            .maybeSingle();
-          
-          if (logData?.buyer_id && isMounted) {
-            const { data: buyerData } = await supabase
-              .from('crm_buyers')
-              .select('id, company_name, stage')
-              .eq('id', logData.buyer_id)
-              .single();
-            
-            if (buyerData && isMounted) {
-              setLinkedBuyer(buyerData);
-            }
-          }
-        }
+      if (!id) {
+        if (isMounted) setLoading(false);
+        return;
       }
-      if (isMounted) {
-        setLoading(false);
+
+      setLoading(true);
+      // Reset derived UI state when switching messages
+      setMessage(null);
+      setNylasMessage(null);
+      setLinkedBuyer(null);
+
+      try {
+        if (isNylas) {
+          if (!isConnected) return;
+
+          const msg = await fetchMessage(id);
+          if (!isMounted) return;
+
+          if (msg) {
+            setNylasMessage(msg);
+
+            // Check if already logged to CRM
+            if (msg.is_logged_to_crm && msg.crm_buyer_id) {
+              const { data: buyerData } = await supabase
+                .from('crm_buyers')
+                .select('id, company_name, stage')
+                .eq('id', msg.crm_buyer_id)
+                .maybeSingle();
+
+              if (buyerData && isMounted) {
+                setLinkedBuyer(buyerData);
+              }
+            }
+          }
+        } else {
+          // Load regular message
+          const msg = await getMessage(id);
+          if (!isMounted) return;
+
+          if (msg) {
+            setMessage(msg);
+            if (!msg.is_read) {
+              markAsRead(id);
+            }
+            if (!hasLoggedRef.current) {
+              hasLoggedRef.current = true;
+              logActivity('open', id, msg.thread_id || undefined);
+            }
+
+            // Check if email is linked to a buyer via sales_activity_logs
+            const { data: logData } = await supabase
+              .from('sales_activity_logs')
+              .select('buyer_id')
+              .eq('email_message_id', id)
+              .maybeSingle();
+
+            if (logData?.buyer_id && isMounted) {
+              const { data: buyerData } = await supabase
+                .from('crm_buyers')
+                .select('id, company_name, stage')
+                .eq('id', logData.buyer_id)
+                .maybeSingle();
+
+              if (buyerData && isMounted) {
+                setLinkedBuyer(buyerData);
+              }
+            }
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
-    
+
     load();
-    
+
     return () => {
       isMounted = false;
     };
-  }, [id, isNylas, isConnected]);
+  }, [id, isNylas, isConnected, fetchMessage, getMessage, markAsRead, logActivity]);
 
   const handleReply = () => {
     if (id) {

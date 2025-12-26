@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { useAuthContext } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNylas, NylasEmailAccount, NylasMessage, NylasMessageDetail } from '@/hooks/useNylas';
@@ -66,9 +66,15 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
 
   // Request deduplication refs
   const fetchMessagesInFlight = useRef<string | null>(null);
-  const fetchMessageInFlight = useRef<string | null>(null);
   const checkConnectionInFlight = useRef(false);
 
+  // In-flight message promise cache (prevents StrictMode + multi-component duplicate loads)
+  const fetchMessagePromises = useRef<Map<string, Promise<NylasMessageDetail | null>>>(new Map());
+  const currentMessageRef = useRef<NylasMessageDetail | null>(null);
+
+  useEffect(() => {
+    currentMessageRef.current = currentMessage;
+  }, [currentMessage]);
   const isConnected = emailAccount?.connected ?? false;
 
   const checkConnection = useCallback(async () => {
@@ -138,34 +144,40 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
 
   const fetchMessage = useCallback(async (messageId: string): Promise<NylasMessageDetail | null> => {
     if (!user || !emailAccount?.connected) return null;
-    
-    // Prevent duplicate calls for the same message
-    if (fetchMessageInFlight.current === messageId) {
-      console.log('[NylasEmailContext] Skipping duplicate fetchMessage call:', messageId);
-      // Return current message if it matches
-      if (currentMessage?.id === messageId) {
-        return currentMessage;
-      }
-      return null;
+
+    // If we already have it as the current message, reuse it.
+    if (currentMessageRef.current?.id === messageId) {
+      return currentMessageRef.current;
     }
-    
-    fetchMessageInFlight.current = messageId;
+
+    // Return the same promise for concurrent callers.
+    const existingPromise = fetchMessagePromises.current.get(messageId);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
     setMessageLoading(true);
     setError(null);
-    
-    try {
-      const message = await nylas.getMessage(messageId);
-      setCurrentMessage(message);
-      return message;
-    } catch (err) {
-      console.error('Failed to fetch message:', err);
-      setError('Failed to fetch message');
-      return null;
-    } finally {
-      setMessageLoading(false);
-      fetchMessageInFlight.current = null;
-    }
-  }, [user, emailAccount, nylas, currentMessage]);
+
+    const promise = (async () => {
+      try {
+        const message = await nylas.getMessage(messageId);
+        currentMessageRef.current = message;
+        setCurrentMessage(message);
+        return message;
+      } catch (err) {
+        console.error('Failed to fetch message:', err);
+        setError('Failed to fetch message');
+        return null;
+      } finally {
+        fetchMessagePromises.current.delete(messageId);
+        setMessageLoading(false);
+      }
+    })();
+
+    fetchMessagePromises.current.set(messageId, promise);
+    return promise;
+  }, [user, emailAccount, nylas]);
 
   const sendEmail = useCallback(async (payload: {
     to: string[];
