@@ -93,24 +93,46 @@ serve(async (req) => {
       params.append("search_query_native", search);
     }
 
-    const nylasUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages?${params.toString()}`;
-    console.log(`[nylas-list-messages] Calling Nylas: ${nylasUrl}`);
+    const grantUrl = `${NYLAS_API_BASE_URL}/v3/grants/${grantId}/messages?${params.toString()}`;
+    const meUrl = `${NYLAS_API_BASE_URL}/v3/me/messages?${params.toString()}`;
 
-    const nylasResponse = await fetch(nylasUrl, {
+    const requestInit: RequestInit = {
       method: "GET",
       headers: {
         Authorization: `Bearer ${nylasApiKey}`,
         "Content-Type": "application/json",
       },
-    });
+    };
+
+    console.log(`[nylas-list-messages] Calling Nylas: ${grantUrl}`);
+
+    let nylasResponse = await fetch(grantUrl, requestInit);
 
     if (!nylasResponse.ok) {
-      const errorText = await nylasResponse.text();
-      console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }),
-        { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      let errorText = await nylasResponse.text();
+      const shouldRetryWithMe =
+        nylasResponse.status === 401 &&
+        errorText.includes("replace the user's grant_id in the path with /me/");
+
+      if (shouldRetryWithMe) {
+        console.log(`[nylas-list-messages] Retrying Nylas with /me endpoint: ${meUrl}`);
+        nylasResponse = await fetch(meUrl, requestInit);
+
+        if (!nylasResponse.ok) {
+          errorText = await nylasResponse.text();
+          console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
+          return new Response(
+            JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }),
+            { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        console.error(`Nylas API error: ${nylasResponse.status}`, errorText);
+        return new Response(
+          JSON.stringify({ error: "Failed to fetch messages from Nylas", details: errorText }),
+          { status: nylasResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const nylasData = await nylasResponse.json();
