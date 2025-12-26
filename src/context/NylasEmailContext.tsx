@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import { useAuthContext } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNylas, NylasEmailAccount, NylasMessage, NylasMessageDetail } from '@/hooks/useNylas';
@@ -64,10 +64,18 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
   // Error state
   const [error, setError] = useState<string | null>(null);
 
+  // Request deduplication refs
+  const fetchMessagesInFlight = useRef<string | null>(null);
+  const checkConnectionInFlight = useRef(false);
+
   const isConnected = emailAccount?.connected ?? false;
 
   const checkConnection = useCallback(async () => {
     if (!user) return;
+    // Prevent duplicate calls
+    if (checkConnectionInFlight.current) return;
+    
+    checkConnectionInFlight.current = true;
     setAccountLoading(true);
     setError(null);
     try {
@@ -78,6 +86,7 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
       setError('Failed to check email connection');
     } finally {
       setAccountLoading(false);
+      checkConnectionInFlight.current = false;
     }
   }, [user, nylas]);
 
@@ -88,6 +97,16 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!user || !emailAccount?.connected) return;
     
+    // Create a unique key for this request
+    const requestKey = `${folder}-${page}-${search || ''}`;
+    
+    // Prevent duplicate calls for the same request
+    if (fetchMessagesInFlight.current === requestKey) {
+      console.log('[NylasEmailContext] Skipping duplicate fetchMessages call:', requestKey);
+      return;
+    }
+    
+    fetchMessagesInFlight.current = requestKey;
     setMessagesLoading(true);
     setError(null);
     setCurrentFolder(folder);
@@ -112,6 +131,7 @@ export function NylasEmailProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       setMessagesLoading(false);
+      fetchMessagesInFlight.current = null;
     }
   }, [user, emailAccount, nylas, toast]);
 
