@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ExternalLink, User, Sparkles, Loader2, FileSearch } from 'lucide-react';
+import { Save, ExternalLink, User, Sparkles, Loader2 } from 'lucide-react';
 import { Buyer, BuyerContact } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -21,10 +21,8 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from '@/hooks/use-toast';
 import { useBuyerEnrichment } from '@/hooks/useBuyerEnrichment';
-import { useBuyerAnalysis } from '@/hooks/useBuyerAnalysis';
 import { useCreditsContext } from '@/context/CreditsContext';
 import EnrichmentReviewModal from './EnrichmentReviewModal';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   loadCountryData, 
   getCountries, 
@@ -63,7 +61,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
   const { updateBuyer } = useApp();
   const { balance } = useCreditsContext();
   const { enrichBuyer, isLoading: isEnriching, canEnrich, creditCost } = useBuyerEnrichment();
-  const { analyzeBuyer, isAnalyzing } = useBuyerAnalysis();
   
   const [formData, setFormData] = useState<Buyer>({ ...buyer });
   const [activeContactTab, setActiveContactTab] = useState<number>(0);
@@ -241,57 +238,10 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
 
   const roleOptions = ['admin', 'buyer', 'manager', 'ceo', 'director', 'other'];
 
-  const handleAnalyzeClick = async () => {
-    const result = await analyzeBuyer(
-      buyer.id,
-      formData.name,
-      formData.websiteUrl,
-      formData.country,
-      formData.mainProducts
-    );
-
-    if (result.success && result.analysis) {
-      setAnalysisResult(result.analysis);
-      toast({
-        title: '바이어 분석 완료',
-        description: '분석 결과가 영업활동일지에 기록되었습니다.',
-      });
-    } else {
-      toast({
-        variant: 'destructive',
-        title: '바이어 분석 실패',
-        description: result.error || '알 수 없는 오류가 발생했습니다.',
-      });
-    }
-  };
-
   return (
     <div className="p-6">
       {/* AI Buttons Row */}
       <div className="flex justify-end gap-3 mb-4">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={handleAnalyzeClick}
-                disabled={isAnalyzing}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                {isAnalyzing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <FileSearch className="w-4 h-4" />
-                )}
-                Buyer Analyze
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>AI가 바이어를 웹 검색하여 우리 회사 제품과의 적합성을 분석합니다.</p>
-              <p className="text-muted-foreground">분석 결과는 영업활동일지에 자동 기록됩니다.</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
 
         <TooltipProvider>
           <Tooltip>
@@ -316,31 +266,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
           </Tooltip>
         </TooltipProvider>
       </div>
-
-      {/* Analysis Result Display */}
-      {analysisResult && (
-        <div className="mb-6 p-4 bg-muted/50 rounded-lg border border-border">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <FileSearch className="w-4 h-4" />
-              바이어 분석 결과
-            </h4>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAnalysisResult(null)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              닫기
-            </Button>
-          </div>
-          <ScrollArea className="h-[300px]">
-            <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed pr-4">
-              {analysisResult}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-8">
         {/* Left Column: 회사정보 */}

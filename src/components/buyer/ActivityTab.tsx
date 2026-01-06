@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User, Mail, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User, Mail, ArrowUpRight, ArrowDownLeft, FileSearch, Loader2, ChevronDown, ChevronUp, Brain } from 'lucide-react';
 import { Buyer, Activity, ActivityType, BuyerStatus } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useSalesActivityLogs, SalesActivityLog } from '@/hooks/useSalesActivityLogs';
+import { useBuyerAnalysis } from '@/hooks/useBuyerAnalysis';
+import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import EmailDetailDrawer from './EmailDetailDrawer';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ActivityTabProps {
   buyer: Buyer;
@@ -18,11 +21,24 @@ interface ActivityTabProps {
 const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
   const { getBuyerActivities, deleteActivity } = useApp();
   const activities = getBuyerActivities(buyer.id);
-  const { logs: emailLogs, loading: emailLogsLoading, fetchLogsByBuyer } = useSalesActivityLogs();
+  const { logs: activityLogs, loading: logsLoading, fetchLogsByBuyer } = useSalesActivityLogs();
+  const { analyzeBuyer, isAnalyzing } = useBuyerAnalysis();
 
-  useEffect(() => {
+  // Separate email logs and analysis logs
+  const emailLogs = activityLogs.filter(log => log.source === 'email');
+  const analysisLogs = activityLogs.filter(log => log.source === 'ai_analysis');
+
+  // State for latest analysis result display
+  const [latestAnalysis, setLatestAnalysis] = useState<string | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  const refreshLogs = useCallback(() => {
     fetchLogsByBuyer(buyer.id);
   }, [buyer.id, fetchLogsByBuyer]);
+
+  useEffect(() => {
+    refreshLogs();
+  }, [refreshLogs]);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [filters, setFilters] = useState<Record<ActivityType, boolean>>({
@@ -39,6 +55,41 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
     if (log.email_message_id) {
       setSelectedEmailId(log.email_message_id);
       setEmailDrawerOpen(true);
+    }
+  };
+
+  const handleAnalyzeClick = async () => {
+    if (!buyer.name || buyer.name.trim() === '') {
+      toast({
+        variant: 'destructive',
+        title: '분석 불가',
+        description: '회사명을 입력해주세요.',
+      });
+      return;
+    }
+
+    const result = await analyzeBuyer(
+      buyer.id,
+      buyer.name,
+      buyer.websiteUrl,
+      buyer.country,
+      buyer.mainProducts
+    );
+
+    if (result.success && result.analysis) {
+      setLatestAnalysis(result.analysis);
+      // Refresh logs to show the new analysis in history
+      refreshLogs();
+      toast({
+        title: '바이어 분석 완료',
+        description: '분석 결과가 영업활동일지에 기록되었습니다.',
+      });
+    } else {
+      toast({
+        variant: 'destructive',
+        title: '바이어 분석 실패',
+        description: result.error || '알 수 없는 오류가 발생했습니다.',
+      });
     }
   };
 
@@ -120,6 +171,57 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
 
   return (
     <div className="p-6 space-y-6 relative">
+      {/* Buyer Analyze Button */}
+      <div className="flex justify-end">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={handleAnalyzeClick}
+                disabled={isAnalyzing}
+                className="flex items-center gap-2"
+              >
+                {isAnalyzing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileSearch className="w-4 h-4" />
+                )}
+                {isAnalyzing ? '분석 중...' : 'Buyer Analyze'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>AI가 바이어를 웹 검색하여 우리 회사 제품과의 적합성을 분석합니다.</p>
+              <p className="text-muted-foreground">분석 결과는 영업활동일지에 자동 기록됩니다.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Latest Analysis Result Display */}
+      {latestAnalysis && (
+        <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Brain className="w-4 h-4 text-primary" />
+              이번 분석 결과
+            </h4>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLatestAnalysis(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              닫기
+            </Button>
+          </div>
+          <ScrollArea className="h-[300px]">
+            <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed pr-4">
+              {latestAnalysis}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
       {/* Top Section: KPIs, Manager, Funnel Progress */}
       <div className="grid grid-cols-3 gap-6">
         {/* KPI Summary */}
@@ -338,6 +440,67 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
           </div>
         )}
       </div>
+
+      {/* AI Analysis History Section */}
+      {analysisLogs.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Brain className="w-5 h-5 text-primary" />
+            AI 분석 기록 (누적)
+            <span className="text-sm font-normal text-muted-foreground">({analysisLogs.length})</span>
+          </h3>
+          <div className="space-y-3">
+            {analysisLogs.map((log) => {
+              const isExpanded = expandedLogId === log.id;
+              const contentPreview = log.content?.substring(0, 150) || '';
+              
+              return (
+                <div
+                  key={log.id}
+                  className="bg-card border border-border rounded-lg p-4 transition-all hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary">
+                      <FileSearch className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-foreground truncate">{log.title}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                          className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+                        >
+                          {isExpanded ? (
+                            <>접기 <ChevronUp className="w-4 h-4" /></>
+                          ) : (
+                            <>자세히 보기 <ChevronDown className="w-4 h-4" /></>
+                          )}
+                        </Button>
+                      </div>
+                      {!isExpanded ? (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {contentPreview}...
+                        </p>
+                      ) : (
+                        <ScrollArea className="h-[400px] mt-2">
+                          <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed pr-4">
+                            {log.content}
+                          </div>
+                        </ScrollArea>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {format(new Date(log.occurred_at), 'yyyy년 M월 d일 a h:mm', { locale: ko })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Email Logs Section */}
       {emailLogs.length > 0 && (
