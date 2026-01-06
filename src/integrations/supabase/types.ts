@@ -748,7 +748,9 @@ export type Database = {
           created_at: string
           credit_cost: number
           id: string
+          model: string | null
           product_name: string | null
+          report_json: Json | null
           survey_id: string | null
           target_regions: string[] | null
           user_id: string
@@ -758,7 +760,9 @@ export type Database = {
           created_at?: string
           credit_cost?: number
           id?: string
+          model?: string | null
           product_name?: string | null
+          report_json?: Json | null
           survey_id?: string | null
           target_regions?: string[] | null
           user_id: string
@@ -768,7 +772,9 @@ export type Database = {
           created_at?: string
           credit_cost?: number
           id?: string
+          model?: string | null
           product_name?: string | null
+          report_json?: Json | null
           survey_id?: string | null
           target_regions?: string[] | null
           user_id?: string
