@@ -110,20 +110,25 @@ Deno.serve(async (req) => {
     }
 
     // Exchange code for token with Nylas
+    // Nylas v3 requires Basic auth header with client_id:client_secret
     const redirectUri = body.redirect_uri || `${req.headers.get('origin')}/email/callback`;
+    
+    // Create Basic auth credentials
+    const basicAuth = btoa(`${clientId}:${clientSecret}`);
+    
+    console.log('Attempting token exchange with redirect_uri:', redirectUri);
     
     const tokenResponse = await fetch('https://api.us.nylas.com/v3/connect/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`,
       },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
+      body: new URLSearchParams({
         code: code,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
-      }),
+      }).toString(),
     });
 
     if (!tokenResponse.ok) {
