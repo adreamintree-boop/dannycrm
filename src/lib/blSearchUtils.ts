@@ -1,15 +1,25 @@
 import { SearchFilter } from '@/data/blMockData';
 import { SearchCategory } from '@/components/bl-search/BLSearchStrip';
 
-// Simple hash function for generating fingerprints
-function simpleHash(str: string): string {
-  let hash = 0;
+// Better hash function for generating fingerprints with much lower collision rate
+// Uses FNV-1a algorithm with 64-bit simulation for better distribution
+function betterHash(str: string): string {
+  // FNV-1a 32-bit + additional mixing for better distribution
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    h1 ^= char;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= char;
+    h2 = Math.imul(h2, 0x811c9dc5);
   }
-  return Math.abs(hash).toString(36);
+  
+  // Combine both hashes for a longer, more unique result
+  const hash1 = (h1 >>> 0).toString(36);
+  const hash2 = (h2 >>> 0).toString(36);
+  return `${hash1}${hash2}`;
 }
 
 // Normalize string for consistent hashing
@@ -27,27 +37,39 @@ function normalizeNumber(value: number | null | undefined): string {
  * This ensures the same row always gets the same fingerprint regardless of
  * when or how it's fetched.
  * 
- * Format: sha1(date + '|' + exporter + '|' + importer + '|' + hs_code + '|' + product + '|' + value_usd)
+ * CRITICAL: Uses id (if available) plus all key fields to ensure uniqueness.
+ * The id field from Excel is the most reliable unique identifier.
  */
 export function generateRowFingerprint(row: {
+  id?: string;
   date: string;
   exporter: string;
   importer: string;
   hsCode: string;
   productName: string;
+  quantity?: string;
+  weight?: string;
   valueUSD: number;
+  originCountry?: string;
+  destinationCountry?: string;
 }): string {
+  // Use id as primary identifier if available, otherwise combine multiple fields
   const parts = [
+    normalize(row.id || ''), // Primary unique identifier from Excel
     normalize(row.date),
     normalize(row.exporter),
     normalize(row.importer),
     normalize(row.hsCode),
     normalize(row.productName),
+    normalize(row.quantity || ''),
+    normalize(row.weight || ''),
     normalizeNumber(row.valueUSD),
+    normalize(row.originCountry || ''),
+    normalize(row.destinationCountry || ''),
   ];
   
   const input = parts.join('|');
-  return `bf_${simpleHash(input)}`;
+  return `bf_${betterHash(input)}`;
 }
 
 /**
@@ -113,7 +135,7 @@ export function generateQueryHash(params: {
   ];
   
   const input = parts.join('|');
-  return `qh_${simpleHash(input)}`;
+  return `qh_${betterHash(input)}`;
 }
 
 /**
