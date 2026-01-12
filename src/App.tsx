@@ -13,6 +13,7 @@ import MyProfile from "./pages/MyProfile";
 import OnboardingSurvey from "./pages/OnboardingSurvey";
 import StrategyResult from "./pages/StrategyResult";
 import Email from "./pages/Email";
+import EmailCallback from "./pages/EmailCallback";
 import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -74,6 +75,11 @@ const App = () => (
               <Route path="/strategy" element={
                 <ProtectedRoute>
                   <StrategyResult />
+                </ProtectedRoute>
+              } />
+              <Route path="/email/callback" element={
+                <ProtectedRoute>
+                  <EmailCallback />
                 </ProtectedRoute>
               } />
               <Route path="/email/*" element={

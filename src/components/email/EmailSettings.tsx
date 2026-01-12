@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Mail, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, CheckCircle, XCircle, Loader2, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -18,11 +16,6 @@ export default function EmailSettings() {
   const [emailAccount, setEmailAccount] = useState<NylasEmailAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
-  
-  // Form state for manual connection
-  const [grantId, setGrantId] = useState('');
-  const [emailAddress, setEmailAddress] = useState('');
-  const [provider, setProvider] = useState('google');
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -37,11 +30,11 @@ export default function EmailSettings() {
     }
   }, [user, getEmailAccount]);
 
-  const handleConnect = async () => {
-    if (!user || !grantId.trim() || !emailAddress.trim()) {
+  const handleConnectOAuth = async () => {
+    if (!user) {
       toast({
         title: '오류',
-        description: 'Grant ID와 이메일 주소를 입력해주세요.',
+        description: '로그인이 필요합니다.',
         variant: 'destructive',
       });
       return;
@@ -49,49 +42,31 @@ export default function EmailSettings() {
 
     setConnecting(true);
     try {
-      // First, delete any existing record for this user
-      await supabase
-        .from('email_accounts')
-        .delete()
-        .eq('user_id', user.id);
-
-      // Then insert new record
-      const { error } = await supabase
-        .from('email_accounts')
-        .insert({
-          user_id: user.id,
-          grant_id: grantId.trim(),
-          email_address: emailAddress.trim(),
-          provider: provider,
-          status: 'connected',
-        });
-
-      if (error) {
-        // Handle duplicate grant_id error
-        if (error.code === '23505' && error.message.includes('grant_id')) {
-          throw new Error('이 Grant ID는 이미 다른 계정에서 사용 중입니다. Nylas Dashboard에서 새 Grant를 생성해주세요.');
-        }
-        throw error;
-      }
-
-      toast({
-        title: '연동 완료',
-        description: '이메일 계정이 연동되었습니다.',
+      // Call the OAuth start edge function
+      const { data, error } = await supabase.functions.invoke('nylas-oauth-start', {
+        body: {
+          redirect_uri: `${window.location.origin}/email/callback`,
+        },
       });
 
-      // Refresh account status
-      const account = await getEmailAccount();
-      setEmailAccount(account);
-      setGrantId('');
-      setEmailAddress('');
+      if (error) {
+        console.error('OAuth start error:', error);
+        throw new Error(error.message || 'OAuth 시작에 실패했습니다.');
+      }
+
+      if (data?.auth_url) {
+        // Redirect to Nylas OAuth
+        window.location.href = data.auth_url;
+      } else {
+        throw new Error('OAuth URL을 받지 못했습니다.');
+      }
     } catch (err: unknown) {
-      console.error('Connection error:', err);
+      console.error('OAuth error:', err);
       toast({
         title: '연동 실패',
         description: err instanceof Error ? err.message : '이메일 연동에 실패했습니다.',
         variant: 'destructive',
       });
-    } finally {
       setConnecting(false);
     }
   };
@@ -190,74 +165,45 @@ export default function EmailSettings() {
             <CardHeader>
               <CardTitle>이메일 계정 연동</CardTitle>
               <CardDescription>
-                Nylas Grant ID를 입력하여 이메일 계정을 연동합니다.
+                Google, Microsoft 등의 이메일 계정을 OAuth로 안전하게 연동합니다.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <div className="flex gap-2">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800 dark:text-amber-200">
-                    <p className="font-medium">Nylas 연동 안내</p>
+                  <Mail className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-800 dark:text-blue-200">
+                    <p className="font-medium">안전한 OAuth 연동</p>
                     <p className="mt-1">
-                      Nylas Dashboard에서 Grant ID를 확인한 후 아래에 입력해주세요.
-                      Grant ID는 이메일 계정 인증 후 발급됩니다.
+                      버튼을 클릭하면 이메일 제공자(Google, Microsoft 등)의 로그인 페이지로 이동합니다.
+                      비밀번호는 저장되지 않으며 안전하게 연동됩니다.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="email">이메일 주소</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your-email@gmail.com"
-                    value={emailAddress}
-                    onChange={(e) => setEmailAddress(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="grantId">Nylas Grant ID</Label>
-                  <Input
-                    id="grantId"
-                    placeholder="your-grant-id-here"
-                    value={grantId}
-                    onChange={(e) => setGrantId(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="provider">이메일 제공자</Label>
-                  <select
-                    id="provider"
-                    value={provider}
-                    onChange={(e) => setProvider(e.target.value)}
-                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="google">Google (Gmail)</option>
-                    <option value="microsoft">Microsoft (Outlook)</option>
-                    <option value="imap">IMAP (기타)</option>
-                  </select>
-                </div>
-              </div>
-
               <Button
-                onClick={handleConnect}
-                disabled={connecting || !grantId.trim() || !emailAddress.trim()}
+                onClick={handleConnectOAuth}
+                disabled={connecting}
                 className="w-full"
+                size="lg"
               >
                 {connecting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    연동 중...
+                    연결 중...
                   </>
                 ) : (
-                  '이메일 연동하기'
+                  <>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    이메일 연동하기 (OAuth)
+                  </>
                 )}
               </Button>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Gmail, Outlook 등 주요 이메일 서비스를 지원합니다.
+              </p>
             </CardContent>
           </Card>
         )}
