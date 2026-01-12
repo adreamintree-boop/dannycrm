@@ -55,8 +55,20 @@ export default function EmailSettings() {
       }
 
       if (data?.auth_url) {
-        // Redirect to Nylas OAuth
-        window.location.href = data.auth_url;
+        // Use top-level redirect to avoid iframe restrictions
+        // Nylas OAuth pages block being embedded via X-Frame-Options/CSP
+        // Try window.top for iframe contexts, fallback to regular navigation
+        try {
+          if (window.top && window.top !== window) {
+            // We're in an iframe - try to redirect the top window
+            window.top.location.href = data.auth_url;
+          } else {
+            window.location.assign(data.auth_url);
+          }
+        } catch {
+          // Cross-origin iframe restriction - open in new window
+          window.open(data.auth_url, '_blank');
+        }
       } else {
         throw new Error('OAuth URL을 받지 못했습니다.');
       }
