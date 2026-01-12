@@ -111,12 +111,22 @@ Deno.serve(async (req) => {
 
     // Exchange code for token with Nylas
     // Nylas v3 requires Basic auth header with client_id:client_secret
-    const redirectUri = body.redirect_uri || `${req.headers.get('origin')}/email/callback`;
+    // CRITICAL: redirect_uri MUST match EXACTLY what was used in the auth URL
+    const redirectUri = body.redirect_uri;
+    
+    if (!redirectUri) {
+      console.error('Missing redirect_uri in request body');
+      return new Response(
+        JSON.stringify({ error: 'Missing redirect_uri parameter' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     // Create Basic auth credentials
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
     console.log('Attempting token exchange with redirect_uri:', redirectUri);
+    console.log('Using code:', code.substring(0, 10) + '...');
     
     const tokenResponse = await fetch('https://api.us.nylas.com/v3/connect/token', {
       method: 'POST',
@@ -133,9 +143,13 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
-      console.error('Nylas token exchange failed:', errorData);
+      console.error('Nylas token exchange failed:', tokenResponse.status, errorData);
       return new Response(
-        JSON.stringify({ error: 'Failed to exchange authorization code' }),
+        JSON.stringify({ 
+          error: 'Failed to exchange authorization code',
+          details: errorData,
+          status: tokenResponse.status,
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

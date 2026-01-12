@@ -42,10 +42,21 @@ export default function EmailSettings() {
 
     setConnecting(true);
     try {
+      // First, delete any existing pending/failed email account records
+      // to prevent duplicate key constraint errors
+      await supabase
+        .from('email_accounts')
+        .delete()
+        .eq('user_id', user.id);
+      
+      // Build the redirect_uri that will be used throughout the OAuth flow
+      const redirectUri = `${window.location.origin}/email/callback`;
+      console.log('Starting OAuth with redirect_uri:', redirectUri);
+      
       // Call the OAuth start edge function
       const { data, error } = await supabase.functions.invoke('nylas-oauth-start', {
         body: {
-          redirect_uri: `${window.location.origin}/email/callback`,
+          redirect_uri: redirectUri,
         },
       });
 
