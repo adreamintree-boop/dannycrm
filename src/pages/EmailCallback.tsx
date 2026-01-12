@@ -42,14 +42,23 @@ export default function EmailCallback() {
           return;
         }
 
+        // Build the exact redirect_uri that was used in the OAuth start
+        // This MUST match exactly what was used in nylas-oauth-start
+        const redirectUri = `${window.location.origin}/email/callback`;
+        
+        console.log('OAuth callback - exchanging code with redirect_uri:', redirectUri);
+        console.log('Code:', code?.substring(0, 10) + '...');
+
         // Call the callback edge function
         const { data, error: callbackError } = await supabase.functions.invoke('nylas-oauth-callback', {
           body: {
             code,
             state,
-            redirect_uri: `${window.location.origin}/email/callback`,
+            redirect_uri: redirectUri,
           },
         });
+
+        console.log('Callback response:', data);
 
         if (callbackError) {
           console.error('Callback error:', callbackError);
@@ -71,12 +80,13 @@ export default function EmailCallback() {
           }, 2000);
         } else {
           setStatus('error');
-          setErrorMessage(data?.error || '알 수 없는 오류가 발생했습니다.');
+          const errorDetails = data?.details ? ` (${data.details})` : '';
+          setErrorMessage((data?.error || '알 수 없는 오류가 발생했습니다.') + errorDetails);
         }
       } catch (err) {
         console.error('Callback processing error:', err);
         setStatus('error');
-        setErrorMessage('이메일 연동 처리 중 오류가 발생했습니다.');
+        setErrorMessage(err instanceof Error ? err.message : '이메일 연동 처리 중 오류가 발생했습니다.');
       }
     };
 
