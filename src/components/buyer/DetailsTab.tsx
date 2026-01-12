@@ -109,12 +109,21 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     setFormData({ ...formData, contacts: updatedContacts });
   };
 
-  const handleSave = () => {
-    updateBuyer(buyer.id, formData);
-    toast({
-      title: '저장 완료',
-      description: '바이어 정보가 업데이트되었습니다.',
-    });
+  const handleSave = async () => {
+    try {
+      await updateBuyer(buyer.id, formData);
+      toast({
+        title: '저장 완료',
+        description: '바이어 정보가 업데이트되었습니다.',
+      });
+    } catch (error) {
+      console.error('Error saving buyer:', error);
+      toast({
+        variant: 'destructive',
+        title: '저장 실패',
+        description: '바이어 정보를 저장하지 못했습니다. 다시 시도해주세요.',
+      });
+    }
   };
 
   const handleEnrichClick = async () => {

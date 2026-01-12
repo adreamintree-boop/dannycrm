@@ -362,12 +362,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!user?.id) return;
     
     const dbUpdates: Record<string, unknown> = {};
-    if (updates.name) dbUpdates.company_name = updates.name;
-    if (updates.country) dbUpdates.country = updates.country;
-    if (updates.region) dbUpdates.region = updates.region;
-    if (updates.status) dbUpdates.stage = updates.status;
+    
+    // Basic fields
+    if (updates.name !== undefined) dbUpdates.company_name = updates.name;
+    if (updates.country !== undefined) dbUpdates.country = updates.country;
+    if (updates.region !== undefined) dbUpdates.region = updates.region;
+    if (updates.status !== undefined) dbUpdates.stage = updates.status;
     if (updates.activityCount !== undefined) dbUpdates.activity_count = updates.activityCount;
     
+    // Company detail fields - map from Buyer type to database column names
+    if (updates.websiteUrl !== undefined) dbUpdates.website = updates.websiteUrl;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.phone !== undefined) dbUpdates.company_phone = updates.phone;
+    if (updates.email !== undefined) dbUpdates.company_email = updates.email;
+    if (updates.facebookUrl !== undefined) dbUpdates.facebook_url = updates.facebookUrl;
+    if (updates.linkedinUrl !== undefined) dbUpdates.linkedin_url = updates.linkedinUrl;
+    if (updates.youtubeUrl !== undefined) dbUpdates.youtube_url = updates.youtubeUrl;
+    
+    // Only make DB call if there are actual updates
     if (Object.keys(dbUpdates).length > 0) {
       const { error } = await supabase
         .from('crm_buyers')
@@ -377,10 +389,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       if (error) {
         console.error('Error updating buyer:', error);
-        return;
+        throw new Error('Failed to save buyer information');
       }
     }
     
+    // Update local state
     setBuyers(prev => prev.map(b => b.id === buyerId ? { ...b, ...updates } : b));
   };
 
