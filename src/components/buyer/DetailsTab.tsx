@@ -20,15 +20,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { toast } from '@/hooks/use-toast';
-import { useBuyerEnrichment } from '@/hooks/useBuyerEnrichment';
 import { useCreditsContext } from '@/context/CreditsContext';
-import EnrichmentReviewModal from './EnrichmentReviewModal';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthContext } from '@/context/AuthContext';
 import { 
   loadCountryData, 
-  getCountries, 
-  isCountryDataLoaded, 
   findCountry, 
-  getFlagEmoji,
   getRegion,
   Country
 } from '@/data/countryData';
@@ -37,37 +34,32 @@ interface DetailsTabProps {
   buyer: Buyer;
 }
 
-interface EnrichedData {
-  country?: string;
-  address?: string;
-  website?: string;
-  phone?: string;
-  email?: string;
-  facebook_url?: string;
-  linkedin_url?: string;
-  youtube_url?: string;
-  notes?: string;
-  confidence?: {
-    address?: number;
-    website?: number;
-    phone?: number;
-    email?: number;
-    facebook_url?: number;
-    linkedin_url?: number;
-  };
+interface EnrichmentOutput {
+  website_url: string | null;
+  facebook_url: string | null;
+  linkedin_url: string | null;
+  youtube_url: string | null;
+  address: string | null;
+  email_address: string | null;
+  phone_number_e164: string | null;
+  enrichment_summary: string;
+  confidence_level: "High" | "Medium" | "Low";
+  evidence: Record<string, unknown>;
 }
+
+const ENRICH_CREDIT_COST = 5;
 
 const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
   const { updateBuyer } = useApp();
-  const { balance } = useCreditsContext();
-  const { enrichBuyer, isLoading: isEnriching, canEnrich, creditCost } = useBuyerEnrichment();
+  const { session } = useAuthContext();
+  const { balance, refreshBalance } = useCreditsContext();
   
   const [formData, setFormData] = useState<Buyer>({ ...buyer });
   const [activeContactTab, setActiveContactTab] = useState<number>(0);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [enrichedData, setEnrichedData] = useState<EnrichedData | null>(null);
   const [countryList, setCountryList] = useState<Country[]>([]);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  const canEnrich = (balance ?? 0) >= ENRICH_CREDIT_COST;
 
   // Load country data on mount
   useEffect(() => {
@@ -79,7 +71,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
   // Auto-fill country from BL destination country if empty
   useEffect(() => {
     if (!formData.country && buyer.blDestinationCountry && countryList.length > 0) {
-      // Try to find matching country using the new matching function
       const matchedCountry = findCountry(buyer.blDestinationCountry);
       
       if (matchedCountry) {
@@ -90,14 +81,13 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
           region: getRegion(matchedCountry.code),
         }));
       } else {
-        // Just set the country name without code - flag for manual review
         setFormData(prev => ({
           ...prev,
           country: 'Unmapped',
         }));
       }
     }
-  }, [buyer.blDestinationCountry, formData.country]);
+  }, [buyer.blDestinationCountry, formData.country, countryList.length]);
 
   const handleInputChange = (field: keyof Buyer, value: string) => {
     setFormData({ ...formData, [field]: value });
@@ -126,7 +116,28 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     }
   };
 
+  // Get country calling code from country code
+  const getCountryCallingCode = (countryCode?: string): string | null => {
+    const callingCodes: Record<string, string> = {
+      'US': '+1', 'CA': '+1', 'KR': '+82', 'JP': '+81', 'CN': '+86',
+      'GB': '+44', 'DE': '+49', 'FR': '+33', 'AU': '+61', 'SG': '+65',
+      'MY': '+60', 'VN': '+84', 'TH': '+66', 'ID': '+62', 'PH': '+63',
+      'IN': '+91', 'AE': '+971', 'SA': '+966', 'HK': '+852', 'TW': '+886',
+      'NL': '+31', 'IT': '+39', 'ES': '+34', 'MX': '+52', 'BR': '+55',
+    };
+    return countryCode ? callingCodes[countryCode] || null : null;
+  };
+
   const handleEnrichClick = async () => {
+    if (!session?.access_token) {
+      toast({
+        variant: 'destructive',
+        title: '오류',
+        description: '로그인이 필요합니다.',
+      });
+      return;
+    }
+
     if (!canEnrich) {
       toast({
         variant: 'destructive',
@@ -136,109 +147,134 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
       return;
     }
 
-    const result = await enrichBuyer(
-      buyer.id,
-      formData.name,
-      formData.country || buyer.blDestinationCountry,
-      {
-        address: formData.address,
-        website: formData.websiteUrl,
-        phone: formData.phone,
-        email: formData.email,
-      },
-      {
-        website: formData.websiteUrl,
-        hs_code: buyer.blHsCode,
-        product_desc: buyer.blProductDesc,
-        sourceCountryFromBL: !!buyer.blDestinationCountry,
-      }
-    );
+    setIsEnriching(true);
 
-    if (result.success && result.enrichedData) {
-      const currentSnapshot = {
-        country: formData.country,
-        address: formData.address,
-        website: formData.websiteUrl,
-        phone: formData.phone,
-        email: formData.email,
-        facebook_url: formData.facebookUrl,
-        linkedin_url: formData.linkedinUrl,
-        youtube_url: formData.youtubeUrl,
+    try {
+      // Prepare input for the edge function
+      const input = {
+        buyer_id: buyer.id,
+        buyer_name: formData.name,
+        country: formData.country || buyer.blDestinationCountry || null,
+        country_calling_code: getCountryCallingCode(formData.countryCode),
+        existing: {
+          website_url: formData.websiteUrl || null,
+          facebook_url: formData.facebookUrl || null,
+          linkedin_url: formData.linkedinUrl || null,
+          youtube_url: formData.youtubeUrl || null,
+          address: formData.address || null,
+          email_address: formData.email || null,
+          phone_number_e164: formData.phone || null,
+        },
       };
 
-      const fieldsToCompare = ['country', 'address', 'website', 'phone', 'email', 'facebook_url', 'linkedin_url', 'youtube_url'] as const;
-      const hasAnyNewValue = fieldsToCompare.some((field) => {
-        const newValue = (result.enrichedData as any)?.[field];
-        const currentValue = (currentSnapshot as any)?.[field];
-        return typeof newValue === 'string' && newValue.trim() !== '' && newValue !== currentValue;
+      const { data, error } = await supabase.functions.invoke('buyer-enrichment', {
+        body: input,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
-      setEnrichedData(result.enrichedData);
-      setShowReviewModal(true);
-
-      toast({
-        title: hasAnyNewValue ? 'AI 추천 정보 조회 완료' : '새로운 정보를 찾지 못했습니다',
-        description: hasAnyNewValue
-          ? `${creditCost} 크레딧이 차감되었습니다.`
-          : '공개적으로 확인 가능한 정보가 부족해 추천 필드가 없었습니다.',
-      });
-    }
-  };
-
-  const handleApplyEnrichment = (selectedFields: string[]) => {
-    if (!enrichedData) return;
-
-    const updates: Partial<Buyer> = {};
-    
-    selectedFields.forEach(field => {
-      const value = enrichedData[field as keyof EnrichedData];
-      if (value && typeof value === 'string') {
-        switch (field) {
-          case 'country':
-            // Use the new country matching function
-            const matchedCountry = findCountry(value);
-            if (matchedCountry) {
-              updates.country = matchedCountry.nameKo;
-              updates.countryCode = matchedCountry.code;
-              updates.region = getRegion(matchedCountry.code);
-            } else {
-              updates.country = 'Unmapped';
-            }
-            break;
-          case 'address':
-            updates.address = value;
-            break;
-          case 'website':
-            updates.websiteUrl = value;
-            break;
-          case 'phone':
-            updates.phone = value;
-            break;
-          case 'email':
-            updates.email = value;
-            break;
-          case 'facebook_url':
-            updates.facebookUrl = value;
-            break;
-          case 'linkedin_url':
-            updates.linkedinUrl = value;
-            break;
-          case 'youtube_url':
-            updates.youtubeUrl = value;
-            break;
-        }
+      if (error) {
+        console.error('Enrichment error:', error);
+        toast({
+          variant: 'destructive',
+          title: '오류',
+          description: 'AI 추천 정보를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.',
+        });
+        return;
       }
-    });
 
-    if (Object.keys(updates).length > 0) {
-      setFormData(prev => ({ ...prev, ...updates }));
+      if (data?.error) {
+        console.error('Enrichment API error:', data.error);
+        toast({
+          variant: 'destructive',
+          title: '오류',
+          description: data.error,
+        });
+        return;
+      }
+
+      if (data?.success && data.data) {
+        const enriched: EnrichmentOutput = data.data;
+        
+        // Apply enriched data to form - ONLY update fields that have evidence
+        const updates: Partial<Buyer> = {};
+        let updatedFieldsCount = 0;
+
+        // Map each field from enrichment output to form data
+        // Only update if: (1) enriched value exists, (2) current value is empty or different
+
+        if (enriched.website_url && !formData.websiteUrl) {
+          updates.websiteUrl = enriched.website_url;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.address && !formData.address) {
+          updates.address = enriched.address;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.facebook_url && !formData.facebookUrl) {
+          updates.facebookUrl = enriched.facebook_url;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.linkedin_url && !formData.linkedinUrl) {
+          updates.linkedinUrl = enriched.linkedin_url;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.youtube_url && !formData.youtubeUrl) {
+          updates.youtubeUrl = enriched.youtube_url;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.email_address && !formData.email) {
+          updates.email = enriched.email_address;
+          updatedFieldsCount++;
+        }
+
+        if (enriched.phone_number_e164 && !formData.phone) {
+          updates.phone = enriched.phone_number_e164;
+          updatedFieldsCount++;
+        }
+
+        // Apply updates to form state - this is the FIX for fields staying empty
+        if (Object.keys(updates).length > 0) {
+          setFormData(prev => ({ ...prev, ...updates }));
+        }
+
+        // Refresh credit balance
+        await refreshBalance();
+
+        // Show toast with results
+        if (updatedFieldsCount > 0) {
+          toast({
+            title: 'AI로 정보 업데이트 완료',
+            description: `${updatedFieldsCount}개 필드가 자동으로 채워졌습니다. 저장하려면 'Save changes' 버튼을 눌러주세요. (신뢰도: ${enriched.confidence_level})`,
+          });
+        } else {
+          toast({
+            title: '새로운 정보를 찾지 못했습니다',
+            description: enriched.enrichment_summary?.slice(0, 100) || '공개적으로 확인 가능한 정보가 부족합니다.',
+          });
+        }
+
+        // Log the summary to console for debugging
+        console.log('Enrichment summary:', enriched.enrichment_summary);
+        console.log('Confidence level:', enriched.confidence_level);
+        console.log('Evidence:', enriched.evidence);
+      }
+    } catch (err) {
+      console.error('Enrichment exception:', err);
       toast({
-        title: '정보 적용 완료',
-        description: `${selectedFields.length}개 필드가 업데이트되었습니다. 저장하려면 'Save changes' 버튼을 눌러주세요.`,
+        variant: 'destructive',
+        title: '오류',
+        description: 'AI 추천 정보를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.',
       });
+    } finally {
+      setIsEnriching(false);
     }
-
-    setEnrichedData(null);
   };
 
   const selectedCountry = countryList.find(c => c.code === formData.countryCode);
@@ -251,7 +287,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
     <div className="p-6">
       {/* AI Buttons Row */}
       <div className="flex justify-end gap-3 mb-4">
-
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -270,7 +305,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             </TooltipTrigger>
             <TooltipContent>
               <p>웹에서 공개 정보를 기반으로 주소/웹사이트/연락처 등을 제안합니다.</p>
-              <p className="text-muted-foreground">실행 시 {creditCost} credit 차감 (보유: {balance})</p>
+              <p className="text-muted-foreground">실행 시 {ENRICH_CREDIT_COST} credit 차감 (보유: {balance})</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -345,7 +380,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
                 구글맵 기준 바이어 소재지 및 주소 <span className="text-destructive">*</span>
               </label>
               <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address)}`}
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address || '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-primary hover:underline flex items-center gap-1"
@@ -355,7 +390,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               </a>
             </div>
             <Input
-              value={formData.address}
+              value={formData.address || ''}
               onChange={(e) => handleInputChange('address', e.target.value)}
               className="mt-1"
             />
@@ -366,7 +401,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               웹사이트 주소 <span className="text-destructive">*</span>
             </label>
             <Input
-              value={formData.websiteUrl}
+              value={formData.websiteUrl || ''}
               onChange={(e) => handleInputChange('websiteUrl', e.target.value)}
               className="mt-1"
             />
@@ -392,7 +427,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
               </Select>
               <span className="flex items-center px-3 bg-muted rounded-md text-sm">$</span>
               <Input
-                value={formData.revenue}
+                value={formData.revenue || ''}
                 onChange={(e) => handleInputChange('revenue', e.target.value)}
                 placeholder="ex) 1,000M"
                 className="flex-1"
@@ -403,7 +438,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
           <div>
             <label className="text-sm font-medium text-foreground">주요품목</label>
             <Textarea
-              value={formData.mainProducts}
+              value={formData.mainProducts || ''}
               onChange={(e) => handleInputChange('mainProducts', e.target.value)}
               className="mt-1"
               rows={3}
@@ -419,7 +454,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <div>
               <label className="text-sm font-medium text-primary">회사 연락처</label>
               <Input
-                value={formData.phone}
+                value={formData.phone || ''}
                 onChange={(e) => handleInputChange('phone', e.target.value)}
                 className="mt-1"
               />
@@ -429,7 +464,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <div>
               <label className="text-sm font-medium text-primary">회사 이메일</label>
               <Input
-                value={formData.email}
+                value={formData.email || ''}
                 onChange={(e) => handleInputChange('email', e.target.value)}
                 className="mt-1"
               />
@@ -445,7 +480,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <div>
               <label className="text-sm font-medium text-foreground">회사 페이스북 URL</label>
               <Textarea
-                value={formData.facebookUrl}
+                value={formData.facebookUrl || ''}
                 onChange={(e) => handleInputChange('facebookUrl', e.target.value)}
                 className="mt-1"
                 rows={3}
@@ -454,7 +489,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <div>
               <label className="text-sm font-medium text-foreground">회사 링크드인 URL</label>
               <Textarea
-                value={formData.linkedinUrl}
+                value={formData.linkedinUrl || ''}
                 onChange={(e) => handleInputChange('linkedinUrl', e.target.value)}
                 className="mt-1"
                 rows={3}
@@ -463,7 +498,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
             <div>
               <label className="text-sm font-medium text-foreground">회사 유튜브 URL</label>
               <Textarea
-                value={formData.youtubeUrl}
+                value={formData.youtubeUrl || ''}
                 onChange={(e) => handleInputChange('youtubeUrl', e.target.value)}
                 className="mt-1"
                 rows={3}
@@ -611,29 +646,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ buyer }) => {
           Save changes
         </Button>
       </div>
-
-      {/* Enrichment Review Modal */}
-      {enrichedData && (
-        <EnrichmentReviewModal
-          isOpen={showReviewModal}
-          onClose={() => {
-            setShowReviewModal(false);
-            setEnrichedData(null);
-          }}
-          enrichedData={enrichedData}
-          currentData={{
-            country: formData.country,
-            address: formData.address,
-            website: formData.websiteUrl,
-            phone: formData.phone,
-            email: formData.email,
-            facebook_url: formData.facebookUrl,
-            linkedin_url: formData.linkedinUrl,
-            youtube_url: formData.youtubeUrl,
-          }}
-          onApply={handleApplyEnrichment}
-        />
-      )}
     </div>
   );
 };
