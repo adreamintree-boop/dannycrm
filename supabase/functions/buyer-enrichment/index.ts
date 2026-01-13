@@ -355,10 +355,10 @@ interface EnrichmentOutput {
 }
 
 async function callGrokForEnrichment(input: EnrichmentInput): Promise<EnrichmentOutput> {
-  const GROK_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  const GROK_API_KEY = Deno.env.get("TaaS_CRM_Data_Enrichment_Test_Grok");
 
   if (!GROK_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("TaaS_CRM_Data_Enrichment_Test_Grok is not configured");
   }
 
   // Build user message with input data
