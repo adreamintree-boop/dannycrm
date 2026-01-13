@@ -10,6 +10,7 @@ import { useNylasEmailContext } from '@/context/NylasEmailContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 import {
   Command,
   CommandEmpty,
@@ -108,16 +109,51 @@ export default function EmailCompose() {
     fetchBuyers();
   }, [user]);
 
+  // Handle buyerId and to query params for prefilling
   useEffect(() => {
-    const replyTo = searchParams.get('replyTo');
-    const forwardFrom = searchParams.get('forward');
-    
-    // Check for buyer context from URL params
+    const buyerIdParam = searchParams.get('buyerId');
+    const toParam = searchParams.get('to');
+
+    // If buyerId is provided, find the buyer in the list and select them
+    if (buyerIdParam && buyers.length > 0) {
+      const foundBuyer = buyers.find(b => b.id === buyerIdParam);
+      if (foundBuyer) {
+        setSelectedBuyer(foundBuyer);
+        setBuyerLocked(true);
+        
+        // If to param is provided, use it; otherwise fetch buyer's email
+        if (toParam) {
+          // Simple email validation
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (emailRegex.test(toParam)) {
+            setTo(toParam);
+          } else {
+            toast({
+              variant: 'destructive',
+              title: '잘못된 이메일 형식',
+              description: '이메일 주소 형식이 올바르지 않습니다.',
+            });
+          }
+        }
+      } else {
+        // Buyer not found in the list
+        toast({
+          variant: 'destructive',
+          title: 'Buyer not found',
+          description: '해당 바이어를 찾을 수 없습니다.',
+        });
+      }
+    }
+  }, [buyers, searchParams]);
+
+  // Handle legacy buyerName/buyerStage params (for backward compatibility)
+  useEffect(() => {
     const buyerIdParam = searchParams.get('buyerId');
     const buyerNameParam = searchParams.get('buyerName');
     const buyerStageParam = searchParams.get('buyerStage');
     
-    if (buyerIdParam && buyerNameParam) {
+    // Only use legacy params if buyers list hasn't loaded the buyer
+    if (buyerIdParam && buyerNameParam && !selectedBuyer) {
       setSelectedBuyer({
         id: buyerIdParam,
         company_name: buyerNameParam,
@@ -126,6 +162,11 @@ export default function EmailCompose() {
       });
       setBuyerLocked(true);
     }
+  }, [searchParams, selectedBuyer]);
+
+  useEffect(() => {
+    const replyTo = searchParams.get('replyTo');
+    const forwardFrom = searchParams.get('forward');
 
     const loadOriginal = async (id: string, isForward: boolean) => {
       if (useNylas) {
