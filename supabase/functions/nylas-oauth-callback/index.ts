@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     
     if (!jwt) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ ok: false, step: 'auth', error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -45,18 +45,31 @@ Deno.serve(async (req) => {
     const userId = getUserIdFromJwt(jwt);
     if (!userId) {
       return new Response(
-        JSON.stringify({ error: 'Invalid token' }),
+        JSON.stringify({ ok: false, step: 'auth', error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Get request body
     const body = await req.json();
-    const { code, state } = body;
+    const { code, state, redirect_uri: redirectUri } = body;
+
+    // Debug logging
+    console.log('OAuth Callback - Received code:', code ? code.substring(0, 10) + '...' : 'MISSING');
+    console.log('OAuth Callback - Received state:', state ? 'present' : 'MISSING');
+    console.log('OAuth Callback - Received redirect_uri:', redirectUri || 'MISSING');
 
     if (!code) {
       return new Response(
-        JSON.stringify({ error: 'Missing authorization code' }),
+        JSON.stringify({ ok: false, step: 'params', error: 'Missing authorization code' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!redirectUri) {
+      console.error('redirect_uri not provided in request body');
+      return new Response(
+        JSON.stringify({ ok: false, step: 'params', error: 'Missing redirect_uri parameter' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -64,7 +77,7 @@ Deno.serve(async (req) => {
     // Validate state
     if (!state) {
       return new Response(
-        JSON.stringify({ error: 'Missing state parameter' }),
+        JSON.stringify({ ok: false, step: 'params', error: 'Missing state parameter' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -75,15 +88,16 @@ Deno.serve(async (req) => {
       stateData = JSON.parse(atob(state));
     } catch {
       return new Response(
-        JSON.stringify({ error: 'Invalid state parameter' }),
+        JSON.stringify({ ok: false, step: 'state', error: 'Invalid state parameter' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Verify user_id matches
     if (stateData.user_id !== userId) {
+      console.error('State user_id mismatch:', stateData.user_id, 'vs', userId);
       return new Response(
-        JSON.stringify({ error: 'State validation failed - user mismatch' }),
+        JSON.stringify({ ok: false, step: 'state', error: 'State validation failed - user mismatch' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -91,8 +105,9 @@ Deno.serve(async (req) => {
     // Check timestamp (expire after 10 minutes)
     const stateAge = Date.now() - stateData.timestamp;
     if (stateAge > 10 * 60 * 1000) {
+      console.error('State expired, age:', stateAge, 'ms');
       return new Response(
-        JSON.stringify({ error: 'State expired - please try again' }),
+        JSON.stringify({ ok: false, step: 'state', error: 'State expired - please try again' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -100,35 +115,29 @@ Deno.serve(async (req) => {
     // Get Nylas credentials
     const clientId = Deno.env.get('NYLAS_CLIENT_ID');
     const clientSecret = Deno.env.get('NYLAS_CLIENT_SECRET');
-    const nylasApiKey = Deno.env.get('TaaS_CRM_Email_Nylas_Test');
+    const nylasApiBase = Deno.env.get('NYLAS_API_BASE') || 'https://api.us.nylas.com';
+
+    // Debug logging (safe)
+    console.log('OAuth Callback - Using client_id:', clientId ? clientId.substring(0, 6) + '...' : 'NOT SET');
+    console.log('OAuth Callback - Using Nylas base URL:', nylasApiBase);
+    console.log('OAuth Callback - Using redirect_uri:', redirectUri);
 
     if (!clientId || !clientSecret) {
+      console.error('Nylas credentials not configured');
       return new Response(
-        JSON.stringify({ error: 'Nylas credentials not configured' }),
+        JSON.stringify({ ok: false, step: 'config', error: 'Nylas credentials not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Exchange code for token with Nylas
-    // Nylas v3 requires Basic auth header with client_id:client_secret
-    // CRITICAL: redirect_uri MUST match EXACTLY what was used in the auth URL
-    const redirectUri = body.redirect_uri;
-    
-    if (!redirectUri) {
-      console.error('Missing redirect_uri in request body');
-      return new Response(
-        JSON.stringify({ error: 'Missing redirect_uri parameter' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
     // Create Basic auth credentials
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
-    console.log('Attempting token exchange with redirect_uri:', redirectUri);
-    console.log('Using code:', code.substring(0, 10) + '...');
+    // Exchange code for token with Nylas
+    const tokenUrl = `${nylasApiBase}/v3/connect/token`;
+    console.log('OAuth Callback - Token exchange URL:', tokenUrl);
     
-    const tokenResponse = await fetch('https://api.us.nylas.com/v3/connect/token', {
+    const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -141,21 +150,35 @@ Deno.serve(async (req) => {
       }).toString(),
     });
 
+    const responseText = await tokenResponse.text();
+    console.log('OAuth Callback - Token exchange response status:', tokenResponse.status);
+
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.text();
-      console.error('Nylas token exchange failed:', tokenResponse.status, errorData);
+      console.error('Nylas token exchange failed:', tokenResponse.status, responseText);
+      
+      // Parse error for better debugging
+      let errorDetails = responseText;
+      try {
+        const errorJson = JSON.parse(responseText);
+        errorDetails = errorJson.error_description || errorJson.error || responseText;
+      } catch {
+        // Keep raw response
+      }
+      
       return new Response(
         JSON.stringify({ 
+          ok: false,
+          step: 'token_exchange',
           error: 'Failed to exchange authorization code',
-          details: errorData,
-          status: tokenResponse.status,
+          nylas_status: tokenResponse.status,
+          nylas_error: errorDetails,
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const tokenData = await tokenResponse.json();
-    console.log('Token exchange response:', JSON.stringify(tokenData, null, 2));
+    const tokenData = JSON.parse(responseText);
+    console.log('OAuth Callback - Token exchange successful');
 
     // Extract grant_id and email from response
     const grantId = tokenData.grant_id;
@@ -165,10 +188,12 @@ Deno.serve(async (req) => {
     if (!grantId) {
       console.error('No grant_id in response:', tokenData);
       return new Response(
-        JSON.stringify({ error: 'No grant ID received from Nylas' }),
+        JSON.stringify({ ok: false, step: 'token_response', error: 'No grant ID received from Nylas' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('OAuth Callback - Grant ID received, storing in database');
 
     // Store the grant in database
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -195,13 +220,16 @@ Deno.serve(async (req) => {
     if (insertError) {
       console.error('Error storing grant:', insertError);
       return new Response(
-        JSON.stringify({ error: 'Failed to store email connection' }),
+        JSON.stringify({ ok: false, step: 'db_insert', error: 'Failed to store email connection' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log('OAuth Callback - Email account stored successfully');
+
     return new Response(
       JSON.stringify({ 
+        ok: true,
         success: true,
         email: email,
         provider: provider,
@@ -215,7 +243,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('OAuth callback error:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ ok: false, step: 'exception', error: 'Internal server error', details: String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
