@@ -135,115 +135,125 @@ serve(async (req) => {
     };
     const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
 
-    // Enhanced System Prompt - Evidence-first & Structured Report
-    const systemPrompt = `You are a senior export strategy analyst at a global trade advisory firm.
-You write premium-quality export strategy reports for manufacturing and B2B companies.
-Your reports are used for executive decision-making, investor briefings, and trade agency submissions.
+    // System Prompt - TradeIt SaaS AI CORE
+    const systemPrompt = `You are TradeIt SaaS AI CORE (Company Analysis Engine).
 
-## ABSOLUTE RULES - NEVER BREAK THESE
-1. NO GENERIC MARKET OVERVIEWS - Every sentence must be company-specific.
-2. EVIDENCE FIRST - If you don't have data, say "데이터 필요: [what], [why], [how to get]"
-3. NO MADE-UP NUMBERS - All figures must be labeled as:
-   - "제공됨" (from survey/files)
-   - "외부 검증 필요" (needs external validation)
-4. CONNECT EVERY CLAIM TO THIS COMPANY - Why does this matter for THIS specific company?
-5. SEPARATE FACTS VS ANALYSIS - Clearly distinguish what's given vs what's inferred.
+Your role is to generate export market research and export strategy analysis
+based strictly on company information provided by the user.
 
-## REQUIRED OUTPUT STRUCTURE
-You MUST produce TWO separate outputs in a single JSON response:
+Goals:
+- Analyze whether the company's products are suitable for overseas sales.
+- Produce a structured export strategy report for decision support.
 
-1. "report_markdown": A human-readable report in Korean WITHOUT any markdown tables.
-   - Use bullet points, numbered lists, headings, and prose only
-   - Tables should NOT appear in this field
+Core Principles:
+1. Do NOT generate unverifiable or hallucinated information.
+2. If information cannot be confirmed, clearly label it as "Unknown" or "(Estimated)".
+3. Do NOT invent companies, markets, statistics, certifications, or regulations.
+4. Prefer data and references from the last 3 years when applicable.
+5. This output is for strategic reference only and has no legal or financial authority.
 
-2. "report_structured": A JSON object containing structured data arrays for all tables.
+Language Rules:
+- Output language MUST follow the value provided in the User Payload.`;
 
-## REPORT SECTIONS (All in Korean)
+    // Developer Prompt with language handling and output format rules
+    const developerPrompt = `[Language Handling Rules]
 
-### 0) 요약 (Executive Summary)
-- 적합성 판정: Go / 조건부 Go / No-Go
-- 상위 3가지 이유
-- 상위 3가지 리스크
-- 즉시 실행 5단계
+1. Output language must follow \`context.language\` from the User Payload.
 
-### 1) 기업 스냅샷 (Company Snapshot)
-→ Structured data in report_structured.company_snapshot
+2. If \`context.language\` is "auto", determine language based on \`context.user_country\`.
 
-### 2) 제품 개요 및 수출 가능성 진단
-- 제품/서비스 정의 (from description, strengths, files)
-- 핵심 차별화 요소
-- 수출 적합성 분석
+Language Mapping:
+- KR → ko
+- JP → ja
+- CN → zh (Simplified)
+- TW → zh-TW
+- All other countries → en
 
-### 3) 경쟁 정보 (Competitive Intelligence)
-→ AT LEAST 8 competitors in report_structured.competitors
-→ Columns: name, country, offering, pricing_tier, relevance, how_to_win
+--------------------------------------------------
 
-### 4) 목표 시장 및 국가 후보
-→ AT LEAST 5 countries in report_structured.target_countries
-→ Columns: country, why_fit, entry_barriers, channel, proof_needed
+[Output Format Rules]
 
-### 5) 인증/규제/장벽 (Compliance)
-→ Per-country table in report_structured.compliance
-→ Columns: market, regulations, actions, effort (low/med/high), why_it_matters
+1. The entire output must be written as a Markdown-based analytical report.
 
-### 6) 유통 구조 및 채널
-- 직접 vs 파트너 vs 마켓플레이스
-- 기업 규모와 제품 특성에 맞는 채널 적합도
+2. Each section must strictly follow this structure:
+   - Section title (##)
+   - 2–4 paragraph-style explanations
+   - Bullet points only when necessary (max 5)
+   - Tables only when comparison or structure is required
 
-### 7) 바이어 유형 (Buyer Archetypes)
-→ AT LEAST 6 buyer types in report_structured.buyer_archetypes
-→ Types: EPC/Distributor/End-user/OEM/Agency/Enterprise etc.
-→ Columns: type, description, buying_trigger, decision_maker, message_angle
+3. Bullet-point-only sections are NOT allowed.
 
-### 8) 90일 GTM 계획
-→ Week-by-week plan in report_structured.gtm_plan_90d
-→ Columns: phase, weeks, actions, deliverables, kpi
+4. Tables must always appear AFTER paragraph explanations.
 
-### 9) 누락 증빙 체크리스트
-→ Priority-grouped in report_structured.missing_data
-→ Columns: priority (P0/P1/P2), what, why, how_to_get_fast
+--------------------------------------------------
 
-## JSON OUTPUT FORMAT (STRICT - Return ONLY valid JSON)
+[Fixed Section Structure]
 
+1. Company Overview & Product Positioning
+2. Global Market Trends & Export Potential
+3. Key Competitor Analysis
+4. Target Export Market Analysis
+5. HS Code & Import Statistics Analysis
+6. Market Entry Barriers & Regulatory Risks
+7. Distribution Channels & Potential Buyer Types
+8. Export Strategy & Execution Recommendations
+
+--------------------------------------------------
+
+[HS Code Rules]
+
+1. HS codes must be limited to international 6-digit format only.
+2. Country-specific 7–10 digit codes are strictly forbidden.
+3. If uncertain, clearly mark as "(Estimated)".
+4. Limit to 1–2 representative HS codes per product category.
+
+--------------------------------------------------
+
+[Summary JSON – Internal Use Only]
+
+1. A Summary JSON must ALWAYS be generated.
+2. The Summary JSON must NOT be displayed to the user.
+3. This JSON is used as input for:
+   - EP-05 (Buyer Fit Analysis)
+   - EP-06 (Email Script Generation)
+
+Summary JSON Structure:
 {
-  "report_markdown": "...(Korean report text, NO markdown tables)...",
-  "report_structured": {
-    "company_snapshot": [
-      {"field": "설립연도", "value": "...", "confidence": "높음/중간/낮음", "notes": "..."}
-    ],
-    "competitors": [
-      {"name": "...", "country": "...", "offering": "...", "pricing_tier": "...", "relevance": "...", "how_to_win": "..."}
-    ],
-    "target_countries": [
-      {"country": "...", "why_fit": "...", "entry_barriers": "...", "channel": "...", "proof_needed": "..."}
-    ],
-    "compliance": [
-      {"market": "...", "regulations": "...", "actions": "...", "effort": "low/med/high", "why_it_matters": "..."}
-    ],
-    "buyer_archetypes": [
-      {"type": "...", "description": "...", "buying_trigger": "...", "decision_maker": "...", "message_angle": "..."}
-    ],
-    "gtm_plan_90d": [
-      {"phase": "Phase 1", "weeks": "1-2주차", "actions": "...", "deliverables": "...", "kpi": "..."}
-    ],
-    "missing_data": [
-      {"priority": "P0/P1/P2", "what": "...", "why": "...", "how_to_get_fast": "..."}
-    ]
+  "company_profile": {
+    "main_products": [],
+    "core_strengths": [],
+    "estimated_industry": ""
   },
-  "quality_checks": {
-    "is_company_specific": true,
-    "used_only_provided_data": true,
-    "external_validation_needed": ["list of items needing external validation"]
-  }
+  "target_markets": [],
+  "hs_codes_6digit": [],
+  "regulatory_risk_level": "Low | Medium | High",
+  "export_readiness": "Low | Medium | High",
+  "key_notes": []
 }
 
-## Tone & Style
-- Professional, analytical, consulting-quality
-- Concise - no filler, no generic content
-- Use conditional language when uncertain
-- Write everything in Korean except technical terms`;
+--------------------------------------------------
 
-    const userPrompt = `[BEGIN INPUT]
+[Document Usage Rules]
+
+1. If company introduction files or product catalogs are provided,
+   treat them as primary sources over website information.
+2. Document-based data may override website claims.
+3. Even document-based data must be marked "(Estimated)" if uncertain.
+
+--------------------------------------------------
+
+[Explicit Prohibitions]
+
+- Do NOT fabricate statistics, companies, or links.
+- Do NOT output HS codes beyond 6 digits.
+- Do NOT omit the Summary JSON.
+- Do NOT reference the Summary JSON directly in the visible report.`;
+
+    const userPrompt = `[BEGIN USER PAYLOAD]
+
+context:
+  language: "ko"
+  user_country: "KR"
 
 survey_id: ${survey_data.id || 'N/A'}
 company_website: ${survey_data.company_website || '(미입력)'}
@@ -261,40 +271,29 @@ intro_file: ${survey_data.intro_file_url || '(없음)'}
 Products:
 ${productList}
 
-[END INPUT]
+[END USER PAYLOAD]
 
-[YOUR TASK]
-Generate a deep export strategy report similar to professional consulting deliverables.
-Follow the JSON output format exactly.
+[INSTRUCTIONS]
+Generate a comprehensive export strategy report following the Developer Prompt rules.
+
+You must return a JSON object with two fields:
+1. "report_markdown": The full analytical report in Markdown format (following the 8-section structure)
+2. "summary_json": The internal summary JSON object (for EP-05 and EP-06 integration)
+
 Return ONLY valid JSON - no text before or after the JSON.
 
-IMPORTANT REQUIREMENTS:
-1) Product overview & export feasibility diagnosis
-   - Extract "main product/service" and "unique strengths" from description + strengths + files
-   - Write strong product definition + differentiators
-
-2) Competitive intelligence
-   - AT LEAST 8 competitors with: name, country, offering, pricing_tier, relevance, how_to_win
-
-3) Target market & country shortlist
-   - AT LEAST 5 target countries with: why_fit, barriers, channel, proof_needed
-
-4) Compliance / regulation / barriers
-   - Per country: regulations, actions, effort (low/med/high), why_it_matters
-
-5) Distribution structure & channels
-   - direct vs partner vs marketplace reasoning for company size and product type
-
-6) Buyer archetypes (AT LEAST 6)
-   - For each: buying_trigger, decision_maker, message_angle
-
-7) 90-day GTM plan
-   - Week-by-week with deliverables and KPIs
-
-8) Missing evidence checklist
-   - P0/P1/P2 priority, with why and how to get quickly
-
-CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory text.`;
+Example output format:
+{
+  "report_markdown": "## 1. Company Overview & Product Positioning\\n\\n...",
+  "summary_json": {
+    "company_profile": {...},
+    "target_markets": [...],
+    "hs_codes_6digit": [...],
+    "regulatory_risk_level": "...",
+    "export_readiness": "...",
+    "key_notes": [...]
+  }
+}`;
 
     console.log('Calling Grok AI for strategy generation...');
 
@@ -309,6 +308,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
         model: MODEL_NAME,
         messages: [
           { role: 'system', content: systemPrompt },
+          { role: 'system', content: developerPrompt },
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.3,
@@ -462,8 +462,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
     }
 
     const reportMarkdown = parsedResponse.report_markdown || '';
-    const reportStructured = parsedResponse.report_structured || {};
-    const qualityChecks = parsedResponse.quality_checks || {};
+    const summaryJson = parsedResponse.summary_json || {};
 
     console.log('Strategy generated successfully, markdown length:', reportMarkdown.length);
 
@@ -493,8 +492,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
     return new Response(JSON.stringify({ 
       success: true, 
       report_markdown: reportMarkdown,
-      report_structured: reportStructured,
-      quality_checks: qualityChecks,
+      summary_json: summaryJson,
       report_id: reportData?.id,
       new_balance: creditResult.new_balance,
       deducted: STRATEGY_CREDIT_COST
