@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Copy, Check, Sparkles, AlertCircle, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, Copy, Check, Sparkles, AlertCircle, Clock, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TopHeader from '@/components/layout/TopHeader';
@@ -9,55 +9,56 @@ import { useCreditsContext } from '@/context/CreditsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 
-interface ReportStructured {
-  company_snapshot?: Array<{ field: string; value: string; confidence: string; notes: string }>;
-  competitors?: Array<{ name: string; country: string; offering: string; pricing_tier: string; relevance: string; how_to_win: string }>;
-  target_countries?: Array<{ country: string; why_fit: string; entry_barriers: string; channel: string; proof_needed: string }>;
-  compliance?: Array<{ market: string; regulations: string; actions: string; effort: string; why_it_matters: string }>;
-  buyer_archetypes?: Array<{ type: string; description: string; buying_trigger: string; decision_maker: string; message_angle: string }>;
-  gtm_plan_90d?: Array<{ phase: string; weeks: string; actions: string; deliverables: string; kpi: string }>;
-  missing_data?: Array<{ priority: string; what: string; why: string; how_to_get_fast: string }>;
+interface SectionData {
+  status: 'pending' | 'generating' | 'completed' | 'error';
+  content: string | null;
+  title: string;
 }
 
 interface StrategyReport {
   id: string;
   content: string;
+  status: 'pending' | 'generating' | 'completed' | 'error';
+  summary_markdown: string | null;
+  sections: Record<string, SectionData>;
   report_json?: {
     report_markdown?: string;
-    report_structured?: ReportStructured;
-    quality_checks?: {
-      is_company_specific?: boolean;
-      used_only_provided_data?: boolean;
-      external_validation_needed?: string[];
-    };
+    summary_json?: any;
   };
   product_name: string | null;
   target_regions: string[] | null;
   created_at: string;
 }
 
+const SECTION_TITLES = [
+  '기업 개요 및 제품 포지셔닝',
+  '글로벌 시장 동향 및 수출 가능성 진단',
+  '주요 경쟁사 및 대체재 분석',
+  '목표 수출 시장 및 진입 논리',
+  'HS CODE 및 수입 구조 분석',
+  '국가별 진입 장벽 및 리스크 요인',
+  '유통 구조 및 잠재 바이어 유형',
+  '수출 전략 및 단계별 실행 제안'
+];
+
 const StrategyResult: React.FC = () => {
   const navigate = useNavigate();
   const { survey, isLoading: surveyLoading, hasSurvey } = useCompanySurvey();
   const { refreshBalance, balance } = useCreditsContext();
-  const [strategyContent, setStrategyContent] = useState<string>('');
-  const [structuredData, setStructuredData] = useState<ReportStructured | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedReports, setSavedReports] = useState<StrategyReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
+  
+  // Progressive generation state
+  const [currentReport, setCurrentReport] = useState<StrategyReport | null>(null);
+  const [sectionStatus, setSectionStatus] = useState<Record<number, 'pending' | 'generating' | 'completed' | 'error'>>({});
+  const [surveyContext, setSurveyContext] = useState<any>(null);
 
   // Fetch saved reports on mount
   useEffect(() => {
@@ -65,14 +66,15 @@ const StrategyResult: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('strategy_reports')
-          .select('id, content, report_json, product_name, target_regions, created_at')
+          .select('id, content, status, summary_markdown, sections, report_json, product_name, target_regions, created_at')
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Type assertion for report_json since the DB types may not be updated yet
         const typedData = (data || []).map(r => ({
           ...r,
+          status: r.status as StrategyReport['status'],
+          sections: (r.sections as unknown as Record<string, SectionData>) || {},
           report_json: r.report_json as StrategyReport['report_json']
         }));
 
@@ -81,8 +83,19 @@ const StrategyResult: React.FC = () => {
         // If there are reports, show the most recent one
         if (typedData.length > 0) {
           setSelectedReportId(typedData[0].id);
-          setStrategyContent(typedData[0].report_json?.report_markdown || typedData[0].content);
-          setStructuredData(typedData[0].report_json?.report_structured || null);
+          setCurrentReport(typedData[0]);
+          
+          // If report is still generating, resume polling
+          if (typedData[0].status === 'generating') {
+            // Set section statuses from saved data
+            const sections = typedData[0].sections || {};
+            const statuses: Record<number, 'pending' | 'generating' | 'completed' | 'error'> = {};
+            for (let i = 1; i <= 8; i++) {
+              const sec = sections[`section${i}`];
+              statuses[i] = sec?.status || 'pending';
+            }
+            setSectionStatus(statuses);
+          }
         }
       } catch (err) {
         console.error('Error fetching reports:', err);
@@ -92,6 +105,47 @@ const StrategyResult: React.FC = () => {
     };
 
     fetchReports();
+  }, []);
+
+  const generateSection = useCallback(async (reportId: string, sectionNumber: number, context: any) => {
+    setSectionStatus(prev => ({ ...prev, [sectionNumber]: 'generating' }));
+    
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-strategy-section', {
+        body: {
+          report_id: reportId,
+          section_number: sectionNumber,
+          survey_context: context
+        },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      setSectionStatus(prev => ({ ...prev, [sectionNumber]: 'completed' }));
+      
+      // Update current report sections
+      setCurrentReport(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sections: {
+            ...prev.sections,
+            [`section${sectionNumber}`]: {
+              status: 'completed',
+              content: data.section_content,
+              title: SECTION_TITLES[sectionNumber - 1]
+            }
+          }
+        };
+      });
+
+      return data;
+    } catch (err) {
+      console.error(`Error generating section ${sectionNumber}:`, err);
+      setSectionStatus(prev => ({ ...prev, [sectionNumber]: 'error' }));
+      return null;
+    }
   }, []);
 
   const handleGenerateStrategy = async () => {
@@ -106,11 +160,13 @@ const StrategyResult: React.FC = () => {
 
     setIsGenerating(true);
     setError(null);
+    setSectionStatus({});
 
     try {
       const requestId = crypto.randomUUID();
       
-      const { data, error: fnError } = await supabase.functions.invoke('generate-strategy', {
+      // Step 1: Generate summary and create report
+      const { data, error: fnError } = await supabase.functions.invoke('generate-strategy-summary', {
         body: {
           request_id: requestId,
           survey_data: {
@@ -131,11 +187,7 @@ const StrategyResult: React.FC = () => {
         },
       });
 
-      if (fnError) {
-        console.error('Strategy generation error:', fnError);
-        throw new Error(fnError.message || '시장조사 생성 중 오류가 발생했습니다.');
-      }
-
+      if (fnError) throw fnError;
       if (data?.error) {
         if (data.refunded) {
           toast({
@@ -147,34 +199,71 @@ const StrategyResult: React.FC = () => {
         throw new Error(data.error);
       }
 
-      // Handle new dual-output format
-      const markdown = data?.report_markdown || data?.strategy || '';
-      const structured = data?.report_structured || null;
+      const reportId = data.report_id;
+      const context = data.survey_context;
+      setSurveyContext(context);
 
-      setStrategyContent(markdown);
-      setStructuredData(structured);
-      setSelectedReportId(data.report_id || null);
+      // Initialize current report with summary
+      const initialReport: StrategyReport = {
+        id: reportId,
+        content: '',
+        status: 'generating',
+        summary_markdown: data.summary_markdown,
+        sections: {},
+        product_name: survey.products?.[0]?.product_name || null,
+        target_regions: survey.target_regions || null,
+        created_at: new Date().toISOString()
+      };
       
+      setCurrentReport(initialReport);
+      setSelectedReportId(reportId);
+
+      // Initialize all sections as pending
+      const initialStatuses: Record<number, 'pending' | 'generating' | 'completed' | 'error'> = {};
+      for (let i = 1; i <= 8; i++) {
+        initialStatuses[i] = 'pending';
+      }
+      setSectionStatus(initialStatuses);
+
+      await refreshBalance();
+      
+      toast({
+        title: '요약 생성 완료',
+        description: '섹션별 분석을 생성 중입니다...',
+      });
+
+      // Step 2: Generate sections sequentially (but show progress)
+      for (let i = 1; i <= 8; i++) {
+        await generateSection(reportId, i, context);
+      }
+
       // Refresh reports list
       const { data: newReports } = await supabase
         .from('strategy_reports')
-        .select('id, content, report_json, product_name, target_regions, created_at')
+        .select('id, content, status, summary_markdown, sections, report_json, product_name, target_regions, created_at')
         .order('created_at', { ascending: false });
       
       if (newReports) {
         const typedNewReports = newReports.map(r => ({
           ...r,
+          status: r.status as StrategyReport['status'],
+          sections: (r.sections as unknown as Record<string, SectionData>) || {},
           report_json: r.report_json as StrategyReport['report_json']
         }));
         setSavedReports(typedNewReports);
+        
+        // Update current report with final data
+        const finalReport = typedNewReports.find(r => r.id === reportId);
+        if (finalReport) {
+          setCurrentReport(finalReport);
+        }
       }
-      
-      await refreshBalance();
       
       toast({
         title: '시장조사 완료',
-        description: `10 크레딧이 차감되었습니다. (잔여: ${data.new_balance})`,
+        description: `10 크레딧이 차감되었습니다.`,
       });
+
     } catch (err) {
       console.error('Error generating strategy:', err);
       const errorMessage = err instanceof Error ? err.message : '시장조사 생성 중 오류가 발생했습니다.';
@@ -189,10 +278,23 @@ const StrategyResult: React.FC = () => {
     }
   };
 
+  const handleRetrySection = async (sectionNumber: number) => {
+    if (!currentReport || !surveyContext) return;
+    await generateSection(currentReport.id, sectionNumber, surveyContext);
+  };
+
   const handleSelectReport = (report: StrategyReport) => {
     setSelectedReportId(report.id);
-    setStrategyContent(report.report_json?.report_markdown || report.content);
-    setStructuredData(report.report_json?.report_structured || null);
+    setCurrentReport(report);
+    
+    // Set section statuses from saved data
+    const sections = report.sections || {};
+    const statuses: Record<number, 'pending' | 'generating' | 'completed' | 'error'> = {};
+    for (let i = 1; i <= 8; i++) {
+      const sec = sections[`section${i}`];
+      statuses[i] = sec?.status || (report.content ? 'completed' : 'pending');
+    }
+    setSectionStatus(statuses);
   };
 
   const handleDeleteReport = async (reportId: string, e: React.MouseEvent) => {
@@ -209,16 +311,13 @@ const StrategyResult: React.FC = () => {
       const updatedReports = savedReports.filter(r => r.id !== reportId);
       setSavedReports(updatedReports);
 
-      // If we deleted the currently selected report, select the next one
       if (selectedReportId === reportId) {
         if (updatedReports.length > 0) {
           setSelectedReportId(updatedReports[0].id);
-          setStrategyContent(updatedReports[0].report_json?.report_markdown || updatedReports[0].content);
-          setStructuredData(updatedReports[0].report_json?.report_structured || null);
+          setCurrentReport(updatedReports[0]);
         } else {
           setSelectedReportId(null);
-          setStrategyContent('');
-          setStructuredData(null);
+          setCurrentReport(null);
         }
       }
 
@@ -230,8 +329,18 @@ const StrategyResult: React.FC = () => {
   };
 
   const handleCopy = async () => {
+    if (!currentReport) return;
+    
+    let content = currentReport.summary_markdown || '';
+    for (let i = 1; i <= 8; i++) {
+      const sec = currentReport.sections?.[`section${i}`];
+      if (sec?.content) {
+        content += '\n\n' + sec.content;
+      }
+    }
+    
     try {
-      await navigator.clipboard.writeText(strategyContent);
+      await navigator.clipboard.writeText(content || currentReport.content);
       setCopied(true);
       toast({ title: '복사 완료', description: '클립보드에 복사되었습니다.' });
       setTimeout(() => setCopied(false), 2000);
@@ -240,7 +349,6 @@ const StrategyResult: React.FC = () => {
     }
   };
 
-  // Render markdown content without tables
   const renderMarkdown = (content: string) => {
     return content
       .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mb-4 text-foreground">$1</h1>')
@@ -288,26 +396,8 @@ const StrategyResult: React.FC = () => {
     );
   }
 
-  // Generating state
-  if (isGenerating) {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <TopHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">Grok AI 수출 적합성 분석 중...</h2>
-            <p className="text-muted-foreground">
-              잠시만 기다려주세요. 약 30초~1분 정도 소요됩니다.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // No reports yet - show initial state with generate button
-  if (savedReports.length === 0 && !strategyContent) {
+  if (savedReports.length === 0 && !currentReport) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <TopHeader />
@@ -325,14 +415,11 @@ const StrategyResult: React.FC = () => {
             </p>
             
             <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
-              <h3 className="font-medium text-foreground mb-2">분석 내용</h3>
+              <h3 className="font-medium text-foreground mb-2">분석 내용 (8개 섹션)</h3>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• 제품-시장 적합성 평가</li>
-                <li>• 경쟁사 분석 (8개 이상)</li>
-                <li>• 목표 국가 후보 (5개국 이상)</li>
-                <li>• 인증/규제 장벽 분석</li>
-                <li>• 바이어 유형 분석 (6개 이상)</li>
-                <li>• 90일 GTM 계획</li>
+                {SECTION_TITLES.map((title, idx) => (
+                  <li key={idx}>• {title}</li>
+                ))}
               </ul>
             </div>
 
@@ -347,10 +434,20 @@ const StrategyResult: React.FC = () => {
               <Button 
                 size="lg" 
                 onClick={handleGenerateStrategy}
+                disabled={isGenerating}
                 className="w-full max-w-xs"
               >
-                <Sparkles className="w-5 h-5 mr-2" />
-                시장조사 시작하기
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    시장조사 시작하기
+                  </>
+                )}
               </Button>
               <p className="text-sm text-muted-foreground">
                 10 크레딧 소진 (보유: {balance ?? '...'})
@@ -370,7 +467,7 @@ const StrategyResult: React.FC = () => {
     );
   }
 
-  // Has reports - show list and content
+  // Has reports or generating - show list and content
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <TopHeader />
@@ -384,8 +481,17 @@ const StrategyResult: React.FC = () => {
               className="w-full"
               disabled={isGenerating}
             >
-              <Sparkles className="w-4 h-4 mr-2" />
-              새 시장조사 (10 크레딧)
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  생성 중...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  새 시장조사 (10 크레딧)
+                </>
+              )}
             </Button>
           </div>
           
@@ -404,9 +510,14 @@ const StrategyResult: React.FC = () => {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {report.product_name || '수출 시장조사'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {report.product_name || '수출 시장조사'}
+                        </p>
+                        {report.status === 'generating' && (
+                          <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                        )}
+                      </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" />
                         {format(new Date(report.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}
@@ -449,250 +560,114 @@ const StrategyResult: React.FC = () => {
                 <div>
                   <h1 className="text-2xl font-semibold text-foreground">수출 시장 적합성 분석 리포트</h1>
                   <p className="text-sm text-muted-foreground">
-                    {savedReports.find(r => r.id === selectedReportId)?.product_name || survey.products[0]?.product_name || 'Company'} - Grok AI 분석
+                    {currentReport?.product_name || survey.products?.[0]?.product_name || 'Company'} - Grok AI 분석
                   </p>
                 </div>
               </div>
-              <Button variant="outline" onClick={handleCopy}>
+              <Button variant="outline" onClick={handleCopy} disabled={!currentReport}>
                 {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                 {copied ? 'Copied!' : 'Copy'}
               </Button>
             </div>
 
-            {/* Content */}
-            {strategyContent ? (
-              <div className="space-y-8">
-                {/* Markdown content */}
-                <article className="prose prose-sm max-w-none dark:prose-invert">
-                  <div 
-                    className="bg-card border border-border rounded-lg p-8 shadow-sm"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(strategyContent) }}
-                  />
-                </article>
+            {/* Progressive Content */}
+            {currentReport ? (
+              <div className="space-y-6">
+                {/* Executive Summary */}
+                {currentReport.summary_markdown ? (
+                  <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+                    <div 
+                      className="prose prose-sm max-w-none dark:prose-invert"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(currentReport.summary_markdown) }}
+                    />
+                  </div>
+                ) : currentReport.status === 'generating' ? (
+                  <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+                    <Skeleton className="h-6 w-48 mb-4" />
+                    <Skeleton className="h-4 w-full mb-2" />
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-5/6" />
+                  </div>
+                ) : null}
 
-                {/* Structured Tables */}
-                {structuredData && (
-                  <div className="space-y-8">
-                    {/* Company Snapshot Table */}
-                    {structuredData.company_snapshot && structuredData.company_snapshot.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">기업 스냅샷</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>항목</TableHead>
-                              <TableHead>값</TableHead>
-                              <TableHead>신뢰도</TableHead>
-                              <TableHead>비고</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {structuredData.company_snapshot.map((row, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="font-medium">{row.field}</TableCell>
-                                <TableCell>{row.value}</TableCell>
-                                <TableCell>{row.confidence}</TableCell>
-                                <TableCell className="text-muted-foreground">{row.notes}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Competitors Table */}
-                    {structuredData.competitors && structuredData.competitors.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">경쟁 정보 ({structuredData.competitors.length}개 기업)</h3>
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>기업명</TableHead>
-                                <TableHead>국가</TableHead>
-                                <TableHead>제품/서비스</TableHead>
-                                <TableHead>가격대</TableHead>
-                                <TableHead>관련성</TableHead>
-                                <TableHead>차별화 전략</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {structuredData.competitors.map((row, idx) => (
-                                <TableRow key={idx}>
-                                  <TableCell className="font-medium">{row.name}</TableCell>
-                                  <TableCell>{row.country}</TableCell>
-                                  <TableCell>{row.offering}</TableCell>
-                                  <TableCell>{row.pricing_tier}</TableCell>
-                                  <TableCell>{row.relevance}</TableCell>
-                                  <TableCell className="text-muted-foreground">{row.how_to_win}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                {/* Section Cards */}
+                {SECTION_TITLES.map((title, idx) => {
+                  const sectionNum = idx + 1;
+                  const section = currentReport.sections?.[`section${sectionNum}`];
+                  const status = sectionStatus[sectionNum] || section?.status || 'pending';
+                  
+                  return (
+                    <div 
+                      key={sectionNum}
+                      className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+                    >
+                      {/* Section header */}
+                      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+                        <h3 className="font-semibold text-foreground">
+                          {sectionNum}. {title}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {status === 'generating' && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              생성 중...
+                            </div>
+                          )}
+                          {status === 'completed' && (
+                            <Check className="w-4 h-4 text-green-500" />
+                          )}
+                          {status === 'error' && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleRetrySection(sectionNum)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-1" />
+                              재시도
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    )}
-
-                    {/* Target Countries Table */}
-                    {structuredData.target_countries && structuredData.target_countries.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">목표 국가 후보 ({structuredData.target_countries.length}개국)</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>국가</TableHead>
-                              <TableHead>적합 이유</TableHead>
-                              <TableHead>진입 장벽</TableHead>
-                              <TableHead>권장 채널</TableHead>
-                              <TableHead>필요 증빙</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {structuredData.target_countries.map((row, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="font-medium">{row.country}</TableCell>
-                                <TableCell>{row.why_fit}</TableCell>
-                                <TableCell>{row.entry_barriers}</TableCell>
-                                <TableCell>{row.channel}</TableCell>
-                                <TableCell className="text-muted-foreground">{row.proof_needed}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                      
+                      {/* Section content */}
+                      <div className="p-6">
+                        {status === 'completed' && section?.content ? (
+                          <div 
+                            className="prose prose-sm max-w-none dark:prose-invert"
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(section.content) }}
+                          />
+                        ) : status === 'generating' ? (
+                          <div className="space-y-3">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-5/6" />
+                            <Skeleton className="h-4 w-4/5" />
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-4 w-5/6" />
+                          </div>
+                        ) : status === 'error' ? (
+                          <div className="flex items-center gap-2 text-destructive">
+                            <AlertCircle className="w-4 h-4" />
+                            <span className="text-sm">섹션 생성에 실패했습니다. 재시도 버튼을 클릭하세요.</span>
+                          </div>
+                        ) : (
+                          <div className="text-muted-foreground text-sm">
+                            대기 중...
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  );
+                })}
 
-                    {/* Compliance Table */}
-                    {structuredData.compliance && structuredData.compliance.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">인증/규제/장벽</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>시장</TableHead>
-                              <TableHead>규제 사항</TableHead>
-                              <TableHead>필요 조치</TableHead>
-                              <TableHead>노력 수준</TableHead>
-                              <TableHead>중요 이유</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {structuredData.compliance.map((row, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="font-medium">{row.market}</TableCell>
-                                <TableCell>{row.regulations}</TableCell>
-                                <TableCell>{row.actions}</TableCell>
-                                <TableCell>
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    row.effort === 'low' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                                    row.effort === 'med' || row.effort === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                                    'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                  }`}>
-                                    {row.effort}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">{row.why_it_matters}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Buyer Archetypes Table */}
-                    {structuredData.buyer_archetypes && structuredData.buyer_archetypes.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">바이어 유형 ({structuredData.buyer_archetypes.length}개 유형)</h3>
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>유형</TableHead>
-                                <TableHead>설명</TableHead>
-                                <TableHead>구매 트리거</TableHead>
-                                <TableHead>의사결정자</TableHead>
-                                <TableHead>메시지 전략</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {structuredData.buyer_archetypes.map((row, idx) => (
-                                <TableRow key={idx}>
-                                  <TableCell className="font-medium">{row.type}</TableCell>
-                                  <TableCell>{row.description}</TableCell>
-                                  <TableCell>{row.buying_trigger}</TableCell>
-                                  <TableCell>{row.decision_maker}</TableCell>
-                                  <TableCell className="text-muted-foreground">{row.message_angle}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* GTM Plan Table */}
-                    {structuredData.gtm_plan_90d && structuredData.gtm_plan_90d.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">90일 GTM 계획</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>단계</TableHead>
-                              <TableHead>기간</TableHead>
-                              <TableHead>활동</TableHead>
-                              <TableHead>산출물</TableHead>
-                              <TableHead>KPI</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {structuredData.gtm_plan_90d.map((row, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="font-medium">{row.phase}</TableCell>
-                                <TableCell>{row.weeks}</TableCell>
-                                <TableCell>{row.actions}</TableCell>
-                                <TableCell>{row.deliverables}</TableCell>
-                                <TableCell className="text-muted-foreground">{row.kpi}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Missing Data Table */}
-                    {structuredData.missing_data && structuredData.missing_data.length > 0 && (
-                      <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                        <h3 className="text-lg font-semibold text-foreground mb-4">누락 증빙 체크리스트</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>우선순위</TableHead>
-                              <TableHead>필요 정보</TableHead>
-                              <TableHead>필요 이유</TableHead>
-                              <TableHead>빠른 수집 방법</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {structuredData.missing_data.map((row, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell>
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    row.priority === 'P0' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                                    row.priority === 'P1' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                                    'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                  }`}>
-                                    {row.priority}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="font-medium">{row.what}</TableCell>
-                                <TableCell>{row.why}</TableCell>
-                                <TableCell className="text-muted-foreground">{row.how_to_get_fast}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
+                {/* Legacy content for old reports */}
+                {currentReport.content && !currentReport.sections?.section1?.content && (
+                  <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+                    <div 
+                      className="prose prose-sm max-w-none dark:prose-invert"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(currentReport.content) }}
+                    />
                   </div>
                 )}
               </div>
