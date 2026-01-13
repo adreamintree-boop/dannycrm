@@ -552,6 +552,47 @@ export type Database = {
           },
         ]
       }
+      email_script_runs: {
+        Row: {
+          body: string
+          buyer_id: string | null
+          created_at: string
+          id: string
+          internal_json: Json
+          stage: string
+          subject_lines: Json
+          user_id: string
+        }
+        Insert: {
+          body: string
+          buyer_id?: string | null
+          created_at?: string
+          id?: string
+          internal_json?: Json
+          stage: string
+          subject_lines?: Json
+          user_id: string
+        }
+        Update: {
+          body?: string
+          buyer_id?: string | null
+          created_at?: string
+          id?: string
+          internal_json?: Json
+          stage?: string
+          subject_lines?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_script_runs_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_buyers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_threads: {
         Row: {
           created_at: string

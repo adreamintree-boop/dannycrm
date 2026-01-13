@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronUp, Send, Save, X, Building2, Lock } from 'lucide-react';
+import EmailScriptGenerator from './EmailScriptGenerator';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEmailContext, ComposeData } from '@/context/EmailContext';
 import { useNylasEmailContext } from '@/context/NylasEmailContext';
@@ -449,6 +450,20 @@ export default function EmailCompose() {
             />
           </div>
         </div>
+
+        {/* AI Email Script Generator */}
+        <EmailScriptGenerator
+          selectedBuyerId={selectedBuyer?.id || null}
+          onScriptGenerated={(generatedSubject, generatedBody) => {
+            if (generatedSubject) {
+              setSubject(generatedSubject);
+            }
+            if (generatedBody) {
+              // Prepend to existing body
+              setBody(prev => prev ? `${generatedBody}\n\n${prev}` : generatedBody);
+            }
+          }}
+        />
 
         <Textarea
           value={body}
