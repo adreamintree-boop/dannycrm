@@ -165,6 +165,53 @@ export type Database = {
         }
         Relationships: []
       }
+      buyer_enrichment_runs: {
+        Row: {
+          buyer_id: string | null
+          confidence_level: string | null
+          created_at: string
+          credit_cost: number
+          enrichment_summary: string | null
+          evidence: Json | null
+          id: string
+          input_json: Json
+          output_json: Json
+          user_id: string
+        }
+        Insert: {
+          buyer_id?: string | null
+          confidence_level?: string | null
+          created_at?: string
+          credit_cost?: number
+          enrichment_summary?: string | null
+          evidence?: Json | null
+          id?: string
+          input_json: Json
+          output_json: Json
+          user_id: string
+        }
+        Update: {
+          buyer_id?: string | null
+          confidence_level?: string | null
+          created_at?: string
+          credit_cost?: number
+          enrichment_summary?: string | null
+          evidence?: Json | null
+          id?: string
+          input_json?: Json
+          output_json?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_enrichment_runs_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_buyers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_products: {
         Row: {
           created_at: string
