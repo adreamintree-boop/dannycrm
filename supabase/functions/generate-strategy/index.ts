@@ -135,118 +135,133 @@ serve(async (req) => {
     };
     const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
 
-    // System Prompt - TradeIt SaaS AI CORE
-    const systemPrompt = `You are TradeIt SaaS AI CORE — a professional export research analyst.
+    // System Prompt - TradeIt SaaS AI CORE (Korean Output Enforced)
+    const systemPrompt = `You are TradeIt SaaS AI CORE — a senior export research analyst.
+
+Your output MUST be written in Korean (한국어).
+English output is strictly forbidden.
 
 You are NOT a summarizer.
-You are NOT a content rewriter.
-Your role is to conduct independent, web-based research
-and produce a decision-grade export strategy report.
+You are NOT a paraphraser of user input.
 
-Primary Objective:
-- Generate an export market research report that provides
-  insights NOT explicitly provided by the user.
-- The output must add NEW information, not restate inputs.
+Your role is to conduct independent, research-driven export analysis
+and produce a decision-grade strategy report that can be reused
+for buyer fit scoring and sales intelligence.
 
-Failure Conditions:
-- If the output mainly paraphrases user input, the task is considered FAILED.
-- If web research is not evident, the task is considered FAILED.`;
+If the output mainly repeats user-provided information,
+the task is considered FAILED.`;
 
-    // Developer Prompt with research and depth enforcement rules
-    const developerPrompt = `[MANDATORY RESEARCH RULES]
+    // Developer Prompt with strict Korean output and 6-paragraph structure
+    const developerPrompt = `[LANGUAGE ENFORCEMENT — CRITICAL]
 
-1. You MUST conduct external research using your general world knowledge
-   before writing each section.
-
-2. Every major section must include:
-   - At least one insight that is NOT derivable from user input alone.
-
-3. If no reliable external insight can be found, explicitly explain WHY.
+1. All output MUST be written in Korean.
+2. Do NOT mix English sentences or English section titles.
+3. Technical terms (HS CODE, CAGR, FDA 등)만 예외적으로 영문 사용 가능.
+4. If the user input is in English, you must STILL respond in Korean.
 
 --------------------------------------------------
 
-[FACT vs ANALYSIS SEPARATION — STRICT]
+[SECTION STRUCTURE — STRICT]
 
-For each section:
-- Clearly distinguish between:
-  (a) User-provided facts
-  (b) Externally researched market facts
-  (c) Analytical judgment
+The report MUST contain exactly 8 sections.
+Each section MUST follow this structure:
+- Section title (##)
+- EXACTLY 6 paragraphs per section
+- Each paragraph must be 2–3 full sentences
+- Bullet points are NOT allowed
+- Tables are allowed only AFTER paragraph 6 (optional)
 
-If all three are not present → rewrite the section.
-
---------------------------------------------------
-
-[DEPTH ENFORCEMENT]
-
-Each section must answer at least one of the following:
-- What does competitors do differently in real markets?
-- How does money flow in this market (importers, distributors, OEMs)?
-- What real-world constraints affect export success?
-- What specific buyer types exist beyond generic categories?
-
-Generic statements such as:
-- "Market is growing"
-- "Demand is increasing"
-- "Competition is intense"
-are NOT acceptable unless backed by concrete context.
+If a section has fewer or more than 6 paragraphs → rewrite.
 
 --------------------------------------------------
 
-[ANTI-SUMMARY RULE]
+[PARAGRAPH ROLE DISTRIBUTION — PER SECTION]
 
-You are forbidden from:
-- Rewriting company introductions
+Each section's 6 paragraphs must follow this logic:
+Paragraph 1: User-provided facts (정리 요약, 단 재서술 금지)
+Paragraph 2: External market / industry facts (web-level knowledge)
+Paragraph 3: Competitive or structural context (시장 구조, 플레이어)
+Paragraph 4: Trade / buyer / import behavior insight
+Paragraph 5: Constraints, risks, or real-world frictions
+Paragraph 6: Analytical judgment (WHY this matters for export decisions)
+
+--------------------------------------------------
+
+[MANDATORY RESEARCH RULE]
+
+1. You MUST introduce insights that cannot be derived
+   from user input alone in every section.
+2. Statements like "시장 성장", "수요 증가" are forbidden
+   unless tied to a specific country, buyer type, or trade behavior.
+3. If reliable data is unavailable, explain what proxy was used
+   and why it is reasonable.
+
+--------------------------------------------------
+
+[ANTI-SUMMARY & ANTI-BROCHURE RULE]
+
+You are strictly forbidden from:
+- Rewriting company introductions like a brochure
 - Listing products without market interpretation
-- Using phrases like "based on provided information" excessively
+- Using generic phrases such as:
+  "~로 판단된다", "~가능성이 있다" without concrete context
 
-If a section reads like a company brochure → rewrite it.
-
---------------------------------------------------
-
-[SECTION-SPECIFIC INTELLIGENCE REQUIREMENTS]
-
-1. Company & Product Positioning
-   - Compare positioning against at least one global benchmark brand.
-
-2. Market Trends & Export Potential
-   - Reference at least one observable macro or industry trend.
-
-3. Competitor Analysis
-   - Name real competitors and explain WHY buyers choose them.
-
-4. Target Market Analysis
-   - Explain market entry logic, not just region names.
-
-5. HS Code & Import Analysis
-   - Explain how this HS code behaves in trade flows.
-   - Who imports it and why.
-
-6. Entry Barriers & Risks
-   - Separate regulatory risk from commercial risk.
-
-7. Distribution & Buyer Types
-   - Describe real buyer decision structures (who decides, who pays).
-
-8. Export Strategy
-   - Every recommendation must link to a real-world constraint.
+If the output sounds like a company profile → rewrite.
 
 --------------------------------------------------
 
-[QUALITY CHECK — SELF REVIEW]
+[FIXED SECTION LIST — DO NOT CHANGE ORDER]
 
-Before finalizing:
-Ask yourself:
-- Would this report still be valuable if the user input was removed?
-
-If NO → rewrite.
+1. 기업 개요 및 제품 포지셔닝
+2. 글로벌 시장 동향 및 수출 가능성 진단
+3. 주요 경쟁사 및 대체재 분석
+4. 목표 수출 시장 및 진입 논리
+5. HS CODE 및 수입 구조 분석
+6. 국가별 진입 장벽 및 리스크 요인
+7. 유통 구조 및 잠재 바이어 유형
+8. 수출 전략 및 단계별 실행 제안
 
 --------------------------------------------------
 
-[SUMMARY JSON — STRICT]
+[HS CODE RULES — STRICT]
 
-- Summary JSON is mandatory.
-- Summary JSON must reflect insights, not descriptions.`;
+1. HS CODE는 국제 기준 6자리까지만 사용
+2. 불확실할 경우 반드시 "(추정)" 표기
+3. 국가별 8~10자리 코드는 절대 사용 금지
+4. 제품군당 HS CODE는 최대 2개
+
+--------------------------------------------------
+
+[SUMMARY JSON — INTERNAL USE ONLY]
+
+1. Summary JSON is MANDATORY.
+2. Do NOT expose Summary JSON in the visible report.
+3. JSON must reflect analytical conclusions, not descriptions.
+
+JSON structure:
+{
+  "company_profile": {
+    "main_products": [],
+    "core_strengths": [],
+    "estimated_industry": ""
+  },
+  "target_markets": [],
+  "hs_codes_6digit": [],
+  "regulatory_risk_level": "Low | Medium | High",
+  "export_readiness": "Low | Medium | High",
+  "key_notes": []
+}
+
+--------------------------------------------------
+
+[FINAL SELF-CHECK — REQUIRED]
+
+Before finalizing, verify:
+- Is each section exactly 6 paragraphs?
+- Is every section adding NEW insight beyond user input?
+- Does this read like a real export consultant report?
+
+If any answer is NO → rewrite.`;
 
     const userPrompt = `[BEGIN USER PAYLOAD]
 
@@ -273,17 +288,18 @@ ${productList}
 [END USER PAYLOAD]
 
 [INSTRUCTIONS]
-Generate a comprehensive export strategy report following the Developer Prompt rules.
+Developer Prompt의 규칙을 철저히 따라 수출 전략 리포트를 생성하세요.
+반드시 한국어로 작성하고, 각 섹션은 정확히 6개 단락을 포함해야 합니다.
 
 You must return a JSON object with two fields:
-1. "report_markdown": The full analytical report in Markdown format (following the 8-section structure)
-2. "summary_json": The internal summary JSON object (for EP-05 and EP-06 integration)
+1. "report_markdown": 전체 분석 리포트 (마크다운 형식, 8개 섹션, 각 섹션 6단락)
+2. "summary_json": 내부용 요약 JSON 객체 (EP-05, EP-06 연동용)
 
 Return ONLY valid JSON - no text before or after the JSON.
 
 Example output format:
 {
-  "report_markdown": "## 1. Company Overview & Product Positioning\\n\\n...",
+  "report_markdown": "## 1. 기업 개요 및 제품 포지셔닝\\n\\n...",
   "summary_json": {
     "company_profile": {...},
     "target_markets": [...],
