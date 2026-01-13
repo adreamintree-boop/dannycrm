@@ -72,6 +72,7 @@ export interface Activity {
 
 export interface MoveHistoryItem {
   id: number;
+  dbId?: string; // Database UUID for persistence
   projectId: string;
   category: 'funnel' | 'activity' | 'document';
   description: string;
