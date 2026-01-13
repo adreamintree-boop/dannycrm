@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User, Mail, ArrowUpRight, ArrowDownLeft, FileSearch, Loader2, ChevronDown, ChevronUp, Brain } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Plus, Trash2, FileText, User, Mail, ArrowUpRight, ArrowDownLeft, FileSearch, Loader2, ChevronDown, ChevronUp, Brain, Send } from 'lucide-react';
 import { Buyer, Activity, ActivityType, BuyerStatus } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ interface ActivityTabProps {
 }
 
 const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
+  const navigate = useNavigate();
   const { getBuyerActivities, deleteActivity } = useApp();
   const activities = getBuyerActivities(buyer.id);
   const { logs: activityLogs, loading: logsLoading, fetchLogsByBuyer } = useSalesActivityLogs();
@@ -169,16 +171,27 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
     return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
   };
 
+  const handleSendEmailClick = () => {
+    let url = `/email/compose?buyerId=${buyer.id}`;
+    // Use company_email or email if available
+    const buyerEmail = buyer.email;
+    if (buyerEmail && buyerEmail.trim()) {
+      url += `&to=${encodeURIComponent(buyerEmail.trim())}`;
+    }
+    navigate(url);
+  };
+
   return (
     <div className="p-6 space-y-6 relative">
-      {/* Buyer Analyze Button */}
-      <div className="flex justify-end">
+      {/* Buyer Analyze & Send Email Buttons */}
+      <div className="flex justify-end gap-2">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 onClick={handleAnalyzeClick}
                 disabled={isAnalyzing}
+                variant="outline"
                 className="flex items-center gap-2"
               >
                 {isAnalyzing ? (
@@ -195,6 +208,13 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ buyer, onOpenDrawer }) => {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        <Button
+          onClick={handleSendEmailClick}
+          className="flex items-center gap-2"
+        >
+          <Send className="w-4 h-4" />
+          Send Email
+        </Button>
       </div>
 
       {/* Latest Analysis Result Display */}
