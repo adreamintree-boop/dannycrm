@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Sparkles, ChevronDown, ChevronUp, Mail, MessageSquare, Reply } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -18,7 +16,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 
 interface EmailScriptGeneratorProps {
@@ -27,52 +24,23 @@ interface EmailScriptGeneratorProps {
 }
 
 type EmailStage = 'initial' | 'follow_up' | 'reply';
-type FollowUpGoal = 'nudge' | 'value_add' | 'clarification' | 'call_to_action' | 'exit_check';
-type ToneStage = 'first_follow_up' | 'second_follow_up' | 'third_follow_up' | 'exit_email';
-type ReplyStatus = 'no_reply' | 'positive' | 'neutral' | 'rejection';
-type OpenStatus = 'opened' | 'unopened' | 'unknown';
-type SilenceHypothesis = 'busy' | 'not_decision_maker' | 'low_priority' | 'unclear_value' | 'soft_reject';
 
-const stageLabels: Record<EmailStage, string> = {
-  initial: 'Initial (첫 컨택)',
-  follow_up: 'Follow-up (후속)',
-  reply: 'Reply (회신 응답)',
-};
-
-const followUpGoalLabels: Record<FollowUpGoal, string> = {
-  nudge: 'Nudge (재촉)',
-  value_add: 'Value Add (가치 추가)',
-  clarification: 'Clarification (명확화)',
-  call_to_action: 'Call to Action (행동 유도)',
-  exit_check: 'Exit Check (종료 확인)',
-};
-
-const toneStageLabels: Record<ToneStage, string> = {
-  first_follow_up: '1차 후속 (Polite + Light)',
-  second_follow_up: '2차 후속 (Helpful + Value)',
-  third_follow_up: '3차 후속 (Direct but Respectful)',
-  exit_email: 'Exit Email (Graceful Exit)',
-};
-
-const replyStatusLabels: Record<ReplyStatus, string> = {
-  no_reply: '무응답',
-  positive: '긍정적',
-  neutral: '중립적',
-  rejection: '거절',
-};
-
-const openStatusLabels: Record<OpenStatus, string> = {
-  opened: '열람함',
-  unopened: '미열람',
-  unknown: '알 수 없음',
-};
-
-const silenceHypothesisLabels: Record<SilenceHypothesis, string> = {
-  busy: '바쁨',
-  not_decision_maker: '의사결정권자 아님',
-  low_priority: '우선순위 낮음',
-  unclear_value: '가치 불명확',
-  soft_reject: '완곡한 거절',
+const stageConfig: Record<EmailStage, { label: string; icon: React.ReactNode; description: string }> = {
+  initial: {
+    label: 'Initial (첫 컨택)',
+    icon: <Mail className="w-4 h-4" />,
+    description: '바이어와의 첫 연락 이메일을 작성합니다.',
+  },
+  follow_up: {
+    label: 'Follow-up (후속)',
+    icon: <MessageSquare className="w-4 h-4" />,
+    description: 'AI가 이메일 히스토리를 분석하여 적절한 후속 이메일을 작성합니다.',
+  },
+  reply: {
+    label: 'Reply (회신 응답)',
+    icon: <Reply className="w-4 h-4" />,
+    description: 'AI가 바이어의 마지막 이메일에 대한 회신을 작성합니다.',
+  },
 };
 
 export default function EmailScriptGenerator({
@@ -81,29 +49,7 @@ export default function EmailScriptGenerator({
 }: EmailScriptGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
-  
-  // Stage selection
   const [emailStage, setEmailStage] = useState<EmailStage>('initial');
-  
-  // Follow-up specific fields
-  const [followUpGoal, setFollowUpGoal] = useState<FollowUpGoal>('nudge');
-  const [toneStage, setToneStage] = useState<ToneStage>('first_follow_up');
-  const [silenceHypothesis, setSilenceHypothesis] = useState<SilenceHypothesis[]>([]);
-  const [sentEmails, setSentEmails] = useState(0);
-  const [daysSinceLastEmail, setDaysSinceLastEmail] = useState(0);
-  const [replyStatus, setReplyStatus] = useState<ReplyStatus>('no_reply');
-  const [openStatus, setOpenStatus] = useState<OpenStatus>('unknown');
-  
-  // Reply specific fields
-  const [lastBuyerEmail, setLastBuyerEmail] = useState('');
-
-  const toggleSilenceHypothesis = (value: SilenceHypothesis) => {
-    setSilenceHypothesis(prev => 
-      prev.includes(value) 
-        ? prev.filter(v => v !== value)
-        : [...prev, value]
-    );
-  };
 
   const handleGenerate = async () => {
     if (!selectedBuyerId) {
@@ -118,31 +64,11 @@ export default function EmailScriptGenerator({
     setGenerating(true);
 
     try {
-      const payload: any = {
+      const payload = {
         buyer_id: selectedBuyerId,
         email_stage: emailStage,
+        auto_analyze: true, // Flag to tell edge function to auto-analyze email history
       };
-
-      if (emailStage === 'follow_up') {
-        payload.follow_up_goal = followUpGoal;
-        payload.tone_stage = toneStage;
-        payload.silence_hypothesis = silenceHypothesis;
-        payload.contact_status = {
-          sent_emails: sentEmails,
-          days_since_last_email: daysSinceLastEmail,
-          reply_status: replyStatus,
-          open_status: openStatus,
-        };
-        payload.tone_constraints = {
-          no_pressure: true,
-          no_salesy_language: true,
-          max_length: 120,
-        };
-      }
-
-      if (emailStage === 'reply' && lastBuyerEmail.trim()) {
-        payload.last_buyer_email = lastBuyerEmail;
-      }
 
       const { data, error } = await supabase.functions.invoke('ep06-email-script', {
         body: payload,
@@ -162,10 +88,19 @@ export default function EmailScriptGenerator({
 
       onScriptGenerated(subject, body);
 
-      toast({
-        title: '이메일 스크립트 생성 완료',
-        description: '제목과 본문이 자동으로 입력되었습니다.',
-      });
+      // Show analysis summary if available
+      const analysisInfo = data.email_history_analysis;
+      if (analysisInfo && (emailStage === 'follow_up' || emailStage === 'reply')) {
+        toast({
+          title: '이메일 스크립트 생성 완료',
+          description: `${analysisInfo.total_emails || 0}개의 이메일 히스토리를 분석하여 작성되었습니다.`,
+        });
+      } else {
+        toast({
+          title: '이메일 스크립트 생성 완료',
+          description: '제목과 본문이 자동으로 입력되었습니다.',
+        });
+      }
 
     } catch (error) {
       console.error('Email script generation error:', error);
@@ -178,6 +113,8 @@ export default function EmailScriptGenerator({
       setGenerating(false);
     }
   };
+
+  const selectedStageConfig = stageConfig[emailStage];
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -210,147 +147,55 @@ export default function EmailScriptGenerator({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(stageLabels).map(([value, label]) => (
+                  {Object.entries(stageConfig).map(([value, config]) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      <div className="flex items-center gap-2">
+                        {config.icon}
+                        <span>{config.label}</span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Follow-up specific fields */}
-            {emailStage === 'follow_up' && (
-              <div className="space-y-4 p-4 border border-border rounded-md bg-background">
-                <h4 className="font-medium text-sm">Follow-up 설정</h4>
-                
-                {/* Follow-up Goal */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">목적 (Goal)</Label>
-                    <Select value={followUpGoal} onValueChange={(v) => setFollowUpGoal(v as FollowUpGoal)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(followUpGoalLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Tone Stage */}
-                  <div className="space-y-2">
-                    <Label className="text-sm">톤 단계</Label>
-                    <Select value={toneStage} onValueChange={(v) => setToneStage(v as ToneStage)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(toneStageLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {/* Stage Description */}
+            <div className="p-3 bg-background border border-border rounded-md">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-primary/10 rounded-md text-primary">
+                  {selectedStageConfig.icon}
                 </div>
-
-                {/* Contact Status */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">발송한 이메일 수</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={sentEmails}
-                      onChange={(e) => setSentEmails(Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">마지막 이메일 후 일수</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={daysSinceLastEmail}
-                      onChange={(e) => setDaysSinceLastEmail(Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">응답 상태</Label>
-                    <Select value={replyStatus} onValueChange={(v) => setReplyStatus(v as ReplyStatus)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(replyStatusLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">열람 상태</Label>
-                    <Select value={openStatus} onValueChange={(v) => setOpenStatus(v as OpenStatus)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(openStatusLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Silence Hypothesis */}
-                <div className="space-y-2">
-                  <Label className="text-sm">침묵 가설 (복수 선택)</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(silenceHypothesisLabels).map(([value, label]) => (
-                      <div
-                        key={value}
-                        className="flex items-center gap-2"
-                      >
-                        <Checkbox
-                          id={`sh-${value}`}
-                          checked={silenceHypothesis.includes(value as SilenceHypothesis)}
-                          onCheckedChange={() => toggleSilenceHypothesis(value as SilenceHypothesis)}
-                        />
-                        <Label htmlFor={`sh-${value}`} className="text-sm font-normal cursor-pointer">
-                          {label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{selectedStageConfig.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedStageConfig.description}
+                  </p>
+                  
+                  {emailStage === 'follow_up' && (
+                    <div className="mt-2 p-2 bg-muted rounded text-xs text-muted-foreground">
+                      <p className="font-medium mb-1">AI가 자동으로 분석하는 항목:</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li>발송한 이메일 수 및 마지막 이메일 후 경과 일수</li>
+                        <li>바이어 응답 상태 (무응답/긍정적/중립적/거절)</li>
+                        <li>적절한 후속 목적 및 톤 선택</li>
+                        <li>침묵 가설 기반 접근 방향 결정</li>
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {emailStage === 'reply' && (
+                    <div className="mt-2 p-2 bg-muted rounded text-xs text-muted-foreground">
+                      <p className="font-medium mb-1">AI가 자동으로 분석하는 항목:</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li>바이어의 마지막 인바운드 이메일 내용</li>
+                        <li>이전 대화 맥락 및 히스토리</li>
+                        <li>바이어의 질문/요청사항에 대한 적절한 응답</li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-
-            {/* Reply specific fields */}
-            {emailStage === 'reply' && (
-              <div className="space-y-2">
-                <Label>바이어 마지막 이메일 내용 (선택)</Label>
-                <Textarea
-                  placeholder="바이어가 보낸 마지막 이메일 내용을 붙여넣으세요..."
-                  value={lastBuyerEmail}
-                  onChange={(e) => setLastBuyerEmail(e.target.value)}
-                  className="min-h-[100px]"
-                />
-              </div>
-            )}
+            </div>
 
             {/* Generate Button */}
             <Button
@@ -361,7 +206,7 @@ export default function EmailScriptGenerator({
               {generating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  생성 중...
+                  이메일 히스토리 분석 및 생성 중...
                 </>
               ) : (
                 <>
