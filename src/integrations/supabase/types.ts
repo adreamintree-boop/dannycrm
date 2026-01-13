@@ -576,6 +576,44 @@ export type Database = {
         }
         Relationships: []
       }
+      move_history: {
+        Row: {
+          author: string
+          category: string
+          created_at: string
+          description: string
+          id: string
+          project_id: string | null
+          user_id: string
+        }
+        Insert: {
+          author: string
+          category: string
+          created_at?: string
+          description: string
+          id?: string
+          project_id?: string | null
+          user_id: string
+        }
+        Update: {
+          author?: string
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          project_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "move_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           company_name: string | null

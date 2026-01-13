@@ -16,6 +16,17 @@ import {
   BuyerContact
 } from '@/data/mockData';
 
+// Database type for move_history
+interface DbMoveHistory {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  category: string;
+  description: string;
+  author: string;
+  created_at: string;
+}
+
 // Demo account identifier - apharm account gets seeded data
 const DEMO_ACCOUNT_EMAIL = 'apharm@apharm.com';
 
@@ -41,7 +52,7 @@ interface AppContextType extends AppState {
   updateBuyerStatus: (buyerId: string, status: BuyerStatus) => Promise<void>;
   toggleBookmark: (buyerId: string) => Promise<void>;
   deleteBuyer: (buyerId: string) => Promise<void>;
-  addActivity: (activity: Omit<Activity, 'id'>) => void;
+  addActivity: (activity: Omit<Activity, 'id'>) => Promise<void>;
   deleteActivity: (activityId: string) => void;
   getBuyerActivities: (buyerId: string) => Activity[];
   addDocument: (doc: Omit<Document, 'id' | 'createdAt'>) => void;
@@ -172,12 +183,90 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [user?.id]);
 
+  // Fetch move history from database
+  const fetchMoveHistory = useCallback(async () => {
+    if (!user?.id) return;
+    
+    const { data, error } = await supabase
+      .from('move_history')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching move history:', error);
+      return;
+    }
+    
+    if (data) {
+      const mappedHistory: MoveHistoryItem[] = (data as DbMoveHistory[]).map((h, index) => ({
+        id: index + 1, // Sequential ID for display
+        dbId: h.id, // Keep track of database ID
+        projectId: h.project_id || '',
+        category: h.category as MoveHistoryItem['category'],
+        description: h.description,
+        author: h.author,
+        date: new Date(h.created_at).toLocaleDateString('ko-KR', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit' 
+        }).replace(/\. /g, '.').replace('.', ''),
+      }));
+      setMoveHistory(mappedHistory);
+    }
+  }, [user?.id]);
+
+  // Helper function to add move history to database
+  const addMoveHistoryToDb = useCallback(async (
+    projectId: string | undefined,
+    category: 'funnel' | 'activity' | 'document',
+    description: string,
+    author: string
+  ) => {
+    if (!user?.id) return;
+    
+    const { data, error } = await supabase
+      .from('move_history')
+      .insert({
+        user_id: user.id,
+        project_id: projectId || null,
+        category,
+        description,
+        author,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error adding move history:', error);
+      return;
+    }
+    
+    if (data) {
+      const dbData = data as DbMoveHistory;
+      const newHistoryItem: MoveHistoryItem = {
+        id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
+        dbId: dbData.id,
+        projectId: dbData.project_id || '',
+        category: dbData.category as MoveHistoryItem['category'],
+        description: dbData.description,
+        author: dbData.author,
+        date: new Date(dbData.created_at).toLocaleDateString('ko-KR', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit' 
+        }).replace(/\. /g, '.').replace('.', ''),
+      };
+      setMoveHistory(prev => [newHistoryItem, ...prev]);
+    }
+  }, [user?.id, moveHistory]);
+
   // Refresh all data
   const refreshData = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchProjects(), fetchBuyers()]);
+    await Promise.all([fetchProjects(), fetchBuyers(), fetchMoveHistory()]);
     setLoading(false);
-  }, [fetchProjects, fetchBuyers]);
+  }, [fetchProjects, fetchBuyers, fetchMoveHistory]);
 
   // Load data on user change
   useEffect(() => {
@@ -345,16 +434,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
       setBuyers(prev => [newBuyer, ...prev]);
       
-      // Add to move history (local for now)
-      const newHistoryItem: MoveHistoryItem = {
-        id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
-        projectId: buyerData.projectId,
-        category: 'funnel',
-        description: `${newBuyer.name} 바이어 기업 등록`,
-        author: profile?.full_name || '관리자',
-        date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
-      };
-      setMoveHistory(prev => [newHistoryItem, ...prev]);
+      // Add to move history (persisted to database)
+      await addMoveHistoryToDb(
+        buyerData.projectId,
+        'funnel',
+        `${newBuyer.name} 바이어 기업 등록`,
+        profile?.full_name || '관리자'
+      );
     }
   };
 
@@ -428,15 +514,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       client: 'level4 Client',
     };
     
-    const newHistoryItem: MoveHistoryItem = {
-      id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
-      projectId: buyer.projectId,
-      category: 'funnel',
-      description: `${buyer.name} 바이어 기업의 인사이트 등급 변경: ${statusNames[buyer.status]} → ${statusNames[status]}`,
-      author: profile?.full_name || '관리자',
-      date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
-    };
-    setMoveHistory(prev => [newHistoryItem, ...prev]);
+    // Add to move history (persisted to database)
+    await addMoveHistoryToDb(
+      buyer.projectId,
+      'funnel',
+      `${buyer.name} 바이어 기업의 인사이트 등급 변경: ${statusNames[buyer.status]} → ${statusNames[status]}`,
+      profile?.full_name || '관리자'
+    );
   };
 
   const toggleBookmark = async (buyerId: string) => {
@@ -460,7 +544,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBuyers(prev => prev.filter(b => b.id !== buyerId));
   };
 
-  const addActivity = (activityData: Omit<Activity, 'id'>) => {
+  const addActivity = async (activityData: Omit<Activity, 'id'>) => {
     const newActivity: Activity = {
       ...activityData,
       id: String(Date.now()),
@@ -474,18 +558,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         : b
     ));
 
-    // Add to move history
+    // Add to move history (persisted to database)
     const buyer = buyers.find(b => b.id === activityData.buyerId);
     if (buyer) {
-      const newHistoryItem: MoveHistoryItem = {
-        id: moveHistory.length > 0 ? Math.max(...moveHistory.map(h => h.id)) + 1 : 1,
-        projectId: activityData.projectId,
-        category: 'activity',
-        description: `${buyer.name} 바이어 기업의 영업활동일지 등록 : ${activityData.title}`,
-        author: activityData.author,
-        date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', ''),
-      };
-      setMoveHistory(prev => [newHistoryItem, ...prev]);
+      await addMoveHistoryToDb(
+        activityData.projectId,
+        'activity',
+        `${buyer.name} 바이어 기업의 영업활동일지 등록 : ${activityData.title}`,
+        activityData.author
+      );
     }
   };
 
