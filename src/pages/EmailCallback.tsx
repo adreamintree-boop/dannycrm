@@ -14,21 +14,40 @@ export default function EmailCallback() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
+    // Process immediately on mount - no delays to avoid code expiration
+    let isProcessed = false;
+
     const processCallback = async () => {
+      // Prevent double processing
+      if (isProcessed) return;
+      isProcessed = true;
+
       const code = searchParams.get('code');
       const state = searchParams.get('state');
       const error = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
+
+      console.log('OAuth Callback - Processing started');
+      console.log('OAuth Callback - Code present:', !!code);
+      console.log('OAuth Callback - State present:', !!state);
+      console.log('OAuth Callback - Error:', error);
 
       // Handle OAuth error
       if (error) {
         setStatus('error');
-        setErrorMessage(`OAuth error: ${error}`);
+        setErrorMessage(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`);
         return;
       }
 
       if (!code) {
         setStatus('error');
         setErrorMessage('No authorization code received');
+        return;
+      }
+
+      if (!state) {
+        setStatus('error');
+        setErrorMessage('No state parameter received');
         return;
       }
 
@@ -46,10 +65,10 @@ export default function EmailCallback() {
         // This MUST match exactly what was used in nylas-oauth-start
         const redirectUri = `${window.location.origin}/email/callback`;
         
-        console.log('OAuth callback - exchanging code with redirect_uri:', redirectUri);
-        console.log('Code:', code?.substring(0, 10) + '...');
+        console.log('OAuth Callback - Exchanging code with redirect_uri:', redirectUri);
+        console.log('OAuth Callback - Code preview:', code.substring(0, 10) + '...');
 
-        // Call the callback edge function
+        // Call the callback edge function IMMEDIATELY
         const { data, error: callbackError } = await supabase.functions.invoke('nylas-oauth-callback', {
           body: {
             code,
@@ -58,16 +77,17 @@ export default function EmailCallback() {
           },
         });
 
-        console.log('Callback response:', data);
+        console.log('OAuth Callback - Response:', data);
 
         if (callbackError) {
-          console.error('Callback error:', callbackError);
+          console.error('OAuth Callback - Edge function error:', callbackError);
           setStatus('error');
           setErrorMessage(callbackError.message || '이메일 연동에 실패했습니다.');
           return;
         }
 
-        if (data?.success) {
+        // Check for success (support both 'success' and 'ok' fields)
+        if (data?.success || data?.ok) {
           setStatus('success');
           toast({
             title: '이메일 연동 완료',
@@ -80,11 +100,21 @@ export default function EmailCallback() {
           }, 2000);
         } else {
           setStatus('error');
-          const errorDetails = data?.details ? ` (${data.details})` : '';
-          setErrorMessage((data?.error || '알 수 없는 오류가 발생했습니다.') + errorDetails);
+          // Build detailed error message
+          let errorMsg = data?.error || '알 수 없는 오류가 발생했습니다.';
+          if (data?.step) {
+            errorMsg = `[${data.step}] ${errorMsg}`;
+          }
+          if (data?.nylas_error) {
+            errorMsg += ` (Nylas: ${data.nylas_error})`;
+          }
+          if (data?.nylas_status) {
+            errorMsg += ` [Status: ${data.nylas_status}]`;
+          }
+          setErrorMessage(errorMsg);
         }
       } catch (err) {
-        console.error('Callback processing error:', err);
+        console.error('OAuth Callback - Processing error:', err);
         setStatus('error');
         setErrorMessage(err instanceof Error ? err.message : '이메일 연동 처리 중 오류가 발생했습니다.');
       }
