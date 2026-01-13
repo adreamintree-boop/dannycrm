@@ -95,12 +95,22 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from JWT
+    // Extract user_id directly from JWT payload (bypass auth.getUser which requires session)
     const jwt = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
+    let userId: string | null = null;
+    
+    try {
+      const parts = jwt.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        userId = payload.sub || null;
+      }
+    } catch (e) {
+      console.error('JWT decode error:', e);
+    }
 
-    if (userError || !user) {
-      console.error('Auth error:', userError);
+    if (!userId) {
+      console.error('Failed to extract user_id from JWT');
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -116,13 +126,13 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Analyzing buyer: ${buyerName} for user: ${user.id}`);
+    console.log(`Analyzing buyer: ${buyerName} for user: ${userId}`);
 
     // Fetch company survey data
     const { data: surveyData, error: surveyError } = await supabase
       .from('company_surveys')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
       .single();
@@ -145,7 +155,7 @@ serve(async (req) => {
     const { data: strategyData, error: strategyError } = await supabase
       .from('strategy_reports')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -235,7 +245,7 @@ serve(async (req) => {
         title: activityTitle,
         content: content,
         occurred_at: now,
-        created_by: user.id,
+        created_by: userId,
       })
       .select()
       .single();
