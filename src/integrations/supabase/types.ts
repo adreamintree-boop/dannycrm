@@ -789,9 +789,6 @@ export type Database = {
           model: string | null
           product_name: string | null
           report_json: Json | null
-          sections: Json | null
-          status: string
-          summary_markdown: string | null
           survey_id: string | null
           target_regions: string[] | null
           user_id: string
@@ -804,9 +801,6 @@ export type Database = {
           model?: string | null
           product_name?: string | null
           report_json?: Json | null
-          sections?: Json | null
-          status?: string
-          summary_markdown?: string | null
           survey_id?: string | null
           target_regions?: string[] | null
           user_id: string
@@ -819,9 +813,6 @@ export type Database = {
           model?: string | null
           product_name?: string | null
           report_json?: Json | null
-          sections?: Json | null
-          status?: string
-          summary_markdown?: string | null
           survey_id?: string | null
           target_regions?: string[] | null
           user_id?: string
