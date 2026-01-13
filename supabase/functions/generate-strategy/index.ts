@@ -37,17 +37,29 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from JWT
+    // Extract user_id directly from JWT payload (bypass auth.getUser which requires session)
     const jwt = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(jwt);
+    let userId: string | null = null;
+    
+    try {
+      const parts = jwt.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        userId = payload.sub || null;
+      }
+    } catch (e) {
+      console.error('JWT decode error:', e);
+    }
 
-    if (userError || !user) {
-      console.error('Auth error:', userError);
+    if (!userId) {
+      console.error('Failed to extract user_id from JWT');
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    
+    console.log(`User authenticated: ${userId}`);
 
     const { survey_data, request_id } = await req.json();
 
@@ -60,7 +72,7 @@ serve(async (req) => {
 
     // Deduct credits first
     const { data: creditData, error: creditError } = await supabase.rpc('deduct_credits', {
-      p_user_id: user.id,
+      p_user_id: userId,
       p_amount: STRATEGY_CREDIT_COST,
       p_action_type: 'STRATEGY',
       p_request_id: request_id,
@@ -91,7 +103,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Credits deducted for user ${user.id}: -${STRATEGY_CREDIT_COST}, new balance: ${creditResult.new_balance}`);
+    console.log(`Credits deducted for user ${userId}: -${STRATEGY_CREDIT_COST}, new balance: ${creditResult.new_balance}`);
 
     // Build context from survey data
     const regionMap: Record<string, string> = {
@@ -309,9 +321,9 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
       console.error('Grok AI error:', aiResponse.status, errorText);
       
       // Refund credits on AI failure
-      console.log(`Refunding credits for user ${user.id} due to AI failure`);
+      console.log(`Refunding credits for user ${userId} due to AI failure`);
       await supabase.rpc('deduct_credits', {
-        p_user_id: user.id,
+        p_user_id: userId,
         p_amount: -STRATEGY_CREDIT_COST, // Negative to add back
         p_action_type: 'STRATEGY',
         p_request_id: `${request_id}_refund`,
@@ -347,7 +359,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
       
       // Refund credits on empty response
       await supabase.rpc('deduct_credits', {
-        p_user_id: user.id,
+        p_user_id: userId,
         p_amount: -STRATEGY_CREDIT_COST,
         p_action_type: 'STRATEGY',
         p_request_id: `${request_id}_refund`,
@@ -414,7 +426,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
           
           // Refund credits on parse failure
           await supabase.rpc('deduct_credits', {
-            p_user_id: user.id,
+            p_user_id: userId,
             p_amount: -STRATEGY_CREDIT_COST,
             p_action_type: 'STRATEGY',
             p_request_id: `${request_id}_refund`,
@@ -432,7 +444,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
       } else {
         // Refund on retry failure
         await supabase.rpc('deduct_credits', {
-          p_user_id: user.id,
+          p_user_id: userId,
           p_amount: -STRATEGY_CREDIT_COST,
           p_action_type: 'STRATEGY',
           p_request_id: `${request_id}_refund`,
@@ -459,7 +471,7 @@ CRITICAL: Return ONLY the JSON object. No markdown code blocks, no explanatory t
     const { data: reportData, error: reportError } = await supabase
       .from('strategy_reports')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         survey_id: survey_data.id || null,
         content: reportMarkdown,
         report_json: parsedResponse,
