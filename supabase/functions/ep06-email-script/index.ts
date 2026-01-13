@@ -39,6 +39,50 @@ email_stage 값에 따라 이메일 목적과 제약을 분기한다.
 
 --------------------------------------------------
 
+[이메일 히스토리 자동 분석]
+email_history 배열이 제공되면, 다음을 자동으로 분석하고 판단한다:
+
+1) Contact Status 분석:
+   - sent_emails: outbound 이메일 개수
+   - days_since_last_email: 마지막 이메일로부터 경과 일수
+   - reply_status: inbound 이메일 유무 및 톤 분석
+     - "no_reply": inbound 없음
+     - "positive": 긍정적 반응 (관심 표명, 질문, 미팅 요청 등)
+     - "neutral": 중립적 반응 (단순 확인, 정보 요청)
+     - "rejection": 거절 의사 표현
+
+2) Follow-up Goal 자동 결정:
+   - 무응답 2회 이하 + 7일 이내: "nudge"
+   - 무응답 + 7일 초과: "value_add"
+   - 긍정적 응답 후: "call_to_action"
+   - 중립적 응답: "clarification"
+   - 무응답 3회 이상 또는 14일 초과: "exit_check"
+
+3) Tone Stage 자동 결정:
+   - 첫 번째 후속: "first_follow_up" (Polite + Light)
+   - 두 번째 후속: "second_follow_up" (Helpful + Value)
+   - 세 번째 후속: "third_follow_up" (Direct but Respectful)
+   - 네 번째 이상 또는 exit_check: "exit_email"
+
+4) Silence Hypothesis 추론:
+   이메일 히스토리와 바이어 정보를 기반으로 침묵 원인을 추론:
+   - "busy": 응답 시간이 길거나 짧은 답변
+   - "not_decision_maker": CC나 전달 언급
+   - "low_priority": 초기 관심 후 무응답
+   - "unclear_value": 제품/서비스 관련 질문 없음
+   - "soft_reject": 완곡한 거절 표현 감지
+
+--------------------------------------------------
+
+[Reply 단계 전용]
+reply 단계에서는:
+1) 가장 최근 inbound 이메일 내용을 분석
+2) 바이어의 질문/요청사항 파악
+3) 이전 대화 맥락을 고려한 답변 작성
+4) 바이어가 사용한 언어로 응답
+
+--------------------------------------------------
+
 [후속 이메일 전용 필수 입력 – Contact History]
 contact_status 객체는 반드시 해석해야 한다.
 {
@@ -164,6 +208,15 @@ Optional Exit Line:
     "tone_stage": "string",
     "version": "ep06_v2",
     "generated_at": "ISO-8601"
+  },
+  "auto_analysis": {
+    "contact_status": {
+      "sent_emails": number,
+      "days_since_last_email": number,
+      "reply_status": "string",
+      "detected_language": "string"
+    },
+    "reasoning": "string"
   }
 }`;
 
@@ -220,12 +273,7 @@ serve(async (req) => {
     const {
       buyer_id,
       email_stage,
-      contact_status,
-      silence_hypothesis,
-      follow_up_goal,
-      tone_stage,
-      tone_constraints,
-      last_buyer_email,
+      auto_analyze = true,
     } = body;
 
     if (!buyer_id || !email_stage) {
@@ -235,7 +283,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Generating email script for buyer: ${buyer_id}, stage: ${email_stage}`);
+    console.log(`Generating email script for buyer: ${buyer_id}, stage: ${email_stage}, auto_analyze: ${auto_analyze}`);
 
     // Fetch buyer data
     const { data: buyerData, error: buyerError } = await supabase
@@ -250,6 +298,42 @@ serve(async (req) => {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Fetch email history for this buyer (for follow_up and reply stages)
+    let emailHistory: any[] = [];
+    let emailHistoryAnalysis: any = null;
+    
+    if ((email_stage === 'follow_up' || email_stage === 'reply') && auto_analyze) {
+      console.log('Fetching email history for auto-analysis...');
+      
+      const { data: activityLogs, error: logsError } = await supabase
+        .from('sales_activity_logs')
+        .select('*')
+        .eq('buyer_id', buyer_id)
+        .eq('created_by', userId)
+        .in('source', ['email', 'nylas'])
+        .order('occurred_at', { ascending: true });
+      
+      if (logsError) {
+        console.error('Failed to fetch email history:', logsError);
+      } else {
+        emailHistory = (activityLogs || []).map(log => ({
+          id: log.id,
+          direction: log.direction,
+          subject: log.title,
+          snippet: log.snippet || log.content?.slice(0, 200) || '',
+          body: log.body_text || log.body_html || log.content || '',
+          from_email: log.from_email,
+          to_emails: log.to_emails,
+          occurred_at: log.occurred_at,
+          source: log.source,
+        }));
+        
+        // Analyze email history
+        emailHistoryAnalysis = analyzeEmailHistory(emailHistory);
+        console.log('Email history analysis:', emailHistoryAnalysis);
+      }
     }
 
     // Fetch company survey data
@@ -317,14 +401,11 @@ serve(async (req) => {
         json: null,
         generated_at: buyerAnalysisData.created_at,
       } : null,
-      contact_status: contact_status || null,
-      silence_hypothesis: silence_hypothesis || [],
-      follow_up_goal: follow_up_goal || null,
-      tone_stage: tone_stage || null,
-      tone_constraints: tone_constraints || { no_pressure: true, no_salesy_language: true, max_length: 120 },
-      last_buyer_email: last_buyer_email || null,
+      // Auto-analyzed values for follow_up/reply
+      email_history: emailHistory,
+      email_history_analysis: emailHistoryAnalysis,
       survey: surveyData,
-      products,
+      products: products,
     });
 
     console.log('Calling Lovable AI Gateway...');
@@ -398,12 +479,13 @@ serve(async (req) => {
         assumptions_or_unknowns: [],
       },
       meta: {
-        silence_hypothesis_used: silence_hypothesis || [],
-        follow_up_goal: follow_up_goal || null,
-        tone_stage: tone_stage || null,
+        silence_hypothesis_used: emailHistoryAnalysis?.silence_hypothesis || [],
+        follow_up_goal: emailHistoryAnalysis?.follow_up_goal || null,
+        tone_stage: emailHistoryAnalysis?.tone_stage || null,
         version: "ep06_v2",
         generated_at: new Date().toISOString(),
       },
+      auto_analysis: emailHistoryAnalysis,
     };
 
     // Ensure subject_lines and body are properly extracted
@@ -434,6 +516,7 @@ serve(async (req) => {
       subject_lines: subjectLines,
       body: emailBody,
       internal_json: internalJson,
+      email_history_analysis: emailHistoryAnalysis,
       run_id: savedRun?.id || null,
     }), {
       status: 200,
@@ -451,24 +534,130 @@ serve(async (req) => {
   }
 });
 
-function buildUserMessage(data: any): any {
-  const {
-    email_stage,
-    buyer,
-    seller,
-    strategy_latest,
-    buyer_analyze_latest,
-    contact_status,
-    silence_hypothesis,
-    follow_up_goal,
-    tone_stage,
-    tone_constraints,
-    last_buyer_email,
-    survey,
-    products,
-  } = data;
+function analyzeEmailHistory(emails: any[]): any {
+  if (!emails || emails.length === 0) {
+    return {
+      total_emails: 0,
+      outbound_count: 0,
+      inbound_count: 0,
+      days_since_last_email: 0,
+      reply_status: 'no_reply',
+      follow_up_goal: 'nudge',
+      tone_stage: 'first_follow_up',
+      silence_hypothesis: ['unclear_value'],
+      last_inbound_email: null,
+      last_outbound_email: null,
+    };
+  }
+
+  const outboundEmails = emails.filter(e => e.direction === 'outbound');
+  const inboundEmails = emails.filter(e => e.direction === 'inbound');
+  
+  const lastEmail = emails[emails.length - 1];
+  const lastOutbound = outboundEmails.length > 0 ? outboundEmails[outboundEmails.length - 1] : null;
+  const lastInbound = inboundEmails.length > 0 ? inboundEmails[inboundEmails.length - 1] : null;
+  
+  // Calculate days since last email
+  const lastEmailDate = new Date(lastEmail.occurred_at);
+  const now = new Date();
+  const daysSinceLastEmail = Math.floor((now.getTime() - lastEmailDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Determine reply status
+  let replyStatus = 'no_reply';
+  if (inboundEmails.length > 0 && lastInbound) {
+    // Simple heuristic: check if last inbound is after last outbound
+    if (!lastOutbound || new Date(lastInbound.occurred_at) > new Date(lastOutbound.occurred_at)) {
+      // Analyze the content for sentiment (simplified)
+      const content = (lastInbound.body || lastInbound.snippet || '').toLowerCase();
+      if (content.includes('not interested') || content.includes('no thank') || content.includes('unsubscribe') || content.includes('remove')) {
+        replyStatus = 'rejection';
+      } else if (content.includes('interested') || content.includes('tell me more') || content.includes('meeting') || content.includes('call') || content.includes('schedule')) {
+        replyStatus = 'positive';
+      } else {
+        replyStatus = 'neutral';
+      }
+    }
+  }
+
+  // Determine follow_up_goal based on history
+  let followUpGoal = 'nudge';
+  if (replyStatus === 'positive') {
+    followUpGoal = 'call_to_action';
+  } else if (replyStatus === 'neutral') {
+    followUpGoal = 'clarification';
+  } else if (replyStatus === 'rejection') {
+    followUpGoal = 'exit_check';
+  } else if (outboundEmails.length >= 3 || daysSinceLastEmail > 14) {
+    followUpGoal = 'exit_check';
+  } else if (daysSinceLastEmail > 7) {
+    followUpGoal = 'value_add';
+  }
+
+  // Determine tone_stage based on outbound count
+  let toneStage = 'first_follow_up';
+  if (outboundEmails.length === 2) {
+    toneStage = 'second_follow_up';
+  } else if (outboundEmails.length === 3) {
+    toneStage = 'third_follow_up';
+  } else if (outboundEmails.length >= 4 || followUpGoal === 'exit_check') {
+    toneStage = 'exit_email';
+  }
+
+  // Infer silence hypothesis
+  const silenceHypothesis: string[] = [];
+  if (daysSinceLastEmail > 7 && replyStatus === 'no_reply') {
+    silenceHypothesis.push('busy');
+  }
+  if (outboundEmails.length > 2 && replyStatus === 'no_reply') {
+    silenceHypothesis.push('low_priority');
+  }
+  if (inboundEmails.length === 0 && outboundEmails.length > 1) {
+    silenceHypothesis.push('unclear_value');
+  }
+  if (silenceHypothesis.length === 0) {
+    silenceHypothesis.push('busy'); // Default hypothesis
+  }
 
   return {
+    total_emails: emails.length,
+    outbound_count: outboundEmails.length,
+    inbound_count: inboundEmails.length,
+    days_since_last_email: daysSinceLastEmail,
+    reply_status: replyStatus,
+    follow_up_goal: followUpGoal,
+    tone_stage: toneStage,
+    silence_hypothesis: silenceHypothesis,
+    last_inbound_email: lastInbound ? {
+      subject: lastInbound.subject,
+      body: lastInbound.body?.slice(0, 1500) || lastInbound.snippet || '',
+      occurred_at: lastInbound.occurred_at,
+    } : null,
+    last_outbound_email: lastOutbound ? {
+      subject: lastOutbound.subject,
+      body: lastOutbound.body?.slice(0, 1000) || lastOutbound.snippet || '',
+      occurred_at: lastOutbound.occurred_at,
+    } : null,
+    conversation_summary: emails.slice(-5).map(e => ({
+      direction: e.direction,
+      subject: e.subject,
+      snippet: e.snippet?.slice(0, 100) || '',
+      occurred_at: e.occurred_at,
+    })),
+  };
+}
+
+function buildUserMessage(data: any): any {
+  const email_stage = data.email_stage;
+  const buyer = data.buyer;
+  const seller = data.seller;
+  const strategy_latest = data.strategy_latest;
+  const buyer_analyze_latest = data.buyer_analyze_latest;
+  const email_history = data.email_history;
+  const email_history_analysis = data.email_history_analysis;
+  const survey = data.survey;
+  const products = data.products;
+
+  const message: any = {
     email_stage,
     buyer: {
       company_name: buyer.company_name,
@@ -495,21 +684,59 @@ function buildUserMessage(data: any): any {
     },
     strategy_latest: strategy_latest ? {
       summary_json: strategy_latest.summary_json,
-      report_markdown: strategy_latest.report_markdown?.slice(0, 3000) || null, // Limit size
+      report_markdown: strategy_latest.report_markdown?.slice(0, 3000) || null,
       generated_at: strategy_latest.generated_at,
     } : null,
     buyer_analyze_latest: buyer_analyze_latest ? {
-      text: buyer_analyze_latest.text?.slice(0, 2000) || null, // Limit size
+      text: buyer_analyze_latest.text?.slice(0, 2000) || null,
       json: buyer_analyze_latest.json,
       generated_at: buyer_analyze_latest.generated_at,
     } : null,
-    contact_status,
-    silence_hypothesis,
-    follow_up_goal,
-    tone_stage,
-    tone_constraints,
-    last_buyer_email: last_buyer_email?.slice(0, 1500) || null, // Limit size
   };
+
+  // Add email history analysis for follow_up and reply stages
+  if (email_stage === 'follow_up' || email_stage === 'reply') {
+    message.email_history_analysis = email_history_analysis;
+    
+    // Include last few emails for context
+    if (email_history && email_history.length > 0) {
+      message.email_history = email_history.slice(-5).map((e: any) => ({
+        direction: e.direction,
+        subject: e.subject,
+        body: e.body?.slice(0, 800) || e.snippet || '',
+        occurred_at: e.occurred_at,
+      }));
+    }
+
+    // For reply stage, emphasize the last inbound email
+    if (email_stage === 'reply' && email_history_analysis?.last_inbound_email) {
+      message.last_buyer_email = email_history_analysis.last_inbound_email.body;
+      message.reply_context = {
+        buyer_email_subject: email_history_analysis.last_inbound_email.subject,
+        buyer_email_date: email_history_analysis.last_inbound_email.occurred_at,
+      };
+    }
+
+    // Add auto-analyzed contact status and recommendations
+    if (email_history_analysis) {
+      message.contact_status = {
+        sent_emails: email_history_analysis.outbound_count,
+        days_since_last_email: email_history_analysis.days_since_last_email,
+        reply_status: email_history_analysis.reply_status,
+        open_status: 'unknown',
+      };
+      message.silence_hypothesis = email_history_analysis.silence_hypothesis;
+      message.follow_up_goal = email_history_analysis.follow_up_goal;
+      message.tone_stage = email_history_analysis.tone_stage;
+      message.tone_constraints = {
+        no_pressure: true,
+        no_salesy_language: true,
+        max_length: 120,
+      };
+    }
+  }
+
+  return message;
 }
 
 function parseTextResponse(content: string): any {
