@@ -20,8 +20,8 @@ const BehaviorIndexCard: React.FC = () => {
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
-  // Determine the number of rows to display (minimum 4, max from data)
-  const numRows = Math.max(maxSquares, 4);
+  // Determine the number of rows to display (minimum 8 for visual balance)
+  const numRows = Math.max(maxSquares, 8);
   const rows = Array.from({ length: numRows }, (_, i) => numRows - i); // top to bottom: highest to lowest
 
   if (loading) {
