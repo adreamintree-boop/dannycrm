@@ -8,8 +8,8 @@
 
 @layer base {
   :root {
-    /* Core backgrounds */
-    --background: 220 14% 96%;
+    /* Core backgrounds - Pure white */
+    --background: 0 0% 100%;
     --foreground: 220 13% 18%;
 
     /* Card surfaces */
