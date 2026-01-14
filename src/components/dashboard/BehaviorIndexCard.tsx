@@ -1,31 +1,36 @@
-import React, { useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
-import { behaviorIndexData } from '@/data/mockData';
+import React, { useEffect } from 'react';
+import { Calendar } from 'lucide-react';
+import { useBehaviorIndex } from '@/hooks/useBehaviorIndex';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const BehaviorIndexCard: React.FC = () => {
-  const [year, setYear] = useState(2025);
-  const [month, setMonth] = useState(12);
+  const { year, month, squareData, maxSquares, loading, refresh } = useBehaviorIndex();
 
+  // Get days in the current month
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
-  const handlePrevMonth = () => {
-    if (month === 1) {
-      setMonth(12);
-      setYear(year - 1);
-    } else {
-      setMonth(month - 1);
-    }
-  };
+  // Determine the number of rows to display (minimum 4, max from data)
+  const numRows = Math.max(maxSquares, 4);
+  const rows = Array.from({ length: numRows }, (_, i) => numRows - i); // top to bottom: highest to lowest
 
-  const handleNextMonth = () => {
-    if (month === 12) {
-      setMonth(1);
-      setYear(year + 1);
-    } else {
-      setMonth(month + 1);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="dashboard-card">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-7 h-7 rounded-full" />
+          <Skeleton className="h-5 w-48" />
+        </div>
+        <Skeleton className="h-4 w-64 mb-4" />
+        <Skeleton className="h-6 w-32 mb-4 ml-auto" />
+        <div className="space-y-1">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-3 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-card">
@@ -39,38 +44,33 @@ const BehaviorIndexCard: React.FC = () => {
       </div>
 
       <div className="text-xs text-muted-foreground mb-4">
-        행동지수바이어 데이터 등록, 등급 이동, 영업활동일지 등록 횟수의 합계
+        행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (10건 = 1칸)
       </div>
 
       <div className="flex items-center justify-end gap-2 mb-4">
-        <button onClick={handlePrevMonth} className="p-1 hover:bg-muted rounded">
-          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
         <span className="text-sm font-medium">{year}.{String(month).padStart(2, '0')}</span>
-        <button onClick={handleNextMonth} className="p-1 hover:bg-muted rounded">
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-        </button>
       </div>
 
       {/* Calendar heatmap grid */}
       <div className="relative">
-        {/* Grid rows for intensity levels */}
+        {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
         <div className="space-y-1 mb-2">
-          {[4, 3, 2, 1, 0].map((level) => (
+          {rows.map((level) => (
             <div key={level} className="flex gap-1">
               {days.map((day) => {
-                const value = behaviorIndexData[day] || 0;
-                const showBlock = value >= level && level > 0;
+                const squaresForDay = squareData[day] || 0;
+                const showBlock = squaresForDay >= level;
                 return (
                   <div
                     key={day}
-                    className={`flex-1 h-3 rounded-sm ${
+                    className={`flex-1 h-3 rounded-sm transition-colors ${
                       day > daysInMonth
                         ? 'invisible'
                         : showBlock
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}
+                    title={day <= daysInMonth ? `${month}/${day}: ${squaresForDay * 10}+ 건` : undefined}
                   />
                 );
               })}
