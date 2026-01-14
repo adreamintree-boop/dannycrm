@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Reply, Forward, Trash2, Star, FileText, Check } from 'lucide-react';
+import { ArrowLeft, Reply, Forward, Trash2, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { useEmailContext, EmailMessage } from '@/context/EmailContext';
 import { useNylasEmailContext } from '@/context/NylasEmailContext';
 import { NylasMessageDetail } from '@/hooks/useNylas';
@@ -9,8 +9,6 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import BuyerSelectModal from './BuyerSelectModal';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface LinkedBuyer {
   id: string;
@@ -23,24 +21,32 @@ export default function EmailDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isNylas = searchParams.get('nylas') === 'true';
+  const mailbox = searchParams.get('mailbox') || 'inbox';
   
   // Regular email context
-  const { getMessage, markAsRead, toggleStar, deleteMessage, logActivity } = useEmailContext();
+  const { getMessage, markAsRead, deleteMessage, logActivity } = useEmailContext();
   
   // Nylas context
-  const { fetchMessage, isConnected, logEmailToCRM: nylasLogToCRM } = useNylasEmailContext();
+  const { fetchMessage, isConnected } = useNylasEmailContext();
   
   const [message, setMessage] = useState<EmailMessage | null>(null);
   const [nylasMessage, setNylasMessage] = useState<NylasMessageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [linkedBuyer, setLinkedBuyer] = useState<LinkedBuyer | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [loggingToCRM, setLoggingToCRM] = useState(false);
+  const [metadataExpanded, setMetadataExpanded] = useState(true);
   const hasLoggedRef = useRef(false);
+
+  // Mailbox paths for navigation
+  const mailboxPaths: Record<string, string> = {
+    inbox: '/email',
+    sent: '/email/sent',
+    all: '/email/all',
+    trash: '/email/trash',
+    draft: '/email/drafts',
+  };
 
   useEffect(() => {
     let isMounted = true;
-
     hasLoggedRef.current = false;
 
     const load = async () => {
@@ -50,7 +56,6 @@ export default function EmailDetail() {
       }
 
       setLoading(true);
-      // Reset derived UI state when switching messages
       setMessage(null);
       setNylasMessage(null);
       setLinkedBuyer(null);
@@ -58,14 +63,11 @@ export default function EmailDetail() {
       try {
         if (isNylas) {
           if (!isConnected) return;
-
           const msg = await fetchMessage(id);
           if (!isMounted) return;
 
           if (msg) {
             setNylasMessage(msg);
-
-            // Check if already logged to CRM
             if (msg.is_logged_to_crm && msg.crm_buyer_id) {
               const { data: buyerData } = await supabase
                 .from('crm_buyers')
@@ -79,7 +81,6 @@ export default function EmailDetail() {
             }
           }
         } else {
-          // Load regular message
           const msg = await getMessage(id);
           if (!isMounted) return;
 
@@ -93,7 +94,6 @@ export default function EmailDetail() {
               logActivity('open', id, msg.thread_id || undefined);
             }
 
-            // Check if email is linked to a buyer via sales_activity_logs
             const { data: logData } = await supabase
               .from('sales_activity_logs')
               .select('buyer_id')
@@ -121,15 +121,16 @@ export default function EmailDetail() {
     };
 
     load();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [id, isNylas, isConnected, fetchMessage, getMessage, markAsRead, logActivity]);
+
+  const handleBack = () => {
+    navigate(mailboxPaths[mailbox] || '/email');
+  };
 
   const handleReply = () => {
     if (id) {
-      const params = new URLSearchParams({ replyTo: id });
+      const params = new URLSearchParams({ replyTo: id, mailbox });
       if (isNylas) params.set('nylas', 'true');
       if (linkedBuyer) {
         params.set('buyerId', linkedBuyer.id);
@@ -142,7 +143,7 @@ export default function EmailDetail() {
 
   const handleForward = () => {
     if (id) {
-      const params = new URLSearchParams({ forward: id });
+      const params = new URLSearchParams({ forward: id, mailbox });
       if (isNylas) params.set('nylas', 'true');
       navigate(`/email/compose?${params.toString()}`);
     }
@@ -151,231 +152,138 @@ export default function EmailDetail() {
   const handleDelete = async () => {
     if (id && !isNylas) {
       await deleteMessage(id);
-      navigate('/email');
+      handleBack();
     }
-  };
-
-  const handleToggleStar = async () => {
-    if (id && message && !isNylas) {
-      await toggleStar(id);
-      setMessage({ ...message, is_starred: !message.is_starred });
-    }
-  };
-
-  const handleLogToCRM = async (buyerId: string, buyerName: string) => {
-    if (!id) return;
-    
-    setLoggingToCRM(true);
-    setModalOpen(false);
-    
-    if (isNylas) {
-      const result = await nylasLogToCRM(id, buyerId);
-      if (result.success) {
-        setLinkedBuyer({ id: buyerId, company_name: buyerName, stage: 'list' });
-        if (nylasMessage) {
-          setNylasMessage({ ...nylasMessage, is_logged_to_crm: true, crm_buyer_id: buyerId });
-        }
-      }
-    }
-    
-    setLoggingToCRM(false);
   };
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  // Render Nylas message
-  if (isNylas && nylasMessage) {
-    const isLogged = nylasMessage.is_logged_to_crm;
-    
+  // Get message data
+  const msgData = isNylas ? nylasMessage : message;
+  if (!msgData) {
     return (
-      <div className="flex-1 flex flex-col bg-background">
-        <div className="border-b border-border p-4 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/email')}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-1" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setModalOpen(true)}
-                disabled={isLogged || loggingToCRM}
-                className={cn('gap-1', isLogged && 'text-green-600')}
-              >
-                {loggingToCRM ? (
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : isLogged ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <FileText className="w-4 h-4" />
-                )}
-                {isLogged ? '기록됨' : 'CRM 기록'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isLogged ? `${linkedBuyer?.company_name || '바이어'}에 저장됨` : '바이어 선택 후 CRM에 기록'}
-            </TooltipContent>
-          </Tooltip>
-          <Button variant="ghost" size="icon" onClick={() => {}}>
-            <Star className={cn('w-4 h-4', nylasMessage.starred && 'fill-yellow-500 text-yellow-500')} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleReply}>
-            <Reply className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleForward}>
-            <Forward className="w-4 h-4" />
-          </Button>
-        </div>
-
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-2xl font-semibold mb-4">{nylasMessage.subject}</h1>
-            
-            <div className="flex items-start gap-4 mb-6 pb-4 border-b border-border">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-primary font-semibold">
-                  {(nylasMessage.from.name || nylasMessage.from.email)[0].toUpperCase()}
-                </span>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{nylasMessage.from.name || nylasMessage.from.email}</span>
-                  <span className="text-muted-foreground text-sm">&lt;{nylasMessage.from.email}&gt;</span>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  받는사람: {nylasMessage.to.map(t => t.email).join(', ')}
-                </div>
-                {nylasMessage.cc.length > 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    참조: {nylasMessage.cc.map(t => t.email).join(', ')}
-                  </div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  {format(new Date(nylasMessage.date), 'yyyy년 M월 d일 (EEEE) a h:mm', { locale: ko })}
-                </div>
-              </div>
-            </div>
-
-            {nylasMessage.body_html ? (
-              <div 
-                className="prose prose-sm dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: nylasMessage.body_html }}
-              />
-            ) : (
-              <div className="whitespace-pre-wrap text-foreground leading-relaxed">
-                {nylasMessage.body_text}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-border p-4 flex items-center gap-2">
-          <Button onClick={handleReply} className="gap-2">
-            <Reply className="w-4 h-4" />
-            답장
-          </Button>
-          <Button variant="outline" onClick={handleForward} className="gap-2">
-            <Forward className="w-4 h-4" />
-            전달
-          </Button>
-        </div>
-
-        <BuyerSelectModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          onSelect={handleLogToCRM}
-          loading={loggingToCRM}
-        />
-      </div>
-    );
-  }
-
-  // Render regular message
-  if (!message) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-white">
         <p>메일을 찾을 수 없습니다</p>
-        <Button variant="link" onClick={() => navigate('/email')}>
+        <Button variant="link" onClick={handleBack}>
           돌아가기
         </Button>
       </div>
     );
   }
 
+  // Extract email data
+  const subject = isNylas && nylasMessage ? nylasMessage.subject : message?.subject || '';
+  const dateStr = isNylas && nylasMessage ? nylasMessage.date : message?.created_at || '';
+  const fromName = isNylas && nylasMessage ? (nylasMessage.from.name || nylasMessage.from.email) : (message?.from_name || message?.from_email || '');
+  const fromEmail = isNylas && nylasMessage ? nylasMessage.from.email : message?.from_email || '';
+  const toEmails = isNylas && nylasMessage ? nylasMessage.to.map(t => `${t.name || ''} <${t.email}>`).join(', ') : message?.to_emails.join(', ') || '';
+  const ccEmails = isNylas && nylasMessage ? nylasMessage.cc.map(t => t.email).join(', ') : message?.cc_emails?.join(', ') || '';
+  const bodyHtml = isNylas && nylasMessage ? nylasMessage.body_html : null;
+  const bodyText = isNylas && nylasMessage ? nylasMessage.body_text : message?.body || '';
+
   return (
-    <div className="flex-1 flex flex-col bg-background">
-      <div className="border-b border-border p-4 flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/email')}>
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      {/* Top navigation bar */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+        <button 
+          onClick={handleBack}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div className="flex-1" />
-        <Button variant="ghost" size="icon" onClick={handleToggleStar}>
-          <Star className={cn(
-            'w-4 h-4',
-            message.is_starred && 'fill-yellow-500 text-yellow-500'
-          )} />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleReply}>
-          <Reply className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleForward}>
-          <Forward className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleDelete}>
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </div>
+          <span>목록으로</span>
+        </button>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-2xl font-semibold mb-4">{message.subject}</h1>
-          
-          <div className="flex items-start gap-4 mb-6 pb-4 border-b border-border">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-primary font-semibold">
-                {(message.from_name || message.from_email)[0].toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{message.from_name || message.from_email}</span>
-                <span className="text-muted-foreground text-sm">&lt;{message.from_email}&gt;</span>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                받는사람: {message.to_emails.join(', ')}
-              </div>
-              {message.cc_emails.length > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  참조: {message.cc_emails.join(', ')}
-                </div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                {format(new Date(message.created_at), 'yyyy년 M월 d일 (EEEE) a h:mm', { locale: ko })}
-              </div>
-            </div>
-          </div>
-
-          <div className="whitespace-pre-wrap text-foreground leading-relaxed">
-            {message.body}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>164개 중 16</span>
+          <div className="flex items-center">
+            <button className="p-1 hover:bg-muted rounded disabled:opacity-40">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button className="p-1 hover:bg-muted rounded disabled:opacity-40">
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="border-t border-border p-4 flex items-center gap-2">
-        <Button onClick={handleReply} className="gap-2">
-          <Reply className="w-4 h-4" />
-          답장
-        </Button>
-        <Button variant="outline" onClick={handleForward} className="gap-2">
-          <Forward className="w-4 h-4" />
-          전달
+      {/* Email content */}
+      <div className="flex-1 overflow-auto">
+        <div className="px-6 py-4">
+          {/* Subject */}
+          <h1 className="text-lg font-semibold text-foreground mb-1">{subject}</h1>
+          <div className="text-sm text-muted-foreground mb-4">
+            {format(new Date(dateStr), 'yyyy. MM. dd a h:mm', { locale: ko })}
+          </div>
+
+          {/* Metadata block */}
+          <div className="border-t border-border pt-4 mb-6">
+            <button 
+              onClick={() => setMetadataExpanded(!metadataExpanded)}
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground mb-3"
+            >
+              <ChevronUp className={cn('w-4 h-4 transition-transform', !metadataExpanded && 'rotate-180')} />
+            </button>
+            
+            {metadataExpanded && (
+              <div className="space-y-2 text-sm">
+                <div className="flex">
+                  <span className="w-20 text-muted-foreground shrink-0">보낸 사람</span>
+                  <span className="text-foreground font-medium">
+                    {fromName} <span className="text-muted-foreground font-normal">&lt;{fromEmail}&gt;</span>
+                  </span>
+                </div>
+                <div className="flex">
+                  <span className="w-20 text-muted-foreground shrink-0">받는 사람</span>
+                  <span className="text-foreground break-all">{toEmails}</span>
+                </div>
+                {ccEmails && (
+                  <div className="flex">
+                    <span className="w-20 text-muted-foreground shrink-0">참조</span>
+                    <span className="text-muted-foreground break-all">{ccEmails}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Email body */}
+          <div className="border-t border-border pt-6">
+            {bodyHtml ? (
+              <div 
+                className="prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+              />
+            ) : (
+              <div className="whitespace-pre-wrap text-foreground leading-relaxed text-sm">
+                {bodyText}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-white">
+        <div className="flex items-center gap-2">
+          <Button onClick={handleReply} size="sm" className="gap-2">
+            <Reply className="w-4 h-4" />
+            답장
+          </Button>
+          <Button variant="outline" onClick={handleForward} size="sm" className="gap-2">
+            <Forward className="w-4 h-4" />
+            전달
+          </Button>
+        </div>
+        
+        <Button variant="ghost" size="sm" onClick={handleDelete} className="gap-2 text-muted-foreground hover:text-destructive">
+          <Trash2 className="w-4 h-4" />
+          삭제
         </Button>
       </div>
     </div>

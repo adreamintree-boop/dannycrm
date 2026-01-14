@@ -21,7 +21,21 @@ const EmailSidebar: React.FC<EmailSidebarProps> = ({ unreadCount }) => {
   const location = useLocation();
   const { emailAccount, isConnected } = useNylasEmailContext();
 
-  const isActive = (path: string) => {
+  const isActive = (path: string, itemId: string) => {
+    // Check if we're on a detail page with mailbox param
+    const searchParams = new URLSearchParams(location.search);
+    const mailboxParam = searchParams.get('mailbox');
+    
+    // If on detail page, use mailbox param
+    if (location.pathname.match(/^\/email\/[^/]+$/) && !location.pathname.includes('compose') && !location.pathname.includes('settings')) {
+      if (mailboxParam) {
+        return mailboxParam === itemId;
+      }
+      // Default to inbox if no mailbox param
+      return itemId === 'inbox';
+    }
+    
+    // Normal path matching
     if (path === '/email') {
       return location.pathname === '/email' || location.pathname === '/email/';
     }
@@ -56,7 +70,7 @@ const EmailSidebar: React.FC<EmailSidebarProps> = ({ unreadCount }) => {
       <nav className="flex-1 px-3">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.path);
+          const active = isActive(item.path, item.id);
           const showBadge = item.id === 'inbox' && unreadCount > 0;
 
           return (
