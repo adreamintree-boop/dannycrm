@@ -73,12 +73,23 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
     return 'yyyy.mm.dd ~ yyyy.mm.dd';
   }, [startDate, endDate]);
 
+  // Helper functions for external search URLs
+  const getGoogleUrl = (companyName: string): string => {
+    const keyword = companyName.trim();
+    return `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
+  };
+
+  const getLinkedinCompanySearchUrl = (companyName: string): string => {
+    const keyword = companyName.trim();
+    return `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(keyword)}`;
+  };
+
   const handleGoogleSearch = (companyName: string) => {
-    window.open(`https://www.google.com/search?q=${encodeURIComponent(companyName)}`, '_blank');
+    window.open(getGoogleUrl(companyName), '_blank', 'noopener,noreferrer');
   };
 
   const handleLinkedInSearch = (companyName: string) => {
-    window.open(`https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(companyName)}`, '_blank');
+    window.open(getLinkedinCompanySearchUrl(companyName), '_blank', 'noopener,noreferrer');
   };
 
   return (
