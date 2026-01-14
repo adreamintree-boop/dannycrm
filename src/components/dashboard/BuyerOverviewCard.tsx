@@ -114,7 +114,7 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({
             </PieChart>
           </ResponsiveContainer>
           {/* Center text - positioned inside the donut arc */}
-          <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '20px' }}>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '35px' }}>
             <span className="text-4xl font-bold text-white">{total}</span>
           </div>
         </div>
