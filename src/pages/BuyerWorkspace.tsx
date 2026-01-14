@@ -40,16 +40,17 @@ const BuyerWorkspace: React.FC = () => {
     return emailLogs.filter(log => log.source === 'email');
   }, [emailLogs]);
 
-  // Initialize tab from URL - only add if not exists
+  // Initialize tab from URL - only once when buyerId changes
   useEffect(() => {
-    if (buyerId) {
+    if (buyerId && buyers.length > 0) {
       const buyer = buyers.find(b => b.id === buyerId);
       if (buyer) {
         // This will either add the tab or just activate existing one
         openBuyerTab(buyer.id, buyer.name, buyer.status);
       }
     }
-  }, [buyerId, buyers, openBuyerTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyerId]); // Only depend on buyerId - buyers and openBuyerTab are stable enough
 
   // Fetch logs when active buyer changes
   useEffect(() => {
