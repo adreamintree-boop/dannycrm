@@ -177,7 +177,7 @@ const BuyerWorkspace: React.FC = () => {
       {currentBuyer && (
         <div className="flex-1 flex min-h-0">
           {/* Left Info Panel - fixed width, non-shrinking */}
-          <div className="w-[340px] min-w-[320px] max-w-[400px] border-r border-border flex flex-col bg-card shrink-0 overflow-hidden">
+          <div className="w-[380px] min-w-[380px] border-r border-border flex flex-col bg-card shrink-0 overflow-hidden">
             <BuyerInfoPanel buyer={currentBuyer} />
           </div>
 
