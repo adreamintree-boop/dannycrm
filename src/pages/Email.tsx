@@ -8,8 +8,7 @@ import EmailCompose from '@/components/email/EmailCompose';
 import EmailSettings from '@/components/email/EmailSettings';
 import { EmailProvider, useEmailContext } from '@/context/EmailContext';
 import { NylasEmailProvider, useNylasEmailContext } from '@/context/NylasEmailContext';
-import { Input } from '@/components/ui/input';
-import { Search, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -41,42 +40,29 @@ function EmailListView({ mailbox }: { mailbox: string }) {
     messagesLoading, 
     fetchMessages: fetchNylasMessages 
   } = useNylasEmailContext();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery] = useState('');
   const lastFetchKey = React.useRef<string | null>(null);
 
-  // Check connection on mount (always run once per EmailListView mount)
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
 
   useEffect(() => {
-    // Wait until connection check is complete
     if (accountLoading) return;
     
-    // Create a unique key for this fetch to prevent duplicates
     const fetchKey = `${mailbox}-${isConnected}`;
     if (lastFetchKey.current === fetchKey) return;
     lastFetchKey.current = fetchKey;
     
     if (isConnected) {
-      // Fetch from Nylas
       fetchNylasMessages(mailbox);
     } else {
-      // Use mock data
       fetchMessages(mailbox);
       if (mailbox === 'inbox') {
         seedSampleEmails();
       }
     }
   }, [mailbox, accountLoading, isConnected, fetchMessages, seedSampleEmails, fetchNylasMessages]);
-
-  const mailboxLabels: Record<string, string> = {
-    inbox: '받은편지함',
-    sent: '보낸편지함',
-    draft: '임시보관함',
-    all: '전체메일',
-    trash: '휴지통',
-  };
 
   if (accountLoading) {
     return (
@@ -92,33 +78,15 @@ function EmailListView({ mailbox }: { mailbox: string }) {
   return (
     <div className="flex-1 flex flex-col">
       {!isConnected && connectionChecked && <ConnectionBanner />}
-      <div className="border-b border-border p-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">{mailboxLabels[mailbox] || mailbox}</h2>
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="메일 검색..."
-                className="pl-9"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
-        <EmailList
-          messages={messages}
-          mailbox={mailbox}
-          loading={isLoading}
-          onToggleStar={toggleStar}
-          searchQuery={searchQuery}
-          nylasMessages={nylasMessages}
-          useNylas={isConnected}
-        />
-      </div>
+      <EmailList
+        messages={messages}
+        mailbox={mailbox}
+        loading={isLoading}
+        onToggleStar={toggleStar}
+        searchQuery={searchQuery}
+        nylasMessages={nylasMessages}
+        useNylas={isConnected}
+      />
     </div>
   );
 }
@@ -138,11 +106,9 @@ function EmailContent() {
     }
   }, [location.pathname, fetchUnreadCount, isConnected]);
 
-  // Calculate unread count: use Nylas messages if connected, otherwise use mock data
   const unreadCount = React.useMemo(() => {
     if (accountLoading) return 0;
     if (isConnected) {
-      // Count unread messages from Nylas inbox
       return nylasMessages.filter(msg => msg.unread).length;
     }
     return mockUnreadCount;
@@ -159,6 +125,7 @@ function EmailContent() {
             <Route path="sent" element={<EmailListView mailbox="sent" />} />
             <Route path="drafts" element={<EmailListView mailbox="draft" />} />
             <Route path="all" element={<EmailListView mailbox="all" />} />
+            <Route path="trash" element={<EmailListView mailbox="trash" />} />
             <Route path="settings" element={<EmailSettingsView />} />
             <Route path="compose" element={<EmailCompose />} />
             <Route path=":id" element={<EmailDetail />} />
