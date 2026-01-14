@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { BuyerStatus } from '@/data/mockData';
 
 export interface OpenBuyerTab {
@@ -22,57 +22,65 @@ const BuyerTabsContext = createContext<BuyerTabsContextType | undefined>(undefin
 export const BuyerTabsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [openTabs, setOpenTabs] = useState<OpenBuyerTab[]>([]);
   const [activeBuyerId, setActiveBuyerIdState] = useState<string | null>(null);
+  
+  // Use ref to track current tabs for synchronous access
+  const openTabsRef = useRef<OpenBuyerTab[]>([]);
+  openTabsRef.current = openTabs;
 
   const hasTab = useCallback((buyerId: string): boolean => {
-    return openTabs.some(t => t.buyerId === buyerId);
-  }, [openTabs]);
+    return openTabsRef.current.some(t => t.buyerId === buyerId);
+  }, []);
 
   const openBuyerTab = useCallback((buyerId: string, companyName: string, stage: BuyerStatus) => {
-    setOpenTabs(prev => {
-      // Check if tab already exists
-      const existingIndex = prev.findIndex(t => t.buyerId === buyerId);
-      
-      if (existingIndex >= 0) {
-        // Update lastActiveAt for existing tab
+    const currentTabs = openTabsRef.current;
+    const existingIndex = currentTabs.findIndex(t => t.buyerId === buyerId);
+    
+    if (existingIndex >= 0) {
+      // Tab exists - just update lastActiveAt
+      setOpenTabs(prev => {
         const updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], lastActiveAt: Date.now() };
+        const idx = updated.findIndex(t => t.buyerId === buyerId);
+        if (idx >= 0) {
+          updated[idx] = { ...updated[idx], lastActiveAt: Date.now() };
+        }
         return updated;
-      }
-      
+      });
+    } else {
       // Add new tab
-      return [...prev, {
+      setOpenTabs(prev => [...prev, {
         buyerId,
         companyName,
         stage,
         lastActiveAt: Date.now()
-      }];
-    });
+      }]);
+    }
     
+    // Always set this buyer as active
     setActiveBuyerIdState(buyerId);
   }, []);
 
   const closeBuyerTab = useCallback((buyerId: string): string | null => {
+    const currentTabs = openTabsRef.current;
+    const closedIndex = currentTabs.findIndex(t => t.buyerId === buyerId);
+    
+    if (closedIndex === -1) return activeBuyerId;
+    
+    const newTabs = currentTabs.filter(t => t.buyerId !== buyerId);
+    
     let newActiveId: string | null = null;
     
-    setOpenTabs(prev => {
-      const closedIndex = prev.findIndex(t => t.buyerId === buyerId);
-      if (closedIndex === -1) return prev;
-      
-      const newTabs = prev.filter(t => t.buyerId !== buyerId);
-      
-      // If closing active tab, determine new active
-      if (buyerId === activeBuyerId && newTabs.length > 0) {
-        // Prefer left neighbor, then right
-        const newActiveIndex = Math.max(0, Math.min(closedIndex, newTabs.length - 1));
-        newActiveId = newTabs[newActiveIndex].buyerId;
-      } else if (newTabs.length === 0) {
-        newActiveId = null;
-      } else {
-        newActiveId = activeBuyerId;
-      }
-      
-      return newTabs;
-    });
+    // If closing active tab, determine new active
+    if (buyerId === activeBuyerId && newTabs.length > 0) {
+      // Prefer left neighbor, then right
+      const newActiveIndex = Math.max(0, Math.min(closedIndex, newTabs.length - 1));
+      newActiveId = newTabs[newActiveIndex].buyerId;
+    } else if (newTabs.length === 0) {
+      newActiveId = null;
+    } else {
+      newActiveId = activeBuyerId;
+    }
+    
+    setOpenTabs(newTabs);
     
     if (newActiveId !== activeBuyerId) {
       setActiveBuyerIdState(newActiveId);
