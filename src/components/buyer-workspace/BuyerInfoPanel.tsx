@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { MapPin, Globe, Facebook, Youtube, Linkedin, ExternalLink } from 'lucide-react';
+import { MapPin, Globe, Facebook, Youtube, Linkedin, Pencil } from 'lucide-react';
 import { Buyer, BuyerContact, BuyerStatus } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import BuyerEditDrawer from './BuyerEditDrawer';
 
 interface BuyerInfoPanelProps {
   buyer: Buyer;
@@ -12,6 +14,7 @@ type InfoTab = 'company' | 'contact1' | 'contact2' | 'contact3';
 
 const BuyerInfoPanel: React.FC<BuyerInfoPanelProps> = ({ buyer }) => {
   const [activeTab, setActiveTab] = useState<InfoTab>('company');
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
 
   const openInNewTab = (url: string | undefined) => {
     if (url && url.trim()) {
@@ -48,15 +51,31 @@ const BuyerInfoPanel: React.FC<BuyerInfoPanelProps> = ({ buyer }) => {
     return buyer.contacts?.[index] || null;
   };
 
+  const handleEditDrawerClose = () => {
+    setIsEditDrawerOpen(false);
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
           {buyer.name}
-          <Button variant="ghost" size="sm" className="p-1 h-auto">
-            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="p-1 h-auto"
+                onClick={() => setIsEditDrawerOpen(true)}
+              >
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Edit company info</p>
+            </TooltipContent>
+          </Tooltip>
         </h2>
         
         {/* Icon buttons row */}
@@ -112,6 +131,13 @@ const BuyerInfoPanel: React.FC<BuyerInfoPanelProps> = ({ buyer }) => {
           )}
         </div>
       </ScrollArea>
+      
+      {/* Edit Drawer */}
+      <BuyerEditDrawer
+        isOpen={isEditDrawerOpen}
+        onClose={handleEditDrawerClose}
+        buyer={buyer}
+      />
     </div>
   );
 };
