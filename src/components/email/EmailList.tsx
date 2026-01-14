@@ -1,15 +1,9 @@
-import React, { useState } from 'react';
-import { Star, FileText, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { EmailMessage, useEmailContext } from '@/context/EmailContext';
-import { useNylasEmailContext } from '@/context/NylasEmailContext';
+import React, { useState, useMemo } from 'react';
+import { EmailMessage } from '@/context/EmailContext';
 import { NylasMessage } from '@/hooks/useNylas';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import BuyerSelectModal from './BuyerSelectModal';
+import EmailListHeader from './EmailListHeader';
+import EmailListItem from './EmailListItem';
 
 interface EmailListProps {
   messages: EmailMessage[];
@@ -17,347 +11,200 @@ interface EmailListProps {
   loading: boolean;
   onToggleStar: (id: string) => void;
   searchQuery: string;
-  // Nylas-specific props
   nylasMessages?: NylasMessage[];
   useNylas?: boolean;
 }
+
+const ITEMS_PER_PAGE = 20;
 
 const EmailList: React.FC<EmailListProps> = ({
   messages,
   mailbox,
   loading,
   onToggleStar,
-  searchQuery,
+  searchQuery: externalSearchQuery,
   nylasMessages = [],
   useNylas = false,
 }) => {
   const navigate = useNavigate();
-  const { logEmailToCRM } = useEmailContext();
-  const { logEmailToCRM: nylasLogToCRM } = useNylasEmailContext();
-  const [loggingIds, setLoggingIds] = useState<Set<string>>(new Set());
-  const [loggedIds, setLoggedIds] = useState<Set<string>>(new Set());
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter messages based on search query
-  const filteredMessages = messages.filter((msg) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      msg.subject.toLowerCase().includes(query) ||
-      msg.body.toLowerCase().includes(query) ||
-      msg.from_email.toLowerCase().includes(query) ||
-      msg.from_name?.toLowerCase().includes(query)
-    );
-  });
-
-  const filteredNylasMessages = nylasMessages.filter((msg) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      msg.subject.toLowerCase().includes(query) ||
-      msg.snippet.toLowerCase().includes(query) ||
-      msg.from.email.toLowerCase().includes(query) ||
-      msg.from.name?.toLowerCase().includes(query)
-    );
-  });
-
-  const handleOpenBuyerModal = (e: React.MouseEvent, msgId: string) => {
-    e.stopPropagation();
-    setSelectedMessageId(msgId);
-    setModalOpen(true);
+  const mailboxLabels: Record<string, string> = {
+    inbox: 'Inbox',
+    sent: 'Sent',
+    draft: 'Drafts',
+    all: 'All',
+    trash: 'Trash',
   };
 
-  const handleBuyerSelect = async (buyerId: string, companyName: string) => {
-    if (!selectedMessageId) return;
-    
-    setLoggingIds(prev => new Set(prev).add(selectedMessageId));
-    setModalOpen(false);
-    
+  // Filter messages based on search query
+  const filteredMessages = useMemo(() => {
     if (useNylas) {
-      const result = await nylasLogToCRM(selectedMessageId, buyerId);
-      if (result.success) {
-        setLoggedIds(prev => new Set(prev).add(selectedMessageId));
-      }
-    } else {
-      await logEmailToCRM(selectedMessageId, buyerId, companyName);
+      return nylasMessages.filter((msg) => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+          msg.subject.toLowerCase().includes(query) ||
+          msg.snippet.toLowerCase().includes(query) ||
+          msg.from.email.toLowerCase().includes(query) ||
+          msg.from.name?.toLowerCase().includes(query)
+        );
+      });
     }
-    
-    setLoggingIds(prev => {
+    return messages.filter((msg) => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        msg.subject.toLowerCase().includes(query) ||
+        msg.body.toLowerCase().includes(query) ||
+        msg.from_email.toLowerCase().includes(query) ||
+        msg.from_name?.toLowerCase().includes(query)
+      );
+    });
+  }, [useNylas, nylasMessages, messages, searchQuery]);
+
+  // Pagination
+  const totalCount = filteredMessages.length;
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const paginatedMessages = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredMessages.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredMessages, currentPage]);
+
+  const allSelected = paginatedMessages.length > 0 && 
+    paginatedMessages.every(msg => selectedIds.has(useNylas ? (msg as NylasMessage).id : (msg as EmailMessage).id));
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      const ids = paginatedMessages.map(msg => useNylas ? (msg as NylasMessage).id : (msg as EmailMessage).id);
+      setSelectedIds(new Set(ids));
+    }
+  };
+
+  const handleSelect = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
       const next = new Set(prev);
-      next.delete(selectedMessageId);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
-    setSelectedMessageId(null);
+  };
+
+  const handleDelete = () => {
+    // TODO: Implement delete functionality
+    console.log('Delete selected:', Array.from(selectedIds));
+    setSelectedIds(new Set());
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setSelectedIds(new Set());
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex-1 flex flex-col">
+        <EmailListHeader
+          title={mailboxLabels[mailbox] || mailbox}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCount={0}
+          totalCount={0}
+          allSelected={false}
+          onSelectAll={() => {}}
+          currentPage={1}
+          totalPages={1}
+          onPageChange={() => {}}
+          itemsPerPage={ITEMS_PER_PAGE}
+        />
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </div>
     );
   }
 
-  const displayMessages = useNylas ? filteredNylasMessages : filteredMessages;
+  return (
+    <div className="flex-1 flex flex-col">
+      <EmailListHeader
+        title={mailboxLabels[mailbox] || mailbox}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedCount={selectedIds.size}
+        totalCount={totalCount}
+        allSelected={allSelected}
+        onSelectAll={handleSelectAll}
+        onDelete={selectedIds.size > 0 ? handleDelete : undefined}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        itemsPerPage={ITEMS_PER_PAGE}
+      />
 
-  if (displayMessages.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <p>메일이 없습니다</p>
-      </div>
-    );
-  }
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    
-    if (isToday) {
-      return format(date, 'a h:mm', { locale: ko });
-    }
-    return format(date, 'M월 d일', { locale: ko });
-  };
-
-  // Only show CRM log button for inbox and sent mailboxes
-  const showCRMButton = mailbox === 'inbox' || mailbox === 'sent' || mailbox === 'all';
-
-  // Render Nylas messages
-  if (useNylas) {
-    return (
-      <>
-        <div className="divide-y divide-border">
-        {filteredNylasMessages.map((msg) => {
-            // Use mailbox prop to determine display: inbox shows sender, sent shows recipient
+      <div className="flex-1 overflow-auto bg-background">
+        {paginatedMessages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <p>메일이 없습니다</p>
+          </div>
+        ) : useNylas ? (
+          // Nylas messages
+          (paginatedMessages as NylasMessage[]).map((msg) => {
             const isInboxView = mailbox === 'inbox' || (mailbox === 'all' && msg.folder.toLowerCase().includes('inbox'));
             const displayName = isInboxView
               ? msg.from.name || msg.from.email
               : msg.to[0]?.email || '(수신자 없음)';
 
-            const isLogging = loggingIds.has(msg.id);
-            const isLogged = loggedIds.has(msg.id);
-            const canLogToCRM = showCRMButton;
+            return (
+              <EmailListItem
+                key={msg.id}
+                id={msg.id}
+                senderName={displayName}
+                subject={msg.subject}
+                snippet={msg.snippet}
+                date={msg.date}
+                isUnread={msg.unread}
+                isSelected={selectedIds.has(msg.id)}
+                hasAttachment={false}
+                onClick={() => navigate(`/email/${msg.id}?nylas=true`)}
+                onSelect={(checked) => handleSelect(msg.id, checked)}
+              />
+            );
+          })
+        ) : (
+          // Mock messages
+          (paginatedMessages as EmailMessage[]).map((msg) => {
+            const displayName = msg.mailbox === 'sent' || msg.mailbox === 'draft'
+              ? msg.to_emails[0] || '(수신자 없음)'
+              : msg.from_name || msg.from_email;
 
             return (
-              <div
+              <EmailListItem
                 key={msg.id}
-                onClick={() => navigate(`/email/${msg.id}?nylas=true`)}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50',
-                  msg.unread && 'bg-primary/5 font-medium'
-                )}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Nylas star toggle would go here
-                  }}
-                  className="text-muted-foreground hover:text-yellow-500 transition-colors"
-                >
-                  <Star
-                    className={cn(
-                      'w-4 h-4',
-                      msg.starred && 'fill-yellow-500 text-yellow-500'
-                    )}
-                  />
-                </button>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      'text-sm truncate',
-                      msg.unread && 'font-semibold text-foreground'
-                    )}>
-                      {displayName}
-                    </span>
-                    {isLogged && (
-                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
-                        <Check className="w-3 h-3" />
-                        CRM
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      'text-sm truncate',
-                      msg.unread ? 'text-foreground' : 'text-muted-foreground'
-                    )}>
-                      {msg.subject}
-                    </span>
-                    {msg.snippet && (
-                      <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-                        - {msg.snippet}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {canLogToCRM && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => handleOpenBuyerModal(e, msg.id)}
-                          disabled={isLogged || isLogging}
-                          className={cn(
-                            'h-7 px-2 text-xs gap-1',
-                            isLogged && 'opacity-50'
-                          )}
-                        >
-                          {isLogging ? (
-                            <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          ) : isLogged ? (
-                            <Check className="w-3 h-3" />
-                          ) : (
-                            <FileText className="w-3 h-3" />
-                          )}
-                          <span className="hidden sm:inline">
-                            {isLogged ? '기록됨' : 'CRM 기록'}
-                          </span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {isLogged ? '이미 CRM에 저장됨' : '바이어 선택 후 CRM에 기록'}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDate(msg.date)}
-                  </div>
-                </div>
-              </div>
+                id={msg.id}
+                senderName={displayName}
+                subject={msg.subject}
+                snippet={msg.snippet || ''}
+                date={msg.created_at}
+                isUnread={!msg.is_read}
+                isSelected={selectedIds.has(msg.id)}
+                hasAttachment={false}
+                onClick={() => navigate(`/email/${msg.id}`)}
+                onSelect={(checked) => handleSelect(msg.id, checked)}
+              />
             );
-          })}
-        </div>
-
-        <BuyerSelectModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          onSelect={handleBuyerSelect}
-          loading={loggingIds.size > 0}
-        />
-      </>
-    );
-  }
-
-  // Render regular messages (mock data)
-  return (
-    <>
-      <div className="divide-y divide-border">
-        {filteredMessages.map((msg) => {
-          const displayName = msg.mailbox === 'sent' || msg.mailbox === 'draft'
-            ? msg.to_emails[0] || '(수신자 없음)'
-            : msg.from_name || msg.from_email;
-
-          const isLogging = loggingIds.has(msg.id);
-          const canLogToCRM = showCRMButton && (msg.mailbox === 'inbox' || msg.mailbox === 'sent');
-
-          return (
-            <div
-              key={msg.id}
-              onClick={() => navigate(`/email/${msg.id}`)}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50',
-                !msg.is_read && 'bg-primary/5 font-medium'
-              )}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleStar(msg.id);
-                }}
-                className="text-muted-foreground hover:text-yellow-500 transition-colors"
-              >
-                <Star
-                  className={cn(
-                    'w-4 h-4',
-                    msg.is_starred && 'fill-yellow-500 text-yellow-500'
-                  )}
-                />
-              </button>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'text-sm truncate',
-                    !msg.is_read && 'font-semibold text-foreground'
-                  )}>
-                    {displayName}
-                  </span>
-                  {msg.is_logged_to_crm && (
-                    <span className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
-                      <Check className="w-3 h-3" />
-                      CRM
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'text-sm truncate',
-                    !msg.is_read ? 'text-foreground' : 'text-muted-foreground'
-                  )}>
-                    {msg.subject}
-                  </span>
-                  {msg.snippet && (
-                    <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-                      - {msg.snippet}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {canLogToCRM && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => handleOpenBuyerModal(e, msg.id)}
-                        disabled={msg.is_logged_to_crm || isLogging}
-                        className={cn(
-                          'h-7 px-2 text-xs gap-1',
-                          msg.is_logged_to_crm && 'opacity-50'
-                        )}
-                      >
-                        {isLogging ? (
-                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                        ) : msg.is_logged_to_crm ? (
-                          <Check className="w-3 h-3" />
-                        ) : (
-                          <FileText className="w-3 h-3" />
-                        )}
-                        <span className="hidden sm:inline">
-                          {msg.is_logged_to_crm ? '기록됨' : 'CRM 기록'}
-                        </span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {msg.is_logged_to_crm ? '이미 CRM에 저장됨' : '바이어 선택 후 CRM에 기록'}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-
-                <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatDate(msg.created_at)}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+          })
+        )}
       </div>
-
-      <BuyerSelectModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        onSelect={handleBuyerSelect}
-        loading={loggingIds.size > 0}
-      />
-    </>
+    </div>
   );
 };
 
