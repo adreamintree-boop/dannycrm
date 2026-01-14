@@ -86,17 +86,17 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({
 
       {/* Half-donut chart */}
       <div className="flex flex-col items-center mb-4">
-        <div className="relative w-full h-32">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="relative w-full" style={{ height: '120px' }}>
+          <ResponsiveContainer width="100%" height={160}>
             <PieChart>
               <Pie
                 data={hasData ? chartData : emptyChartData}
                 cx="50%"
-                cy="95%"
+                cy="75%"
                 startAngle={180}
                 endAngle={0}
-                innerRadius="50%"
-                outerRadius="90%"
+                innerRadius={50}
+                outerRadius={70}
                 paddingAngle={hasData && chartData.length > 1 ? 2 : 0}
                 dataKey="value"
                 animationBegin={0}
@@ -113,13 +113,13 @@ const BuyerOverviewCard: React.FC<BuyerOverviewCardProps> = ({
               </Pie>
             </PieChart>
           </ResponsiveContainer>
-          {/* Center text - positioned above the chart bottom */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
-            <span className="text-4xl font-bold text-white drop-shadow-lg">{total}</span>
+          {/* Center text - positioned inside the donut arc */}
+          <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '20px' }}>
+            <span className="text-4xl font-bold text-white">{total}</span>
           </div>
         </div>
         {/* vs last month text */}
-        <div className="flex items-center gap-1 mt-2">
+        <div className="flex items-center gap-1">
           <span className="text-emerald-300 text-sm font-medium">0%</span>
           <span className="text-white/70 text-sm">vs last month</span>
         </div>
