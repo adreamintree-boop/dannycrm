@@ -18,6 +18,7 @@ import TopHeader from "./components/layout/TopHeader";
 import { AppProvider } from "./context/AppContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CreditsProvider } from "./context/CreditsContext";
+import { BuyerTabsProvider } from "./context/BuyerTabsContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
         <AuthProvider>
           <CreditsProvider>
             <AppProvider>
+            <BuyerTabsProvider>
             <Routes>
               {/* Public routes */}
               <Route path="/auth" element={<Auth />} />
@@ -88,6 +90,7 @@ const App = () => (
                 </ProtectedRoute>
               } />
             </Routes>
+            </BuyerTabsProvider>
             </AppProvider>
           </CreditsProvider>
         </AuthProvider>

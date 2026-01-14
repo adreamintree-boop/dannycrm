@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, X, MapPin, Globe, Facebook, Youtube, Linkedin, Loader2 } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useApp } from '@/context/AppContext';
-import { Buyer, BuyerStatus } from '@/data/mockData';
+import { useBuyerTabs } from '@/context/BuyerTabsContext';
+import { BuyerStatus } from '@/data/mockData';
 import TopHeader from '@/components/layout/TopHeader';
 import BuyerInfoPanel from '@/components/buyer-workspace/BuyerInfoPanel';
 import BuyerEmailTimeline from '@/components/buyer-workspace/BuyerEmailTimeline';
@@ -12,20 +12,11 @@ import BuyerEmailViewer from '@/components/buyer-workspace/BuyerEmailViewer';
 import BuyerAnalyzePanel from '@/components/buyer-workspace/BuyerAnalyzePanel';
 import { useSalesActivityLogs, SalesActivityLog } from '@/hooks/useSalesActivityLogs';
 
-export interface OpenBuyerTab {
-  buyerId: string;
-  companyName: string;
-  stage: BuyerStatus;
-}
-
 const BuyerWorkspace: React.FC = () => {
   const { buyerId } = useParams<{ buyerId: string }>();
   const navigate = useNavigate();
   const { buyers } = useApp();
-  
-  // Tab management state
-  const [openTabs, setOpenTabs] = useState<OpenBuyerTab[]>([]);
-  const [activeBuyerId, setActiveBuyerId] = useState<string | null>(null);
+  const { openTabs, activeBuyerId, openBuyerTab, closeBuyerTab, setActiveBuyerId } = useBuyerTabs();
   
   // Content tab state (Activity / Mail timeline / Buyer Analyze)
   const [contentTab, setContentTab] = useState<'activity' | 'mail' | 'analyze'>('mail');
@@ -47,24 +38,16 @@ const BuyerWorkspace: React.FC = () => {
     return emailLogs.filter(log => log.source === 'email');
   }, [emailLogs]);
 
-  // Initialize tab from URL
+  // Initialize tab from URL - only add if not exists
   useEffect(() => {
     if (buyerId) {
       const buyer = buyers.find(b => b.id === buyerId);
       if (buyer) {
-        // Check if tab already exists
-        const existingTab = openTabs.find(t => t.buyerId === buyerId);
-        if (!existingTab) {
-          setOpenTabs(prev => [...prev, {
-            buyerId: buyer.id,
-            companyName: buyer.name,
-            stage: buyer.status
-          }]);
-        }
-        setActiveBuyerId(buyerId);
+        // This will either add the tab or just activate existing one
+        openBuyerTab(buyer.id, buyer.name, buyer.status);
       }
     }
-  }, [buyerId, buyers]);
+  }, [buyerId, buyers, openBuyerTab]);
 
   // Fetch logs when active buyer changes
   useEffect(() => {
@@ -83,27 +66,16 @@ const BuyerWorkspace: React.FC = () => {
   const handleTabClick = useCallback((tabBuyerId: string) => {
     setActiveBuyerId(tabBuyerId);
     setSelectedEmailId(null);
-  }, []);
+  }, [setActiveBuyerId]);
 
   const handleCloseTab = useCallback((tabBuyerId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setOpenTabs(prev => {
-      const newTabs = prev.filter(t => t.buyerId !== tabBuyerId);
-      
-      // If closing active tab, switch to another tab or go back
-      if (tabBuyerId === activeBuyerId) {
-        if (newTabs.length > 0) {
-          const closedIndex = prev.findIndex(t => t.buyerId === tabBuyerId);
-          const newActiveIndex = Math.min(closedIndex, newTabs.length - 1);
-          setActiveBuyerId(newTabs[newActiveIndex].buyerId);
-        } else {
-          navigate('/');
-        }
-      }
-      
-      return newTabs;
-    });
-  }, [activeBuyerId, navigate]);
+    const newActiveId = closeBuyerTab(tabBuyerId);
+    
+    if (newActiveId === null) {
+      navigate('/');
+    }
+  }, [closeBuyerTab, navigate]);
 
   const handleBackToFunnel = useCallback(() => {
     navigate('/');
@@ -168,39 +140,41 @@ const BuyerWorkspace: React.FC = () => {
           Customer Funnel
         </Button>
         
-        {/* Buyer Tabs */}
-        <div className="flex-1 flex items-center overflow-x-auto">
-          {openTabs.map((tab) => {
-            const isActive = tab.buyerId === activeBuyerId;
-            return (
-              <div
-                key={tab.buyerId}
-                onClick={() => handleTabClick(tab.buyerId)}
-                className={`
-                  flex items-center gap-2 px-4 py-2 cursor-pointer border-r border-border
-                  ${isActive ? `${getStageColor(tab.stage)} text-white` : 'bg-muted/50 text-foreground hover:bg-muted'}
-                `}
-              >
-                <span className="text-sm font-medium truncate max-w-[150px]">
-                  {getStageLabel(tab.stage)} - {tab.companyName}
-                </span>
-                <button
-                  onClick={(e) => handleCloseTab(tab.buyerId, e)}
-                  className={`p-0.5 rounded hover:bg-white/20 ${isActive ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+        {/* Buyer Tabs - horizontal scroll, no wrap */}
+        <div className="flex-1 overflow-x-auto scrollbar-thin">
+          <div className="flex items-center flex-nowrap">
+            {openTabs.map((tab) => {
+              const isActive = tab.buyerId === activeBuyerId;
+              return (
+                <div
+                  key={tab.buyerId}
+                  onClick={() => handleTabClick(tab.buyerId)}
+                  className={`
+                    flex items-center gap-2 px-4 py-2 cursor-pointer border-r border-border flex-shrink-0 whitespace-nowrap
+                    ${isActive ? `${getStageColor(tab.stage)} text-white` : 'bg-muted/50 text-foreground hover:bg-muted'}
+                  `}
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            );
-          })}
+                  <span className="text-sm font-medium truncate max-w-[180px]">
+                    {getStageLabel(tab.stage)} - {tab.companyName}
+                  </span>
+                  <button
+                    onClick={(e) => handleCloseTab(tab.buyerId, e)}
+                    className={`p-0.5 rounded hover:bg-white/20 flex-shrink-0 ${isActive ? 'text-white/80 hover:text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       {currentBuyer && (
         <div className="flex-1 flex min-h-0">
-          {/* Left Info Panel */}
-          <div className="w-80 border-r border-border flex flex-col bg-card shrink-0">
+          {/* Left Info Panel - fixed width, non-shrinking */}
+          <div className="w-[340px] min-w-[320px] max-w-[400px] border-r border-border flex flex-col bg-card shrink-0 overflow-hidden">
             <BuyerInfoPanel buyer={currentBuyer} />
           </div>
 

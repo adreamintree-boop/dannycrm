@@ -76,21 +76,23 @@ const BuyerInfoPanel: React.FC<BuyerInfoPanelProps> = ({ buyer }) => {
         </div>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="flex items-center border-b border-border px-4">
-        {(['company', 'contact1', 'contact2', 'contact3'] as InfoTab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`py-2 px-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab === 'company' ? 'company info' : tab}
-          </button>
-        ))}
+      {/* Sub-tabs - horizontal scroll, no wrap */}
+      <div className="flex items-center border-b border-border overflow-x-auto scrollbar-thin">
+        <div className="flex items-center flex-nowrap px-2 gap-1 min-w-0">
+          {(['company', 'contact1', 'contact2', 'contact3'] as InfoTab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-shrink-0 py-2 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === tab
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab === 'company' ? 'company info' : tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}
