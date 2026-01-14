@@ -115,11 +115,11 @@ function EmailContent() {
   }, [isConnected, nylasMessages, mockUnreadCount, accountLoading]);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-white">
       <TopHeader />
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 bg-white">
         <EmailSidebar unreadCount={unreadCount} />
-        <main className="flex-1 flex flex-col min-h-0 overflow-auto bg-background">
+        <main className="flex-1 flex flex-col min-h-0 overflow-auto bg-white">
           <Routes>
             <Route index element={<EmailListView mailbox="inbox" />} />
             <Route path="sent" element={<EmailListView mailbox="sent" />} />
