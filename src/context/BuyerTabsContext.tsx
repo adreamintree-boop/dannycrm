@@ -32,28 +32,25 @@ export const BuyerTabsProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, []);
 
   const openBuyerTab = useCallback((buyerId: string, companyName: string, stage: BuyerStatus) => {
-    const currentTabs = openTabsRef.current;
-    const existingIndex = currentTabs.findIndex(t => t.buyerId === buyerId);
-    
-    if (existingIndex >= 0) {
-      // Tab exists - just update lastActiveAt
-      setOpenTabs(prev => {
+    // Use functional update to ensure we're working with latest state
+    setOpenTabs(prev => {
+      const existingIndex = prev.findIndex(t => t.buyerId === buyerId);
+      
+      if (existingIndex >= 0) {
+        // Tab exists - just update lastActiveAt, don't add duplicate
         const updated = [...prev];
-        const idx = updated.findIndex(t => t.buyerId === buyerId);
-        if (idx >= 0) {
-          updated[idx] = { ...updated[idx], lastActiveAt: Date.now() };
-        }
+        updated[existingIndex] = { ...updated[existingIndex], lastActiveAt: Date.now() };
         return updated;
-      });
-    } else {
-      // Add new tab
-      setOpenTabs(prev => [...prev, {
+      }
+      
+      // Add new tab only if it doesn't exist
+      return [...prev, {
         buyerId,
         companyName,
         stage,
         lastActiveAt: Date.now()
-      }]);
-    }
+      }];
+    });
     
     // Always set this buyer as active
     setActiveBuyerIdState(buyerId);
