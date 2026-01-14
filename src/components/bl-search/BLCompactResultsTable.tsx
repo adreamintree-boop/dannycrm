@@ -96,9 +96,9 @@ const BLCompactResultsTable: React.FC<BLCompactResultsTableProps> = ({
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Calculate row number
+  // Calculate row number - page-based indexing (1 ~ N)
   const getRowNumber = (index: number): number => {
-    return results.length - ((currentPage - 1) * 10 + index);
+    return index + 1;
   };
 
   // Loading state

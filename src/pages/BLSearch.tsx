@@ -318,7 +318,7 @@ const BLSearch: React.FC = () => {
         {hasSearched && (
           <>
             {/* Left: Results Table */}
-            <div className="flex-1 overflow-auto p-6 lg:w-[70%]">
+            <div className="flex-1 overflow-auto p-6">
               <BLCompactResultsTable
                 results={results}
                 paginatedResults={displayedResults}
@@ -335,11 +335,11 @@ const BLSearch: React.FC = () => {
               />
             </div>
 
-            {/* Right: Summary Panel */}
-            {results.length > 0 && (
-              <div className="hidden lg:block w-[300px] xl:w-[350px] shrink-0">
+            {/* Right: Summary Panel - uses only current page rows */}
+            {displayedResults.length > 0 && (
+              <div className="hidden lg:block w-[420px] xl:w-[460px] shrink-0 min-w-[420px]">
                 <BLSummaryPanel
-                  results={results}
+                  results={displayedResults}
                   startDate={startDate}
                   endDate={endDate}
                   onSave={handleSaveSummary}
