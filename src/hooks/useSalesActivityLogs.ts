@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 
@@ -20,10 +20,22 @@ export function useSalesActivityLogs() {
   const { user } = useAuthContext();
   const [logs, setLogs] = useState<SalesActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentBuyerId, setCurrentBuyerId] = useState<string | null>(null);
+  
+  // Use ref to track the latest requested buyerId to prevent race conditions
+  const latestRequestedBuyerIdRef = useRef<string | null>(null);
 
   const fetchLogsByBuyer = useCallback(async (buyerId: string) => {
     if (!user) return;
+    
+    // Track this as the latest request
+    latestRequestedBuyerIdRef.current = buyerId;
+    
+    // Immediately clear logs and set the current buyer to prevent flickering
+    setCurrentBuyerId(buyerId);
+    setLogs([]);
     setLoading(true);
+    
     try {
       const { data, error } = await supabase
         .from('sales_activity_logs')
@@ -33,16 +45,26 @@ export function useSalesActivityLogs() {
         .order('occurred_at', { ascending: false });
 
       if (error) throw error;
-      setLogs(data || []);
+      
+      // Only update if this is still the latest requested buyer (prevent race conditions)
+      if (latestRequestedBuyerIdRef.current === buyerId) {
+        setLogs(data || []);
+      }
     } catch (error) {
       console.error('Failed to fetch sales activity logs:', error);
     } finally {
-      setLoading(false);
+      // Only update loading if this is still the latest request
+      if (latestRequestedBuyerIdRef.current === buyerId) {
+        setLoading(false);
+      }
     }
   }, [user]);
 
   const fetchUnassignedLogs = useCallback(async () => {
     if (!user) return;
+    latestRequestedBuyerIdRef.current = null;
+    setCurrentBuyerId(null);
+    setLogs([]);
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -53,16 +75,23 @@ export function useSalesActivityLogs() {
         .order('occurred_at', { ascending: false });
 
       if (error) throw error;
-      setLogs(data || []);
+      if (latestRequestedBuyerIdRef.current === null) {
+        setLogs(data || []);
+      }
     } catch (error) {
       console.error('Failed to fetch unassigned logs:', error);
     } finally {
-      setLoading(false);
+      if (latestRequestedBuyerIdRef.current === null) {
+        setLoading(false);
+      }
     }
   }, [user]);
 
   const fetchAllLogs = useCallback(async () => {
     if (!user) return;
+    latestRequestedBuyerIdRef.current = 'ALL';
+    setCurrentBuyerId(null);
+    setLogs([]);
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -72,11 +101,15 @@ export function useSalesActivityLogs() {
         .order('occurred_at', { ascending: false });
 
       if (error) throw error;
-      setLogs(data || []);
+      if (latestRequestedBuyerIdRef.current === 'ALL') {
+        setLogs(data || []);
+      }
     } catch (error) {
       console.error('Failed to fetch all logs:', error);
     } finally {
-      setLoading(false);
+      if (latestRequestedBuyerIdRef.current === 'ALL') {
+        setLoading(false);
+      }
     }
   }, [user]);
 
@@ -122,6 +155,7 @@ export function useSalesActivityLogs() {
   return {
     logs,
     loading,
+    currentBuyerId,
     fetchLogsByBuyer,
     fetchUnassignedLogs,
     fetchAllLogs,
