@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import RichTextEditor from './RichTextEditor';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronUp, Send, Save, X, Building2, Lock } from 'lucide-react';
 import EmailScriptGenerator from './EmailScriptGenerator';
@@ -176,11 +176,13 @@ export default function EmailCompose() {
         if (msg) {
           if (isForward) {
             setSubject(`Fwd: ${msg.subject}`);
-            setBody(`\n\n---------- 전달된 메시지 ----------\n보낸사람: ${msg.from.name || msg.from.email}\n받는사람: ${msg.to.map(t => t.email).join(', ')}\n제목: ${msg.subject}\n\n${msg.body_text || msg.body_html?.replace(/<[^>]*>/g, '') || ''}`);
+            const fwdContent = `<br><br><hr><p><strong>---------- 전달된 메시지 ----------</strong></p><p>보낸사람: ${msg.from.name || msg.from.email}</p><p>받는사람: ${msg.to.map(t => t.email).join(', ')}</p><p>제목: ${msg.subject}</p><br><div>${msg.body_html || msg.body_text?.replace(/\n/g, '<br>') || ''}</div>`;
+            setBody(fwdContent);
           } else {
             setTo(msg.from.email);
             setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
-            setBody(`\n\n${msg.date}에 ${msg.from.name || msg.from.email}님이 작성:\n> ${(msg.body_text || '').split('\n').join('\n> ')}`);
+            const quoteContent = `<br><br><p>${msg.date}에 ${msg.from.name || msg.from.email}님이 작성:</p><blockquote style="border-left: 2px solid #ccc; padding-left: 1rem; margin-left: 0; color: #666;">${msg.body_html || msg.body_text?.replace(/\n/g, '<br>') || ''}</blockquote>`;
+            setBody(quoteContent);
             setReplyToMessageId(id);
           }
         }
@@ -190,11 +192,13 @@ export default function EmailCompose() {
         if (msg) {
           if (isForward) {
             setSubject(`Fwd: ${msg.subject}`);
-            setBody(`\n\n---------- 전달된 메시지 ----------\n보낸사람: ${msg.from_name || msg.from_email}\n받는사람: ${msg.to_emails.join(', ')}\n제목: ${msg.subject}\n\n${msg.body}`);
+            const fwdContent = `<br><br><hr><p><strong>---------- 전달된 메시지 ----------</strong></p><p>보낸사람: ${msg.from_name || msg.from_email}</p><p>받는사람: ${msg.to_emails.join(', ')}</p><p>제목: ${msg.subject}</p><br><div>${msg.body.replace(/\n/g, '<br>')}</div>`;
+            setBody(fwdContent);
           } else {
             setTo(msg.from_email);
             setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
-            setBody(`\n\n${msg.created_at}에 ${msg.from_name || msg.from_email}님이 작성:\n> ${msg.body.split('\n').join('\n> ')}`);
+            const quoteContent = `<br><br><p>${msg.created_at}에 ${msg.from_name || msg.from_email}님이 작성:</p><blockquote style="border-left: 2px solid #ccc; padding-left: 1rem; margin-left: 0; color: #666;">${msg.body.replace(/\n/g, '<br>')}</blockquote>`;
+            setBody(quoteContent);
           }
         }
       }
@@ -218,13 +222,13 @@ export default function EmailCompose() {
     const bccEmails = bcc ? bcc.split(',').map(e => e.trim()).filter(Boolean) : [];
 
     if (isConnected) {
-      // Send via Nylas
+      // Send via Nylas - body is already HTML from rich text editor
       const success = await sendNylasEmail({
         to: toEmails,
         cc: ccEmails.length > 0 ? ccEmails : undefined,
         bcc: bccEmails.length > 0 ? bccEmails : undefined,
         subject,
-        body_html: body.replace(/\n/g, '<br>'),
+        body_html: body,
         buyer_id: selectedBuyer?.id,
         reply_to_message_id: replyToMessageId || undefined,
       });
@@ -233,13 +237,13 @@ export default function EmailCompose() {
         navigate('/email/sent');
       }
     } else {
-      // Send via mock system
+      // Send via mock system - body is already HTML from rich text editor
       const data: ComposeData = {
         to,
         cc,
         bcc,
         subject,
-        body,
+        body, // HTML body
         buyerId: selectedBuyer?.id,
         buyerName: selectedBuyer?.company_name,
       };
@@ -465,11 +469,10 @@ export default function EmailCompose() {
           }}
         />
 
-        <Textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
+        <RichTextEditor
+          content={body}
+          onChange={setBody}
           placeholder="내용을 입력하세요..."
-          className="min-h-[300px] resize-none"
         />
       </div>
 
