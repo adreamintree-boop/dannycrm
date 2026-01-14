@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
-import BuyerDetail from "./pages/BuyerDetail";
+import BuyerWorkspace from "./pages/BuyerWorkspace";
 import BLSearch from "./pages/BLSearch";
 import CompanyAggregation from "./pages/CompanyAggregation";
 import Auth from "./pages/Auth";
@@ -46,7 +46,7 @@ const App = () => (
               } />
               <Route path="/buyers/:buyerId" element={
                 <ProtectedRoute>
-                  <BuyerDetail />
+                  <BuyerWorkspace />
                 </ProtectedRoute>
               } />
               <Route path="/bl-search" element={
