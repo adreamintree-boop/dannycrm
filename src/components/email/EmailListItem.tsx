@@ -43,10 +43,9 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
     <div
       onClick={onClick}
       className={cn(
-        'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-border/50',
-        'hover:bg-muted/50',
-        isSelected && 'bg-primary/5',
-        isUnread && 'bg-blue-50/50'
+        'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-border/50 bg-white',
+        'hover:bg-gray-50',
+        isSelected && 'bg-blue-50'
       )}
     >
       {/* Checkbox */}
@@ -58,12 +57,9 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
         />
       </div>
 
-      {/* Sender name */}
+      {/* Sender name - always bold */}
       <div className="w-36 shrink-0">
-        <span className={cn(
-          'text-sm truncate block',
-          isUnread ? 'font-semibold text-foreground' : 'text-foreground'
-        )}>
+        <span className="text-sm font-semibold text-foreground truncate block">
           {senderName}
         </span>
       </div>
@@ -73,19 +69,21 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
         {hasAttachment && (
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         )}
+        {/* Subject - bold only when unread */}
         <span className={cn(
           'text-sm shrink-0',
-          isUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground'
+          isUnread ? 'font-semibold text-foreground' : 'font-normal text-foreground'
         )}>
           {subject}
         </span>
-        <span className="text-sm text-muted-foreground truncate">
+        {/* Snippet - always normal weight */}
+        <span className="text-sm font-normal text-muted-foreground truncate">
           {snippet}
         </span>
       </div>
 
       {/* Date */}
-      <div className="text-sm text-muted-foreground whitespace-nowrap shrink-0">
+      <div className="text-sm font-normal text-muted-foreground whitespace-nowrap shrink-0">
         {formatDate(date)}
       </div>
     </div>

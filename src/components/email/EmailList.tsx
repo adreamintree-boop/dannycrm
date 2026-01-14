@@ -150,7 +150,7 @@ const EmailList: React.FC<EmailListProps> = ({
         itemsPerPage={ITEMS_PER_PAGE}
       />
 
-      <div className="flex-1 overflow-auto bg-background">
+      <div className="flex-1 overflow-auto bg-white">
         {paginatedMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <p>메일이 없습니다</p>
