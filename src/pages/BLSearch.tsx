@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { subMonths } from 'date-fns';
-import BLSearchStrip, { SearchCategory } from '@/components/bl-search/BLSearchStrip';
+import BLSearchHeader, { SearchCategory } from '@/components/bl-search/BLSearchHeader';
 import BLRecentSearches from '@/components/bl-search/BLRecentSearches';
 import BLDataUpdates from '@/components/bl-search/BLDataUpdates';
-import BLResultsTable from '@/components/bl-search/BLResultsTable';
-import BLFilterPanel from '@/components/bl-search/BLFilterPanel';
+import BLCompactResultsTable from '@/components/bl-search/BLCompactResultsTable';
+import BLSummaryPanel from '@/components/bl-search/BLSummaryPanel';
 import { useBLSearch } from '@/hooks/useBLSearch';
 import { useBLSearchHistory, BLSearchHistoryItem } from '@/hooks/useBLSearchHistory';
 import { useCreditsContext } from '@/context/CreditsContext';
@@ -46,11 +46,16 @@ const BLSearch: React.FC = () => {
 
   const { chargeBLSearchPage, refreshBalance } = useCreditsContext();
 
-  // Search strip state (independent from filter panel)
+  // Search strip state
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 12));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
-  const [searchCategoryState, setSearchCategoryState] = useState<SearchCategory>('bl');
+  const [searchCategoryState, setSearchCategoryState] = useState<SearchCategory>('importer');
+  
+  // Track loaded results for "Load More" functionality
+  const [displayedResults, setDisplayedResults] = useState<BLRecord[]>([]);
+  const [displayedPage, setDisplayedPage] = useState(1);
+  const pageSize = 10;
   
   // Track current search key for session
   const currentSearchKeyRef = useRef<string>('');
@@ -75,16 +80,37 @@ const BLSearch: React.FC = () => {
     });
   }, []);
 
-  // Tab change is UI-only - NO search, NO credit deduction
+  // Reset displayed results when new search happens
+  useEffect(() => {
+    if (hasSearched && results.length > 0) {
+      setDisplayedResults(results.slice(0, pageSize));
+      setDisplayedPage(1);
+    } else {
+      setDisplayedResults([]);
+      setDisplayedPage(1);
+    }
+  }, [hasSearched, results]);
+
+  // Tab change is UI-only
   const handleSearchCategoryChange = (category: SearchCategory) => {
     setSearchCategoryState(category);
-    // Only update UI state - do NOT trigger search or credit flow
   };
 
-  // Generate search key from current search state using stable hash
+  // Map new category type to legacy type for search hook
+  const mapCategoryToLegacy = (category: SearchCategory): 'product' | 'hscode' | 'importer' | 'exporter' | 'bl' => {
+    switch (category) {
+      case 'importer': return 'importer';
+      case 'exporter': return 'exporter';
+      case 'product': return 'product';
+      case 'hscode': return 'hscode';
+      default: return 'bl';
+    }
+  };
+
+  // Generate search key from current search state
   const getCurrentSearchKey = useCallback(() => {
     return generateSearchKey({
-      searchType: searchCategoryState,
+      searchType: mapCategoryToLegacy(searchCategoryState),
       keyword: searchKeyword,
       dateFrom: startDate,
       dateTo: endDate,
@@ -92,14 +118,13 @@ const BLSearch: React.FC = () => {
     });
   }, [searchKeyword, searchCategoryState, filters, startDate, endDate]);
 
-  // Get row fingerprints from paginated results using stable deterministic hash
+  // Get row fingerprints from results
   const getRowFingerprints = useCallback((rows: BLRecord[]): string[] => {
     return rows.map(row => generateRowFingerprint(row));
   }, []);
 
-  // Charge credits for current page - ONLY when searchInitiated is true
+  // Charge credits for current page
   const chargeForCurrentPage = useCallback(async (rows: BLRecord[], page: number, searchKey: string) => {
-    // CRITICAL: Guard - only charge if search was explicitly initiated
     if (!searchInitiatedRef.current) return true;
     if (isChargingRef.current || rows.length === 0) return true;
     
@@ -125,16 +150,13 @@ const BLSearch: React.FC = () => {
         return false;
       }
 
-      // Show toast only if credits were actually charged (deductionCount > 0)
       if (result.chargedCount && result.chargedCount > 0) {
         toast({
           title: '크레딧 차감',
           description: `이번 페이지 신규 조회: ${result.chargedCount}건 / 차감: ${result.chargedCount} credit`,
         });
       }
-      // No toast when chargedCount === 0 (previously viewed rows)
 
-      // Update viewed rows in history if we have a history ID
       if (currentHistoryIdRef.current) {
         await updateViewedRows(currentHistoryIdRef.current, fingerprints);
         await updateLastViewedPage(currentHistoryIdRef.current, page);
@@ -147,50 +169,44 @@ const BLSearch: React.FC = () => {
     }
   }, [getRowFingerprints, getSearchMeta, chargeBLSearchPage, results.length, refreshBalance, updateViewedRows, updateLastViewedPage]);
 
-  // Handle page changes - charge for new page
-  const handlePageChange = useCallback(async (newPage: number) => {
-    if (newPage === currentPage) return;
-    
-    // Calculate which rows will be on the new page
-    const pageSize = 10;
-    const startIndex = (newPage - 1) * pageSize;
+  // Handle Load More
+  const handleLoadMore = useCallback(async () => {
+    const nextPage = displayedPage + 1;
+    const startIndex = displayedPage * pageSize;
     const endIndex = Math.min(startIndex + pageSize, results.length);
-    const newPageRows = results.slice(startIndex, endIndex);
+    const newRows = results.slice(startIndex, endIndex);
     
     const searchKey = currentSearchKeyRef.current;
-    const success = await chargeForCurrentPage(newPageRows, newPage, searchKey);
+    const success = await chargeForCurrentPage(newRows, nextPage, searchKey);
     
     if (success) {
-      setCurrentPage(newPage);
+      setDisplayedResults(prev => [...prev, ...newRows]);
+      setDisplayedPage(nextPage);
     }
-  }, [currentPage, results, chargeForCurrentPage, setCurrentPage]);
+  }, [displayedPage, results, chargeForCurrentPage]);
 
   // Charge for initial page after search completes
   useEffect(() => {
-    if (hasSearched && !isLoading && paginatedResults.length > 0 && currentPage === 1) {
+    if (hasSearched && !isLoading && displayedResults.length > 0 && displayedPage === 1) {
       const searchKey = getCurrentSearchKey();
       
-      // For replay mode, use the already-set search key (from history query_hash)
-      // For new searches, update the search key
       const effectiveSearchKey = isReplayModeRef.current 
         ? currentSearchKeyRef.current 
         : searchKey;
       
-      // Only update search key ref for new searches
       if (!isReplayModeRef.current && searchKey !== currentSearchKeyRef.current) {
         currentSearchKeyRef.current = searchKey;
       }
       
-      // Always charge - the backend will handle deduplication
-      chargeForCurrentPage(paginatedResults, 1, effectiveSearchKey);
+      chargeForCurrentPage(displayedResults, 1, effectiveSearchKey);
     }
-  }, [hasSearched, isLoading, paginatedResults, currentPage, getCurrentSearchKey, chargeForCurrentPage]);
+  }, [hasSearched, isLoading, displayedResults, displayedPage, getCurrentSearchKey, chargeForCurrentPage]);
 
   // Save search to history after results
   useEffect(() => {
     if (hasSearched && !isLoading && results.length > 0 && !isReplayModeRef.current) {
       saveSearch({
-        searchType: searchCategoryState,
+        searchType: mapCategoryToLegacy(searchCategoryState),
         keyword: searchKeyword,
         dateFrom: startDate,
         dateTo: endDate,
@@ -205,156 +221,133 @@ const BLSearch: React.FC = () => {
   }, [hasSearched, isLoading, results.length, searchCategoryState, searchKeyword, startDate, endDate, filters, saveSearch]);
 
   const handleSearch = () => {
-    // Reset refs for new search
     currentSearchKeyRef.current = '';
     currentHistoryIdRef.current = null;
     isReplayModeRef.current = false;
-    
-    // CRITICAL: Set search initiated flag BEFORE calling search
     searchInitiatedRef.current = true;
     
-    // Pass main keyword, category, and date range to search hook
     setMainKeyword(searchKeyword);
-    setSearchCategory(searchCategoryState);
-    setDateRange(startDate, endDate);
-    search();
-  };
-
-  const handleFilterPanelSearch = () => {
-    // Reset refs for new search
-    currentSearchKeyRef.current = '';
-    currentHistoryIdRef.current = null;
-    isReplayModeRef.current = false;
-    
-    // CRITICAL: Set search initiated flag BEFORE calling search
-    searchInitiatedRef.current = true;
-    
-    // Filter panel search uses date range but NOT main keyword
-    setMainKeyword('');
-    setSearchCategory(searchCategoryState);
+    setSearchCategory(mapCategoryToLegacy(searchCategoryState));
     setDateRange(startDate, endDate);
     search();
   };
 
   // Handle selecting a history item
   const handleSelectHistory = useCallback((item: BLSearchHistoryItem) => {
-    // Set replay mode - we're reopening a previous search
     isReplayModeRef.current = true;
     currentHistoryIdRef.current = item.id;
-    
-    // CRITICAL: Set search initiated flag for replay mode
     searchInitiatedRef.current = true;
-    
-    // CRITICAL: Set the search key BEFORE running the search
-    // This uses the same query_hash from history, ensuring the backend
-    // recognizes this as the same session and doesn't re-charge viewed rows
     currentSearchKeyRef.current = item.query_hash;
     
-    // Hydrate the search state from history
     setSearchKeyword(item.keyword);
-    setSearchCategoryState(item.search_type);
+    // Map legacy type to new type
+    const categoryMap: Record<string, SearchCategory> = {
+      'importer': 'importer',
+      'exporter': 'exporter',
+      'product': 'product',
+      'hscode': 'hscode',
+      'bl': 'importer'
+    };
+    setSearchCategoryState(categoryMap[item.search_type] || 'importer');
     
     const historyDateFrom = item.date_from ? new Date(item.date_from) : undefined;
     const historyDateTo = item.date_to ? new Date(item.date_to) : undefined;
     
-    if (historyDateFrom) {
-      setStartDate(historyDateFrom);
-    }
-    if (historyDateTo) {
-      setEndDate(historyDateTo);
-    }
+    if (historyDateFrom) setStartDate(historyDateFrom);
+    if (historyDateTo) setEndDate(historyDateTo);
     
-    // Apply filters from history - reset and apply
     resetFilters();
     item.filters_json.forEach((f, idx) => {
       if (idx === 0) {
         updateFilter(filters[0]?.id || '', f.type, f.value);
       } else {
         addFilter();
-        // Need to apply filter after adding
         setTimeout(() => {
           updateFilter(filters[idx]?.id || '', f.type, f.value);
         }, 0);
       }
     });
     
-    // Run the search with hydrated params
     setMainKeyword(item.keyword);
     setSearchCategory(item.search_type);
     setDateRange(historyDateFrom, historyDateTo);
     
     search();
-    
-    // Refresh history to update last_opened_at
     fetchHistory();
   }, [filters, resetFilters, addFilter, updateFilter, setMainKeyword, setSearchCategory, setDateRange, search, fetchHistory]);
 
-  const handleImport = () => {
-    console.log('Import clicked');
+  const handleSaveSummary = () => {
+    toast({
+      title: '저장 완료',
+      description: '검색 결과가 저장되었습니다.',
+    });
   };
 
-  return (
-    <div className="h-[calc(100vh-3.5rem)] flex bg-background">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Search Strip */}
-        <BLSearchStrip
-          searchKeyword={searchKeyword}
-          onSearchKeywordChange={setSearchKeyword}
-          startDate={startDate}
-          endDate={endDate}
-          onStartDateChange={setStartDate}
-          onEndDateChange={setEndDate}
-          onSearch={handleSearch}
-          onImport={handleImport}
-          isLoading={isLoading}
-          searchCategory={searchCategoryState}
-          onSearchCategoryChange={handleSearchCategoryChange}
-        />
+  const hasMore = displayedResults.length < results.length;
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-auto p-6">
-          {/* Before search - show Recent Searches and Data Updates */}
-          {!hasSearched && (
+  return (
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-muted/20">
+      {/* Search Header */}
+      <BLSearchHeader
+        searchKeyword={searchKeyword}
+        onSearchKeywordChange={setSearchKeyword}
+        startDate={startDate}
+        endDate={endDate}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        onSearch={handleSearch}
+        isLoading={isLoading}
+        searchCategory={searchCategoryState}
+        onSearchCategoryChange={handleSearchCategoryChange}
+        showViewSummary={hasSearched && results.length > 0}
+      />
+
+      {/* Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Before search - show Recent Searches and Data Updates */}
+        {!hasSearched && (
+          <div className="flex-1 overflow-auto p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <BLRecentSearches onSelectHistory={handleSelectHistory} />
               <BLDataUpdates />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* After search - show Results Table */}
-          {(hasSearched || isLoading) && (
-            <BLResultsTable
-              results={results}
-              paginatedResults={paginatedResults}
-              filters={filters}
-              mainKeyword={searchKeyword}
-              startDate={startDate}
-              endDate={endDate}
-              isLoading={isLoading}
-              hasSearched={hasSearched}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              sortOrder={sortOrder}
-              onToggleSortOrder={toggleSortOrder}
-            />
-          )}
-        </div>
-      </div>
+        {/* After search - 2-column layout */}
+        {hasSearched && (
+          <>
+            {/* Left: Results Table */}
+            <div className="flex-1 overflow-auto p-6 lg:w-[70%]">
+              <BLCompactResultsTable
+                results={results}
+                paginatedResults={displayedResults}
+                filters={filters}
+                mainKeyword={searchKeyword}
+                startDate={startDate}
+                endDate={endDate}
+                isLoading={isLoading}
+                hasSearched={hasSearched}
+                currentPage={displayedPage}
+                totalPages={Math.ceil(results.length / pageSize)}
+                onLoadMore={handleLoadMore}
+                hasMore={hasMore}
+              />
+            </div>
 
-      {/* Right Filter Panel */}
-      <div className="w-[280px] shrink-0 border-l border-border bg-muted/20 overflow-hidden">
-        <BLFilterPanel
-          filters={filters}
-          onAddFilter={addFilter}
-          onRemoveFilter={removeFilter}
-          onUpdateFilter={updateFilter}
-          onReset={resetFilters}
-          onSearch={handleFilterPanelSearch}
-          validationError={validationError}
-          isLoading={isLoading}
-        />
+            {/* Right: Summary Panel */}
+            {results.length > 0 && (
+              <div className="hidden lg:block w-[300px] xl:w-[350px] shrink-0">
+                <BLSummaryPanel
+                  results={results}
+                  startDate={startDate}
+                  endDate={endDate}
+                  onSave={handleSaveSummary}
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
