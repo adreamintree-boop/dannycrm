@@ -5,12 +5,15 @@ import { Button } from '@/components/ui/button';
 import { BLRecord } from '@/data/blMockData';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface BuyerImportDetailsDrawerProps {
+export type CompanyDetailsMode = 'buyer' | 'supplier';
+
+interface CompanyDetailsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  buyerName: string;
+  companyName: string;
+  mode: CompanyDetailsMode;
   allResults: BLRecord[];
-  currentPageRows: BLRecord[]; // Current page rows for visibility check
+  currentPageRows: BLRecord[];
   startDate?: Date;
   endDate?: Date;
 }
@@ -35,40 +38,48 @@ const normalizeCompanyName = (name: string | null | undefined): string => {
   if (!name) return '';
   return name
     .trim()
-    .replace(/\s+/g, ' ') // collapse multiple spaces
+    .replace(/\s+/g, ' ')
     .toUpperCase();
 };
 
-const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
+const CompanyDetailsDrawer: React.FC<CompanyDetailsDrawerProps> = ({
   isOpen,
   onClose,
-  buyerName,
+  companyName,
+  mode,
   allResults,
   currentPageRows,
   startDate,
   endDate,
 }) => {
-  // State for unlock toggle
   const [isUnlocked, setIsUnlocked] = useState(false);
 
-  // Filter results for this buyer from the ENTIRE dataset (not just current page)
-  const buyerRecords = useMemo(() => {
-    return allResults.filter(record => 
-      record.importer.toLowerCase() === buyerName.toLowerCase()
-    );
-  }, [allResults, buyerName]);
+  // Filter results for this company from the ENTIRE dataset
+  const companyRecords = useMemo(() => {
+    if (mode === 'buyer') {
+      return allResults.filter(record => 
+        record.importer.toLowerCase() === companyName.toLowerCase()
+      );
+    } else {
+      return allResults.filter(record => 
+        record.exporter.toLowerCase() === companyName.toLowerCase()
+      );
+    }
+  }, [allResults, companyName, mode]);
 
-  // Build set of visible exporter names from current page rows
-  const visibleExporterSet = useMemo(() => {
+  // Build set of visible company names from current page rows
+  // For buyer mode: check exporters, for supplier mode: check importers
+  const visibleCompanySet = useMemo(() => {
     const set = new Set<string>();
     currentPageRows.forEach(record => {
-      const normalized = normalizeCompanyName(record.exporter);
+      const fieldToCheck = mode === 'buyer' ? record.exporter : record.importer;
+      const normalized = normalizeCompanyName(fieldToCheck);
       if (normalized && normalized !== '-') {
         set.add(normalized);
       }
     });
     return set;
-  }, [currentPageRows]);
+  }, [currentPageRows, mode]);
 
   // Format date range for display
   const dateRangeText = useMemo(() => {
@@ -85,39 +96,38 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
     return 'yyyy.mm.dd ~ yyyy.mm.dd';
   }, [startDate, endDate]);
 
-  // Calculate Top 5 Trading Companies (Exporters for this buyer)
-  // Sort by visibility first (visible on top), then by count
-  const topExporters = useMemo(() => {
-    const exporterMap = new Map<string, number>();
+  // Calculate Top 5 Trading Companies
+  // For buyer mode: aggregate exporters
+  // For supplier mode: aggregate importers
+  const topTradingCompanies = useMemo(() => {
+    const companyMap = new Map<string, number>();
     
-    buyerRecords.forEach(record => {
-      const exporter = record.exporter;
-      if (exporter && exporter !== '-') {
-        exporterMap.set(exporter, (exporterMap.get(exporter) || 0) + 1);
+    companyRecords.forEach(record => {
+      const targetCompany = mode === 'buyer' ? record.exporter : record.importer;
+      if (targetCompany && targetCompany !== '-') {
+        companyMap.set(targetCompany, (companyMap.get(targetCompany) || 0) + 1);
       }
     });
 
-    return Array.from(exporterMap.entries())
+    return Array.from(companyMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([name, count]) => {
         const normalized = normalizeCompanyName(name);
-        const isVisible = visibleExporterSet.has(normalized);
+        const isVisible = visibleCompanySet.has(normalized);
         return { name, count, isVisible };
       })
-      // Sort: visible (non-blurred) first, then blurred
       .sort((a, b) => {
         if (a.isVisible === b.isVisible) return 0;
         return a.isVisible ? -1 : 1;
       });
-  }, [buyerRecords, visibleExporterSet]);
+  }, [companyRecords, visibleCompanySet, mode]);
 
   // Calculate monthly shipping activity with FULL month range
   const monthlyActivity = useMemo(() => {
-    // First, build a map of actual transaction counts by month
     const monthMap = new Map<string, number>();
     
-    buyerRecords.forEach(record => {
+    companyRecords.forEach(record => {
       const date = new Date(record.date);
       if (!isNaN(date.getTime())) {
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -125,9 +135,7 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
       }
     });
 
-    // Generate full month range between startDate and endDate
     if (!startDate || !endDate) {
-      // Fallback: just use existing data if no date range
       return Array.from(monthMap.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([month, count]) => ({
@@ -139,33 +147,18 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
 
     const allMonths = generateMonthRange(startDate, endDate);
     
-    // Map all months, filling missing ones with 0
-    const chartData = allMonths.map(monthKey => ({
+    return allMonths.map(monthKey => ({
       month: monthKey,
-      displayMonth: monthKey.split('-')[1], // Just show month number for X-axis
+      displayMonth: monthKey.split('-')[1],
       count: monthMap.get(monthKey) || 0,
     }));
+  }, [companyRecords, startDate, endDate]);
 
-    // Debug logging during development
-    console.log('[BuyerImportDetailsDrawer] Monthly Activity Debug:', {
-      buyerName,
-      dateRange: { startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
-      totalMonthsInRange: allMonths.length,
-      monthsWithData: monthMap.size,
-      totalTransactions: buyerRecords.length,
-      chartDataLength: chartData.length,
-      chartData: chartData.slice(0, 5), // First 5 for debug
-    });
-
-    return chartData;
-  }, [buyerRecords, startDate, endDate, buyerName]);
-
-  // Get total transactions
-  const totalTransactions = buyerRecords.length;
+  const totalTransactions = companyRecords.length;
 
   // Get recently traded products (latest 10)
   const recentProducts = useMemo(() => {
-    return [...buyerRecords]
+    return [...companyRecords]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10)
       .map(record => ({
@@ -175,23 +168,44 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
         tradeTerms: record.incoterms || '-',
         productDescription: record.productName,
       }));
-  }, [buyerRecords]);
+  }, [companyRecords]);
 
   // Get company locations from addresses
   const companyLocations = useMemo(() => {
     const locationSet = new Set<string>();
     
-    buyerRecords.forEach(record => {
-      if (record.importerAddress && record.importerAddress !== '-') {
-        locationSet.add(record.importerAddress);
-      }
-      if (record.destinationCountry && record.destinationCountry !== '-') {
-        locationSet.add(record.destinationCountry);
+    companyRecords.forEach(record => {
+      if (mode === 'buyer') {
+        if (record.importerAddress && record.importerAddress !== '-') {
+          locationSet.add(record.importerAddress);
+        }
+        if (record.destinationCountry && record.destinationCountry !== '-') {
+          locationSet.add(record.destinationCountry);
+        }
+      } else {
+        if (record.exporterAddress && record.exporterAddress !== '-') {
+          locationSet.add(record.exporterAddress);
+        }
+        if (record.originCountry && record.originCountry !== '-') {
+          locationSet.add(record.originCountry);
+        }
       }
     });
 
     return Array.from(locationSet).slice(0, 5);
-  }, [buyerRecords]);
+  }, [companyRecords, mode]);
+
+  // Labels based on mode
+  const headerLabel = mode === 'buyer' 
+    ? <>Buyer Company <span className="text-primary">Import</span> Details</>
+    : <>Supplier Company <span className="text-primary">Export</span> Details</>;
+  
+  const leftSideLabel = mode === 'buyer' ? 'Export' : 'Export';
+  const rightSideLabel = mode === 'buyer' ? 'Import' : 'Import';
+  
+  const blurHelperText = mode === 'buyer'
+    ? 'Only exporters shown on the current page are fully visible. Unlock to reveal all.'
+    : 'Only importers shown on the current page are fully visible. Unlock to reveal all.';
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -204,10 +218,10 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <SheetTitle className="text-sm font-normal text-muted-foreground">
-                Buyer Company <span className="text-primary">Import</span> Details
+                {headerLabel}
               </SheetTitle>
               <h2 className="text-xl font-bold mt-1 text-foreground uppercase">
-                {buyerName}
+                {companyName}
               </h2>
             </div>
             <div className="flex items-center gap-4">
@@ -255,64 +269,106 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Only exporters shown on the current page are fully visible. Unlock to reveal all.
+                {blurHelperText}
               </p>
               
-              <div className="flex gap-8">
-                {/* Export Side */}
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground text-center mb-3">Export</p>
-                  <div className="space-y-2">
-                    {topExporters.map((exporter, index) => {
-                      const shouldBlur = !exporter.isVisible && !isUnlocked;
-                      
-                      return (
-                        <div
-                          key={index}
-                          className={`border rounded-md px-3 py-2 text-xs bg-muted/30 transition-all relative ${
-                            shouldBlur 
-                              ? 'select-none' 
-                              : 'hover:bg-muted/50'
-                          }`}
-                          style={shouldBlur ? { 
-                            filter: 'blur(5px)', 
-                            opacity: 0.6 
-                          } : undefined}
-                        >
-                          <span className="line-clamp-2">{exporter.name}</span>
-                          {shouldBlur && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                              <Lock className="w-3 h-3 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {topExporters.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        데이터 없음
-                      </p>
-                    )}
+              {mode === 'buyer' ? (
+                // Buyer mode: Exporters (left, blurred) -> Buyer (right, highlighted)
+                <div className="flex gap-8">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground text-center mb-3">{leftSideLabel}</p>
+                    <div className="space-y-2">
+                      {topTradingCompanies.map((company, index) => {
+                        const shouldBlur = !company.isVisible && !isUnlocked;
+                        
+                        return (
+                          <div
+                            key={index}
+                            className={`border rounded-md px-3 py-2 text-xs bg-muted/30 transition-all relative ${
+                              shouldBlur ? 'select-none' : 'hover:bg-muted/50'
+                            }`}
+                            style={shouldBlur ? { filter: 'blur(5px)', opacity: 0.6 } : undefined}
+                          >
+                            <span className="line-clamp-2">{company.name}</span>
+                            {shouldBlur && (
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                <Lock className="w-3 h-3 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {topTradingCompanies.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">데이터 없음</p>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Arrow + Import Side */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center">
-                    <div className="w-12 h-0.5 bg-primary" />
-                    <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-primary" />
-                  </div>
-                  
-                  <div className="flex-shrink-0 w-[180px]">
-                    <p className="text-sm text-primary text-center mb-3">Import</p>
-                    <div className="border-2 border-primary rounded-md px-3 py-3 text-xs bg-primary/5">
-                      <span className="line-clamp-2 text-primary font-medium text-center block">
-                        {buyerName}
-                      </span>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center">
+                      <div className="w-12 h-0.5 bg-primary" />
+                      <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-primary" />
+                    </div>
+                    
+                    <div className="flex-shrink-0 w-[180px]">
+                      <p className="text-sm text-primary text-center mb-3">{rightSideLabel}</p>
+                      <div className="border-2 border-primary rounded-md px-3 py-3 text-xs bg-primary/5">
+                        <span className="line-clamp-2 text-primary font-medium text-center block">
+                          {companyName}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // Supplier mode: Supplier (left, highlighted) -> Importers (right, blurred)
+                <div className="flex gap-8">
+                  <div className="flex-shrink-0 w-[180px]">
+                    <p className="text-sm text-primary text-center mb-3">{leftSideLabel}</p>
+                    <div className="border-2 border-primary rounded-md px-3 py-3 text-xs bg-primary/5">
+                      <span className="line-clamp-2 text-primary font-medium text-center block">
+                        {companyName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center">
+                      <div className="w-12 h-0.5 bg-primary" />
+                      <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-primary" />
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground text-center mb-3">{rightSideLabel}</p>
+                    <div className="space-y-2">
+                      {topTradingCompanies.map((company, index) => {
+                        const shouldBlur = !company.isVisible && !isUnlocked;
+                        
+                        return (
+                          <div
+                            key={index}
+                            className={`border rounded-md px-3 py-2 text-xs bg-muted/30 transition-all relative ${
+                              shouldBlur ? 'select-none' : 'hover:bg-muted/50'
+                            }`}
+                            style={shouldBlur ? { filter: 'blur(5px)', opacity: 0.6 } : undefined}
+                          >
+                            <span className="line-clamp-2">{company.name}</span>
+                            {shouldBlur && (
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                <Lock className="w-3 h-3 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {topTradingCompanies.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">데이터 없음</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Shipping Activity by Data Source */}
@@ -454,4 +510,4 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
   );
 };
 
-export default BuyerImportDetailsDrawer;
+export default CompanyDetailsDrawer;
