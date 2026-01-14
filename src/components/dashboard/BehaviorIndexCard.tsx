@@ -83,12 +83,12 @@ const BehaviorIndexCard: React.FC = () => {
         행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (1~10건 = 1칸)
       </div>
 
-      {/* Calendar heatmap grid - fixed size squares with horizontal scroll */}
-      <div className="relative flex-1 flex flex-col justify-end overflow-x-auto scrollbar-thin">
+      {/* Calendar heatmap grid - full width with evenly distributed columns */}
+      <div className="relative flex-1 flex flex-col justify-end w-full">
         {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
-        <div className="space-y-1 mb-2 min-w-max">
+        <div className="space-y-1 mb-2 w-full">
           {rows.map((level) => (
-            <div key={level} className="flex gap-1">
+            <div key={level} className="flex justify-between w-full">
               {days.map((day) => {
                 const squaresForDay = squareData[day] || 0;
                 const rawCount = dailyData[day] || 0;
@@ -112,10 +112,10 @@ const BehaviorIndexCard: React.FC = () => {
         </div>
 
         {/* Dashed line */}
-        <div className="border-t border-dashed border-status-target my-2 min-w-max" />
+        <div className="border-t border-dashed border-status-target my-2 w-full" />
 
         {/* Day labels */}
-        <div className="flex gap-1 min-w-max">
+        <div className="flex justify-between w-full">
           {days.map((day) => (
             <div
               key={day}
