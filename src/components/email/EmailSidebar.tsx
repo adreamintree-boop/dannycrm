@@ -33,7 +33,7 @@ const EmailSidebar: React.FC<EmailSidebarProps> = ({ unreadCount }) => {
     : '이메일 미연동';
 
   return (
-    <div className="w-52 border-r border-border bg-background flex flex-col h-full">
+    <div className="w-52 border-r border-border bg-white flex flex-col h-full">
       {/* Email account selector */}
       <div className="p-3 border-b border-border">
         <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-muted rounded-lg transition-colors">
