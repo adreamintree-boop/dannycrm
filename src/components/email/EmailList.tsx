@@ -174,7 +174,7 @@ const EmailList: React.FC<EmailListProps> = ({
                 isUnread={msg.unread}
                 isSelected={selectedIds.has(msg.id)}
                 hasAttachment={false}
-                onClick={() => navigate(`/email/${msg.id}?nylas=true`)}
+                onClick={() => navigate(`/email/${msg.id}?nylas=true&mailbox=${mailbox}`)}
                 onSelect={(checked) => handleSelect(msg.id, checked)}
               />
             );
@@ -197,7 +197,7 @@ const EmailList: React.FC<EmailListProps> = ({
                 isUnread={!msg.is_read}
                 isSelected={selectedIds.has(msg.id)}
                 hasAttachment={false}
-                onClick={() => navigate(`/email/${msg.id}`)}
+                onClick={() => navigate(`/email/${msg.id}?mailbox=${mailbox}`)}
                 onSelect={(checked) => handleSelect(msg.id, checked)}
               />
             );
