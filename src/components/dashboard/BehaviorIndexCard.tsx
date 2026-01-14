@@ -83,12 +83,12 @@ const BehaviorIndexCard: React.FC = () => {
         행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (1~10건 = 1칸)
       </div>
 
-      {/* Calendar heatmap grid - full width */}
-      <div className="relative w-full flex-1 flex flex-col justify-end">
+      {/* Calendar heatmap grid - fixed size squares with horizontal scroll */}
+      <div className="relative flex-1 flex flex-col justify-end overflow-x-auto scrollbar-thin">
         {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
-        <div className="space-y-1 mb-2">
+        <div className="space-y-1 mb-2 min-w-max">
           {rows.map((level) => (
-            <div key={level} className="flex gap-0.5">
+            <div key={level} className="flex gap-1">
               {days.map((day) => {
                 const squaresForDay = squareData[day] || 0;
                 const rawCount = dailyData[day] || 0;
@@ -96,7 +96,7 @@ const BehaviorIndexCard: React.FC = () => {
                 return (
                   <div
                     key={day}
-                    className={`flex-1 h-3 rounded-sm transition-colors ${
+                    className={`w-3.5 h-3.5 rounded-sm transition-colors shrink-0 ${
                       day > daysInMonth
                         ? 'invisible'
                         : showBlock
@@ -112,14 +112,14 @@ const BehaviorIndexCard: React.FC = () => {
         </div>
 
         {/* Dashed line */}
-        <div className="border-t border-dashed border-status-target my-2" />
+        <div className="border-t border-dashed border-status-target my-2 min-w-max" />
 
         {/* Day labels */}
-        <div className="flex gap-0.5">
+        <div className="flex gap-1 min-w-max">
           {days.map((day) => (
             <div
               key={day}
-              className={`flex-1 text-center text-[10px] text-muted-foreground ${
+              className={`w-3.5 text-center text-[10px] text-muted-foreground shrink-0 ${
                 day > daysInMonth ? 'invisible' : ''
               }`}
             >
