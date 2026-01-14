@@ -341,6 +341,7 @@ const BLSearch: React.FC = () => {
                 <BLSummaryPanel
                   results={displayedResults}
                   allResults={results}
+                  currentPageRows={displayedResults}
                   startDate={startDate}
                   endDate={endDate}
                   onSave={handleSaveSummary}

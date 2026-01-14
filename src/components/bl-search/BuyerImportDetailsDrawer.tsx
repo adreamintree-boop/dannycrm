@@ -1,6 +1,7 @@
-import React, { useMemo, useEffect } from 'react';
-import { X, MapPin } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, MapPin, Lock, Unlock } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { BLRecord } from '@/data/blMockData';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -9,6 +10,7 @@ interface BuyerImportDetailsDrawerProps {
   onClose: () => void;
   buyerName: string;
   allResults: BLRecord[];
+  currentPageRows: BLRecord[]; // Current page rows for visibility check
   startDate?: Date;
   endDate?: Date;
 }
@@ -28,20 +30,45 @@ const generateMonthRange = (start: Date, end: Date): string[] => {
   return months;
 };
 
+// Normalize company name for matching
+const normalizeCompanyName = (name: string | null | undefined): string => {
+  if (!name) return '';
+  return name
+    .trim()
+    .replace(/\s+/g, ' ') // collapse multiple spaces
+    .toUpperCase();
+};
+
 const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
   isOpen,
   onClose,
   buyerName,
   allResults,
+  currentPageRows,
   startDate,
   endDate,
 }) => {
+  // State for unlock toggle
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
   // Filter results for this buyer from the ENTIRE dataset (not just current page)
   const buyerRecords = useMemo(() => {
     return allResults.filter(record => 
       record.importer.toLowerCase() === buyerName.toLowerCase()
     );
   }, [allResults, buyerName]);
+
+  // Build set of visible exporter names from current page rows
+  const visibleExporterSet = useMemo(() => {
+    const set = new Set<string>();
+    currentPageRows.forEach(record => {
+      const normalized = normalizeCompanyName(record.exporter);
+      if (normalized && normalized !== '-') {
+        set.add(normalized);
+      }
+    });
+    return set;
+  }, [currentPageRows]);
 
   // Format date range for display
   const dateRangeText = useMemo(() => {
@@ -72,8 +99,12 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
     return Array.from(exporterMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([name, count]) => ({ name, count }));
-  }, [buyerRecords]);
+      .map(([name, count]) => {
+        const normalized = normalizeCompanyName(name);
+        const isVisible = visibleExporterSet.has(normalized);
+        return { name, count, isVisible };
+      });
+  }, [buyerRecords, visibleExporterSet]);
 
   // Calculate monthly shipping activity with FULL month range
   const monthlyActivity = useMemo(() => {
@@ -193,24 +224,64 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top 5 Trading Companies */}
             <div className="bg-card border rounded-lg p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <h3 className="font-semibold">Top 5 Trading Companies</h3>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <h3 className="font-semibold">Top 5 Trading Companies</h3>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-3 text-xs gap-1.5"
+                  onClick={() => setIsUnlocked(!isUnlocked)}
+                >
+                  {isUnlocked ? (
+                    <>
+                      <Lock className="w-3 h-3" />
+                      Lock
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-3 h-3" />
+                      Unlock
+                    </>
+                  )}
+                </Button>
               </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Only exporters shown on the current page are fully visible. Unlock to reveal all.
+              </p>
               
               <div className="flex gap-8">
                 {/* Export Side */}
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground text-center mb-3">Export</p>
                   <div className="space-y-2">
-                    {topExporters.map((exporter, index) => (
-                      <div
-                        key={index}
-                        className="border rounded-md px-3 py-2 text-xs bg-muted/30 hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="line-clamp-2">{exporter.name}</span>
-                      </div>
-                    ))}
+                    {topExporters.map((exporter, index) => {
+                      const shouldBlur = !exporter.isVisible && !isUnlocked;
+                      
+                      return (
+                        <div
+                          key={index}
+                          className={`border rounded-md px-3 py-2 text-xs bg-muted/30 transition-all relative ${
+                            shouldBlur 
+                              ? 'select-none' 
+                              : 'hover:bg-muted/50'
+                          }`}
+                          style={shouldBlur ? { 
+                            filter: 'blur(5px)', 
+                            opacity: 0.6 
+                          } : undefined}
+                        >
+                          <span className="line-clamp-2">{exporter.name}</span>
+                          {shouldBlur && (
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                              <Lock className="w-3 h-3 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {topExporters.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         데이터 없음
