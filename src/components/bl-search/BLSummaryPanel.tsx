@@ -3,12 +3,12 @@ import { ExternalLink, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BLRecord } from '@/data/blMockData';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import BuyerImportDetailsDrawer from './BuyerImportDetailsDrawer';
+import CompanyDetailsDrawer, { CompanyDetailsMode } from './CompanyDetailsDrawer';
 
 interface BLSummaryPanelProps {
   results: BLRecord[];
-  allResults: BLRecord[]; // Full dataset for drawer aggregation
-  currentPageRows: BLRecord[]; // Current page rows for visibility check in drawer
+  allResults: BLRecord[];
+  currentPageRows: BLRecord[];
   startDate?: Date;
   endDate?: Date;
   onAddToCRM?: (companyName: string, type: 'buyer' | 'supplier') => void;
@@ -27,7 +27,8 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
   onSave
 }) => {
   const [activeTab, setActiveTab] = useState<'buyers' | 'suppliers'>('buyers');
-  const [selectedBuyer, setSelectedBuyer] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [drawerMode, setDrawerMode] = useState<CompanyDetailsMode>('buyer');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Calculate top 5 companies based on active tab
@@ -99,15 +100,16 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
     window.open(getLinkedinCompanySearchUrl(companyName), '_blank', 'noopener,noreferrer');
   };
 
-  // Handle Detail button click - opens drawer with full dataset
+  // Handle Detail button click - opens drawer with appropriate mode
   const handleDetailClick = (companyName: string) => {
-    setSelectedBuyer(companyName);
+    setSelectedCompany(companyName);
+    setDrawerMode(activeTab === 'buyers' ? 'buyer' : 'supplier');
     setIsDrawerOpen(true);
   };
 
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
-    setSelectedBuyer(null);
+    setSelectedCompany(null);
   };
 
   return (
@@ -185,7 +187,6 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
               
               {/* Labels around chart */}
               {topCompanies.slice(0, 5).map((company, index) => {
-                // Position labels around the chart
                 const positions = [
                   { top: '5%', right: '5%' },
                   { top: '20%', right: '0' },
@@ -239,15 +240,15 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
                     </span>
                   </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-1 pl-7 flex-wrap">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] gap-1"
-                        onClick={() => handleDetailClick(company.name)}
-                      >
-                        Detail
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1 pl-7 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] gap-1"
+                      onClick={() => handleDetailClick(company.name)}
+                    >
+                      Detail
                       <ExternalLink className="w-3 h-3" />
                     </Button>
                     <Button
@@ -294,12 +295,13 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
           저장하기
         </Button>
 
-        {/* Buyer Import Details Drawer */}
-        {selectedBuyer && (
-          <BuyerImportDetailsDrawer
+        {/* Company Details Drawer (Buyer or Supplier mode) */}
+        {selectedCompany && (
+          <CompanyDetailsDrawer
             isOpen={isDrawerOpen}
             onClose={handleCloseDrawer}
-            buyerName={selectedBuyer}
+            companyName={selectedCompany}
+            mode={drawerMode}
             allResults={allResults}
             currentPageRows={currentPageRows}
             startDate={startDate}
