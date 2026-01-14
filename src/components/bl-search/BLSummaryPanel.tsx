@@ -3,9 +3,11 @@ import { ExternalLink, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BLRecord } from '@/data/blMockData';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import BuyerImportDetailsDrawer from './BuyerImportDetailsDrawer';
 
 interface BLSummaryPanelProps {
   results: BLRecord[];
+  allResults: BLRecord[]; // Full dataset for drawer aggregation
   startDate?: Date;
   endDate?: Date;
   onAddToCRM?: (companyName: string, type: 'buyer' | 'supplier') => void;
@@ -16,12 +18,15 @@ const COLORS = ['#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE'];
 
 const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
   results,
+  allResults,
   startDate,
   endDate,
   onAddToCRM,
   onSave
 }) => {
   const [activeTab, setActiveTab] = useState<'buyers' | 'suppliers'>('buyers');
+  const [selectedBuyer, setSelectedBuyer] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Calculate top 5 companies based on active tab
   const topCompanies = useMemo(() => {
@@ -90,6 +95,17 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
 
   const handleLinkedInSearch = (companyName: string) => {
     window.open(getLinkedinCompanySearchUrl(companyName), '_blank', 'noopener,noreferrer');
+  };
+
+  // Handle Detail button click - opens drawer with full dataset
+  const handleDetailClick = (companyName: string) => {
+    setSelectedBuyer(companyName);
+    setIsDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setSelectedBuyer(null);
   };
 
   return (
@@ -221,17 +237,15 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
                     </span>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-1 pl-7 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] gap-1"
-                      onClick={() => {
-                        // Navigate to company detail
-                      }}
-                    >
-                      Detail
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-1 pl-7 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] gap-1"
+                        onClick={() => handleDetailClick(company.name)}
+                      >
+                        Detail
                       <ExternalLink className="w-3 h-3" />
                     </Button>
                     <Button
@@ -277,6 +291,18 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
         >
           저장하기
         </Button>
+
+        {/* Buyer Import Details Drawer */}
+        {selectedBuyer && (
+          <BuyerImportDetailsDrawer
+            isOpen={isDrawerOpen}
+            onClose={handleCloseDrawer}
+            buyerName={selectedBuyer}
+            allResults={allResults}
+            startDate={startDate}
+            endDate={endDate}
+          />
+        )}
       </div>
     </div>
   );

@@ -335,11 +335,12 @@ const BLSearch: React.FC = () => {
               />
             </div>
 
-            {/* Right: Summary Panel - uses only current page rows */}
+            {/* Right: Summary Panel - uses only current page rows for summary, but full results for drawer */}
             {displayedResults.length > 0 && (
               <div className="hidden lg:block w-[420px] xl:w-[460px] shrink-0 min-w-[420px]">
                 <BLSummaryPanel
                   results={displayedResults}
+                  allResults={results}
                   startDate={startDate}
                   endDate={endDate}
                   onSave={handleSaveSummary}
