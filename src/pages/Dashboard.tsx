@@ -22,11 +22,13 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Top row - 3 cards in one row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Top row - 3 cards: 2 narrow + 1 wide */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <BuyerOverviewCard statusCounts={statusCounts} total={total} />
         <SalesActivityCard />
-        <BehaviorIndexCard />
+        <div className="lg:col-span-2">
+          <BehaviorIndexCard />
+        </div>
       </div>
 
       {/* Middle row - 2 cards */}
