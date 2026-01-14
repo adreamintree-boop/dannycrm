@@ -183,7 +183,11 @@ export default function EmailCompose() {
             const fwdContent = `<br><br><hr><p><strong>---------- 전달된 메시지 ----------</strong></p><p>보낸사람: ${msg.from.name || msg.from.email}</p><p>받는사람: ${msg.to.map(t => t.email).join(', ')}</p><p>제목: ${msg.subject}</p><br><div>${msg.body_html || msg.body_text?.replace(/\n/g, '<br>') || ''}</div>`;
             setBody(fwdContent);
           } else {
-            setTo(msg.from.email);
+            // Format: "Name <email>" or just "email" if no name
+            const fromDisplay = msg.from.name 
+              ? `${msg.from.name} <${msg.from.email}>`
+              : msg.from.email;
+            setTo(fromDisplay);
             setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
             const quoteContent = `<br><br><p>${msg.date}에 ${msg.from.name || msg.from.email}님이 작성:</p><blockquote style="border-left: 2px solid #ccc; padding-left: 1rem; margin-left: 0; color: #666;">${msg.body_html || msg.body_text?.replace(/\n/g, '<br>') || ''}</blockquote>`;
             setBody(quoteContent);
@@ -199,7 +203,11 @@ export default function EmailCompose() {
             const fwdContent = `<br><br><hr><p><strong>---------- 전달된 메시지 ----------</strong></p><p>보낸사람: ${msg.from_name || msg.from_email}</p><p>받는사람: ${msg.to_emails.join(', ')}</p><p>제목: ${msg.subject}</p><br><div>${msg.body.replace(/\n/g, '<br>')}</div>`;
             setBody(fwdContent);
           } else {
-            setTo(msg.from_email);
+            // Format: "Name <email>" or just "email" if no name
+            const fromDisplay = msg.from_name 
+              ? `${msg.from_name} <${msg.from_email}>`
+              : msg.from_email;
+            setTo(fromDisplay);
             setSubject(`Re: ${msg.subject.replace(/^Re: /, '')}`);
             const quoteContent = `<br><br><p>${msg.created_at}에 ${msg.from_name || msg.from_email}님이 작성:</p><blockquote style="border-left: 2px solid #ccc; padding-left: 1rem; margin-left: 0; color: #666;">${msg.body.replace(/\n/g, '<br>')}</blockquote>`;
             setBody(quoteContent);
