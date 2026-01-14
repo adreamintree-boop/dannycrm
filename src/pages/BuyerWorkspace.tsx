@@ -27,11 +27,13 @@ const BuyerWorkspace: React.FC = () => {
   // Activity logs
   const { logs: emailLogs, loading: logsLoading, fetchLogsByBuyer } = useSalesActivityLogs();
 
-  // Get current buyer
+  // Get current buyer - use buyerId from URL as primary source
   const currentBuyer = useMemo(() => {
-    if (!activeBuyerId) return null;
-    return buyers.find(b => b.id === activeBuyerId) || null;
-  }, [activeBuyerId, buyers]);
+    // First try to use activeBuyerId from context
+    const targetId = activeBuyerId || buyerId;
+    if (!targetId) return null;
+    return buyers.find(b => b.id === targetId) || null;
+  }, [activeBuyerId, buyerId, buyers]);
 
   // Filter email logs for current buyer
   const buyerEmailLogs = useMemo(() => {
