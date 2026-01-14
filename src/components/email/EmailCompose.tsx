@@ -111,9 +111,12 @@ export default function EmailCompose() {
   }, [user]);
 
   // Handle buyerId and to query params for prefilling
+  // Note: Only set 'to' field from query param when NOT in reply mode
+  // (reply mode sets 'to' from the original message's sender)
   useEffect(() => {
     const buyerIdParam = searchParams.get('buyerId');
     const toParam = searchParams.get('to');
+    const replyTo = searchParams.get('replyTo');
 
     // If buyerId is provided, find the buyer in the list and select them
     if (buyerIdParam && buyers.length > 0) {
@@ -122,8 +125,9 @@ export default function EmailCompose() {
         setSelectedBuyer(foundBuyer);
         setBuyerLocked(true);
         
-        // If to param is provided, use it; otherwise fetch buyer's email
-        if (toParam) {
+        // Only set 'to' from query param if NOT in reply mode
+        // In reply mode, 'to' is set from the original message's sender
+        if (toParam && !replyTo) {
           // Simple email validation
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (emailRegex.test(toParam)) {
