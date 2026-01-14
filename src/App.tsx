@@ -32,65 +32,65 @@ const App = () => (
         <AuthProvider>
           <CreditsProvider>
             <AppProvider>
-            <BuyerTabsProvider>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/auth" element={<Auth />} />
-              
-              {/* Onboarding route */}
-              <Route path="/onboarding" element={<Onboarding />} />
-              
-              {/* Protected routes */}
-              <Route path="/*" element={
-                <ProtectedRoute>
-                  <MainLayout />
-                </ProtectedRoute>
-              } />
-              <Route path="/buyers/:buyerId" element={
-                <ProtectedRoute>
-                  <BuyerWorkspace />
-                </ProtectedRoute>
-              } />
-              <Route path="/bl-search" element={
-                <ProtectedRoute>
-                  <div className="min-h-screen flex flex-col bg-background">
-                    <TopHeader />
-                    <BLSearch />
-                  </div>
-                </ProtectedRoute>
-              } />
-              <Route path="/company-aggregation" element={
-                <ProtectedRoute>
-                  <CompanyAggregation />
-                </ProtectedRoute>
-              } />
-              <Route path="/my-profile" element={
-                <ProtectedRoute>
-                  <MyProfile />
-                </ProtectedRoute>
-              } />
-              <Route path="/onboarding-survey" element={
-                <ProtectedRoute>
-                  <OnboardingSurvey />
-                </ProtectedRoute>
-              } />
-              <Route path="/strategy" element={
-                <ProtectedRoute>
-                  <StrategyResult />
-                </ProtectedRoute>
-              } />
-              <Route path="/email/callback" element={
-                <ProtectedRoute>
-                  <EmailCallback />
-                </ProtectedRoute>
-              } />
-              <Route path="/email/*" element={
-                <ProtectedRoute>
-                  <Email />
-                </ProtectedRoute>
-              } />
-            </Routes>
-            </BuyerTabsProvider>
+              <BuyerTabsProvider>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/auth" element={<Auth />} />
+                  
+                  {/* Onboarding route */}
+                  <Route path="/onboarding" element={<Onboarding />} />
+                  
+                  {/* Protected routes */}
+                  <Route path="/*" element={
+                    <ProtectedRoute>
+                      <MainLayout />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/buyers/:buyerId" element={
+                    <ProtectedRoute>
+                      <BuyerWorkspace />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/bl-search" element={
+                    <ProtectedRoute>
+                      <div className="min-h-screen flex flex-col bg-background">
+                        <TopHeader />
+                        <BLSearch />
+                      </div>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/company-aggregation" element={
+                    <ProtectedRoute>
+                      <CompanyAggregation />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/my-profile" element={
+                    <ProtectedRoute>
+                      <MyProfile />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/onboarding-survey" element={
+                    <ProtectedRoute>
+                      <OnboardingSurvey />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/strategy" element={
+                    <ProtectedRoute>
+                      <StrategyResult />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/email/callback" element={
+                    <ProtectedRoute>
+                      <EmailCallback />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/email/*" element={
+                    <ProtectedRoute>
+                      <Email />
+                    </ProtectedRoute>
+                  } />
+                </Routes>
+              </BuyerTabsProvider>
             </AppProvider>
           </CreditsProvider>
         </AuthProvider>
