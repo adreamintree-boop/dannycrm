@@ -6,21 +6,19 @@ interface DailyBehaviorData {
   [day: number]: number; // day (1-31) -> behavior count
 }
 
-interface BehaviorSource {
-  date: string;
-  count: number;
-  type: 'buyer_created' | 'stage_change' | 'activity_log' | 'email';
-}
-
 export const useBehaviorIndex = () => {
   const { user } = useAuthContext();
   const [dailyData, setDailyData] = useState<DailyBehaviorData>({});
   const [loading, setLoading] = useState(true);
 
-  // Get current year and month (system time, no manual selection)
+  // Current system date for reference
   const now = useMemo(() => new Date(), []);
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1; // 1-indexed
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-indexed
+
+  // Selected year/month state (defaults to current)
+  const [year, setYear] = useState(currentYear);
+  const [month, setMonth] = useState(currentMonth);
 
   const fetchBehaviorData = useCallback(async () => {
     if (!user?.id) {
@@ -31,7 +29,7 @@ export const useBehaviorIndex = () => {
     setLoading(true);
 
     try {
-      // Calculate date range for current month
+      // Calculate date range for selected month
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
       const startDateStr = startDate.toISOString();
@@ -110,11 +108,12 @@ export const useBehaviorIndex = () => {
     fetchBehaviorData();
   }, [fetchBehaviorData]);
 
-  // Compute square counts (every 10 points = 1 square)
+  // Compute square counts using ceil (1-10 = 1, 11-20 = 2, etc.)
   const squareData = useMemo(() => {
     const result: { [day: number]: number } = {};
     Object.entries(dailyData).forEach(([day, count]) => {
-      result[parseInt(day)] = Math.floor(count / 10);
+      // 0 count = 0 squares, >0 count = ceil(count/10)
+      result[parseInt(day)] = count > 0 ? Math.ceil(count / 10) : 0;
     });
     return result;
   }, [dailyData]);
@@ -125,6 +124,34 @@ export const useBehaviorIndex = () => {
     return squares.length > 0 ? Math.max(...squares, 4) : 4; // minimum 4 rows
   }, [squareData]);
 
+  // Navigation handlers
+  const goToPreviousMonth = useCallback(() => {
+    if (month === 1) {
+      setMonth(12);
+      setYear(year - 1);
+    } else {
+      setMonth(month - 1);
+    }
+  }, [month, year]);
+
+  const goToNextMonth = useCallback(() => {
+    // Block navigation into future months
+    if (year === currentYear && month >= currentMonth) {
+      return;
+    }
+    if (month === 12) {
+      setMonth(1);
+      setYear(year + 1);
+    } else {
+      setMonth(month + 1);
+    }
+  }, [month, year, currentYear, currentMonth]);
+
+  // Check if we can navigate to next month
+  const canGoNext = useMemo(() => {
+    return !(year === currentYear && month >= currentMonth);
+  }, [year, month, currentYear, currentMonth]);
+
   return {
     year,
     month,
@@ -133,5 +160,8 @@ export const useBehaviorIndex = () => {
     maxSquares,
     loading,
     refresh: fetchBehaviorData,
+    goToPreviousMonth,
+    goToNextMonth,
+    canGoNext,
   };
 };

@@ -1,12 +1,22 @@
-import React, { useEffect } from 'react';
-import { Calendar } from 'lucide-react';
+import React from 'react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBehaviorIndex } from '@/hooks/useBehaviorIndex';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const BehaviorIndexCard: React.FC = () => {
-  const { year, month, squareData, maxSquares, loading, refresh } = useBehaviorIndex();
+  const { 
+    year, 
+    month, 
+    squareData, 
+    dailyData,
+    maxSquares, 
+    loading, 
+    goToPreviousMonth, 
+    goToNextMonth, 
+    canGoNext 
+  } = useBehaviorIndex();
 
-  // Get days in the current month
+  // Get days in the selected month
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -41,24 +51,47 @@ const BehaviorIndexCard: React.FC = () => {
           </div>
           <h3 className="font-semibold text-foreground">Monthly Sales Behavior Index</h3>
         </div>
+        
+        {/* Month navigation */}
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={goToPreviousMonth} 
+            className="p-1 hover:bg-muted rounded transition-colors"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <span className="text-sm font-medium min-w-[70px] text-center">
+            {year}.{String(month).padStart(2, '0')}
+          </span>
+          <button 
+            onClick={goToNextMonth} 
+            className={`p-1 rounded transition-colors ${
+              canGoNext 
+                ? 'hover:bg-muted' 
+                : 'opacity-40 cursor-not-allowed'
+            }`}
+            disabled={!canGoNext}
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
       </div>
 
       <div className="text-xs text-muted-foreground mb-4">
-        행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (10건 = 1칸)
+        행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (1~10건 = 1칸)
       </div>
 
-      <div className="flex items-center justify-end gap-2 mb-4">
-        <span className="text-sm font-medium">{year}.{String(month).padStart(2, '0')}</span>
-      </div>
-
-      {/* Calendar heatmap grid */}
-      <div className="relative">
+      {/* Calendar heatmap grid - full width */}
+      <div className="relative w-full">
         {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
         <div className="space-y-1 mb-2">
           {rows.map((level) => (
-            <div key={level} className="flex gap-1">
+            <div key={level} className="flex gap-0.5">
               {days.map((day) => {
                 const squaresForDay = squareData[day] || 0;
+                const rawCount = dailyData[day] || 0;
                 const showBlock = squaresForDay >= level;
                 return (
                   <div
@@ -70,7 +103,7 @@ const BehaviorIndexCard: React.FC = () => {
                         ? 'bg-primary'
                         : 'bg-muted'
                     }`}
-                    title={day <= daysInMonth ? `${month}/${day}: ${squaresForDay * 10}+ 건` : undefined}
+                    title={day <= daysInMonth ? `${month}월 ${day}일: ${rawCount}건` : undefined}
                   />
                 );
               })}
@@ -82,7 +115,7 @@ const BehaviorIndexCard: React.FC = () => {
         <div className="border-t border-dashed border-status-target my-2" />
 
         {/* Day labels */}
-        <div className="flex gap-1">
+        <div className="flex gap-0.5">
           {days.map((day) => (
             <div
               key={day}
