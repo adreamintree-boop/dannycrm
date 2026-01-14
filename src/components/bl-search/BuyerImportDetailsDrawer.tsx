@@ -86,6 +86,7 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
   }, [startDate, endDate]);
 
   // Calculate Top 5 Trading Companies (Exporters for this buyer)
+  // Sort by visibility first (visible on top), then by count
   const topExporters = useMemo(() => {
     const exporterMap = new Map<string, number>();
     
@@ -103,6 +104,11 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
         const normalized = normalizeCompanyName(name);
         const isVisible = visibleExporterSet.has(normalized);
         return { name, count, isVisible };
+      })
+      // Sort: visible (non-blurred) first, then blurred
+      .sort((a, b) => {
+        if (a.isVisible === b.isVisible) return 0;
+        return a.isVisible ? -1 : 1;
       });
   }, [buyerRecords, visibleExporterSet]);
 
