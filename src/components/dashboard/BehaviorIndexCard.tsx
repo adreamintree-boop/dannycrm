@@ -83,10 +83,10 @@ const BehaviorIndexCard: React.FC = () => {
         행동지수: 바이어 등록, 등급 이동, 영업활동일지 등록, 이메일 활동의 합계 (1~10건 = 1칸)
       </div>
 
-      {/* Calendar heatmap grid - with horizontal scroll */}
-      <div className="relative w-full flex-1 flex flex-col justify-end overflow-x-auto scrollbar-thin">
+      {/* Calendar heatmap grid - full width */}
+      <div className="relative w-full flex-1 flex flex-col justify-end">
         {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
-        <div className="space-y-0.5 mb-2 min-w-max">
+        <div className="space-y-1 mb-2">
           {rows.map((level) => (
             <div key={level} className="flex gap-0.5">
               {days.map((day) => {
@@ -96,7 +96,7 @@ const BehaviorIndexCard: React.FC = () => {
                 return (
                   <div
                     key={day}
-                    className={`w-4 h-3 rounded-sm transition-colors flex-shrink-0 ${
+                    className={`flex-1 h-3 rounded-sm transition-colors ${
                       day > daysInMonth
                         ? 'invisible'
                         : showBlock
@@ -112,14 +112,14 @@ const BehaviorIndexCard: React.FC = () => {
         </div>
 
         {/* Dashed line */}
-        <div className="border-t border-dashed border-status-target my-2 min-w-max" style={{ width: 'calc(31 * 16px + 30 * 2px)' }} />
+        <div className="border-t border-dashed border-status-target my-2" />
 
         {/* Day labels */}
-        <div className="flex gap-0.5 min-w-max">
+        <div className="flex gap-0.5">
           {days.map((day) => (
             <div
               key={day}
-              className={`w-4 text-center text-[10px] text-muted-foreground flex-shrink-0 ${
+              className={`flex-1 text-center text-[10px] text-muted-foreground ${
                 day > daysInMonth ? 'invisible' : ''
               }`}
             >
