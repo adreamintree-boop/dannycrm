@@ -84,7 +84,7 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
   return (
     <div className="bg-white border-l border-border h-full flex flex-col">
       {/* Header with Tabs */}
-      <div className="p-4 border-b border-border">
+      <div className="px-6 py-4 border-b border-border">
         <div className="flex items-center gap-4 mb-2">
           <button
             onClick={() => setActiveTab('buyers')}
@@ -113,7 +113,7 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto px-6 py-4">
         {topCompanies.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             <p className="text-sm">집계 데이터가 없습니다</p>
@@ -259,7 +259,7 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
       </div>
 
       {/* Save Button */}
-      <div className="p-4 border-t border-border">
+      <div className="px-6 py-4 border-t border-border">
         <Button 
           className="w-full"
           onClick={onSave}
