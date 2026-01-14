@@ -160,7 +160,7 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent 
         side="right" 
-        className="w-full md:w-[640px] md:max-w-[55vw] xl:w-[720px] xl:max-w-[45vw] p-0 overflow-y-auto"
+        className="w-full sm:w-[85vw] sm:max-w-[1100px] lg:w-[70vw] lg:max-w-[1200px] p-0 overflow-y-auto"
       >
         {/* Header */}
         <SheetHeader className="sticky top-0 bg-background z-10 border-b px-6 py-4">
