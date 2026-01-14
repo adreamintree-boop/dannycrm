@@ -8,6 +8,7 @@ import BuyerImportDetailsDrawer from './BuyerImportDetailsDrawer';
 interface BLSummaryPanelProps {
   results: BLRecord[];
   allResults: BLRecord[]; // Full dataset for drawer aggregation
+  currentPageRows: BLRecord[]; // Current page rows for visibility check in drawer
   startDate?: Date;
   endDate?: Date;
   onAddToCRM?: (companyName: string, type: 'buyer' | 'supplier') => void;
@@ -19,6 +20,7 @@ const COLORS = ['#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE'];
 const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
   results,
   allResults,
+  currentPageRows,
   startDate,
   endDate,
   onAddToCRM,
@@ -299,6 +301,7 @@ const BLSummaryPanel: React.FC<BLSummaryPanelProps> = ({
             onClose={handleCloseDrawer}
             buyerName={selectedBuyer}
             allResults={allResults}
+            currentPageRows={currentPageRows}
             startDate={startDate}
             endDate={endDate}
           />
