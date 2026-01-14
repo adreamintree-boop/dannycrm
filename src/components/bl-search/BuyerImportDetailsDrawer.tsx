@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { BLRecord } from '@/data/blMockData';
@@ -12,6 +12,21 @@ interface BuyerImportDetailsDrawerProps {
   startDate?: Date;
   endDate?: Date;
 }
+
+// Generate all months between startDate and endDate inclusive
+const generateMonthRange = (start: Date, end: Date): string[] => {
+  const months: string[] = [];
+  const current = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+  
+  while (current <= endMonth) {
+    const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+    months.push(monthKey);
+    current.setMonth(current.getMonth() + 1);
+  }
+  
+  return months;
+};
 
 const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
   isOpen,
@@ -60,8 +75,9 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
       .map(([name, count]) => ({ name, count }));
   }, [buyerRecords]);
 
-  // Calculate monthly shipping activity
+  // Calculate monthly shipping activity with FULL month range
   const monthlyActivity = useMemo(() => {
+    // First, build a map of actual transaction counts by month
     const monthMap = new Map<string, number>();
     
     buyerRecords.forEach(record => {
@@ -72,16 +88,40 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
       }
     });
 
-    // Sort by month and create chart data
-    const sortedMonths = Array.from(monthMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, count]) => ({
-        month: month.split('-')[1], // Just show month number
-        count,
-      }));
+    // Generate full month range between startDate and endDate
+    if (!startDate || !endDate) {
+      // Fallback: just use existing data if no date range
+      return Array.from(monthMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, count]) => ({
+          month,
+          displayMonth: month.split('-')[1],
+          count,
+        }));
+    }
 
-    return sortedMonths;
-  }, [buyerRecords]);
+    const allMonths = generateMonthRange(startDate, endDate);
+    
+    // Map all months, filling missing ones with 0
+    const chartData = allMonths.map(monthKey => ({
+      month: monthKey,
+      displayMonth: monthKey.split('-')[1], // Just show month number for X-axis
+      count: monthMap.get(monthKey) || 0,
+    }));
+
+    // Debug logging during development
+    console.log('[BuyerImportDetailsDrawer] Monthly Activity Debug:', {
+      buyerName,
+      dateRange: { startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+      totalMonthsInRange: allMonths.length,
+      monthsWithData: monthMap.size,
+      totalTransactions: buyerRecords.length,
+      chartDataLength: chartData.length,
+      chartData: chartData.slice(0, 5), // First 5 for debug
+    });
+
+    return chartData;
+  }, [buyerRecords, startDate, endDate, buyerName]);
 
   // Get total transactions
   const totalTransactions = buyerRecords.length;
@@ -120,7 +160,7 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent 
         side="right" 
-        className="w-full sm:w-[45vw] sm:max-w-[960px] p-0 overflow-y-auto"
+        className="w-full md:w-[640px] md:max-w-[55vw] xl:w-[720px] xl:max-w-[45vw] p-0 overflow-y-auto"
       >
         {/* Header */}
         <SheetHeader className="sticky top-0 bg-background z-10 border-b px-6 py-4">
@@ -213,22 +253,30 @@ const BuyerImportDetailsDrawer: React.FC<BuyerImportDetailsDrawerProps> = ({
               {monthlyActivity.length > 0 ? (
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={monthlyActivity}>
+                    <AreaChart data={monthlyActivity} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
-                        dataKey="month" 
-                        tick={{ fontSize: 11 }}
+                        dataKey="displayMonth" 
+                        tick={{ fontSize: 10 }}
                         stroke="hsl(var(--muted-foreground))"
+                        interval={monthlyActivity.length > 12 ? Math.floor(monthlyActivity.length / 12) : 0}
                       />
                       <YAxis 
-                        tick={{ fontSize: 11 }}
+                        tick={{ fontSize: 10 }}
                         stroke="hsl(var(--muted-foreground))"
+                        allowDecimals={false}
                       />
                       <Tooltip 
                         contentStyle={{
                           backgroundColor: 'hsl(var(--background))',
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '6px',
+                        }}
+                        labelFormatter={(label, payload) => {
+                          if (payload && payload.length > 0) {
+                            return payload[0].payload.month;
+                          }
+                          return label;
                         }}
                         formatter={(value: number) => [`${value}건`, 'Transactions']}
                       />
