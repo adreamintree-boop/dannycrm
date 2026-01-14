@@ -43,7 +43,7 @@ const BehaviorIndexCard: React.FC = () => {
   }
 
   return (
-    <div className="dashboard-card">
+    <div className="dashboard-card h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
@@ -84,7 +84,7 @@ const BehaviorIndexCard: React.FC = () => {
       </div>
 
       {/* Calendar heatmap grid - full width */}
-      <div className="relative w-full">
+      <div className="relative w-full flex-1 flex flex-col justify-end">
         {/* Grid rows for intensity levels - from top (highest) to bottom (lowest) */}
         <div className="space-y-1 mb-2">
           {rows.map((level) => (
