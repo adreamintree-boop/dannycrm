@@ -22,24 +22,28 @@ const EmailSidebar: React.FC<EmailSidebarProps> = ({ unreadCount }) => {
   const { emailAccount, isConnected } = useNylasEmailContext();
 
   const isActive = (path: string, itemId: string) => {
-    // Check if we're on a detail page with mailbox param
     const searchParams = new URLSearchParams(location.search);
     const mailboxParam = searchParams.get('mailbox');
     
-    // If on detail page, use mailbox param
-    if (location.pathname.match(/^\/email\/[^/]+$/) && !location.pathname.includes('compose') && !location.pathname.includes('settings')) {
+    // Known named routes (not email detail pages)
+    const namedRoutes = ['sent', 'all', 'trash', 'compose', 'settings'];
+    const pathParts = location.pathname.split('/');
+    const lastPart = pathParts[pathParts.length - 1];
+    const isNamedRoute = namedRoutes.includes(lastPart) || lastPart === 'email' || lastPart === '';
+    
+    // If on email detail page (has message ID, not a named route)
+    if (!isNamedRoute && location.pathname.match(/^\/email\/[^/]+$/)) {
       if (mailboxParam) {
         return mailboxParam === itemId;
       }
-      // Default to inbox if no mailbox param
       return itemId === 'inbox';
     }
     
-    // Normal path matching
+    // Normal path matching for list routes
     if (path === '/email') {
       return location.pathname === '/email' || location.pathname === '/email/';
     }
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const displayEmail = isConnected && emailAccount?.email_address 
