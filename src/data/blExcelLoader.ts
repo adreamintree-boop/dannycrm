@@ -2,7 +2,9 @@
 // Loads and parses the Excel file, mapping columns to BLRecord interface
 
 import * as XLSX from 'xlsx';
-import { BLRecord, setBLData } from './blMockData';
+// IMPORTANT: use a single import path for blMockData everywhere, otherwise Vite can create
+// multiple module instances and the in-memory dataset (mockBLData) won't be shared.
+import { BLRecord, setBLData, mockBLData } from '@/data/blMockData';
 
 interface ExcelRow {
   Date?: string | number;
@@ -31,7 +33,7 @@ interface ExcelRow {
 // Parse Excel date serial number to string
 function parseExcelDate(value: string | number | undefined): string {
   if (!value) return '-';
-  
+
   if (typeof value === 'number') {
     // Excel date serial number
     const date = XLSX.SSF.parse_date_code(value);
@@ -43,7 +45,7 @@ function parseExcelDate(value: string | number | undefined): string {
     }
     return String(value);
   }
-  
+
   return String(value);
 }
 
@@ -57,10 +59,10 @@ function formatValue(value: string | number | undefined | null): string {
 function formatQuantityWithUnit(quantity: string | number | undefined, unit: string | undefined): string {
   const qty = formatValue(quantity);
   const qtyUnit = formatValue(unit);
-  
+
   if (qty === '-') return '-';
   if (qtyUnit === '-') return qty;
-  
+
   return `${qty} ${qtyUnit}`;
 }
 
@@ -68,30 +70,30 @@ function formatQuantityWithUnit(quantity: string | number | undefined, unit: str
 function formatWeightWithUnit(weight: string | number | undefined, unit: string | undefined): string {
   const wgt = formatValue(weight);
   const wgtUnit = formatValue(unit);
-  
+
   if (wgt === '-') return '-';
   if (wgtUnit === '-') return wgt;
-  
+
   return `${wgt} ${wgtUnit}`;
 }
 
 // Parse USD value
 function parseUSDValue(value: string | number | undefined): number {
   if (value === undefined || value === null || value === '') return 0;
-  
+
   if (typeof value === 'number') return value;
-  
+
   // Remove currency symbols and commas
   const cleaned = String(value).replace(/[$,]/g, '').trim();
   const parsed = parseFloat(cleaned);
-  
+
   return isNaN(parsed) ? 0 : parsed;
 }
 
 // Transform Excel row to BLRecord
 function transformRow(row: ExcelRow, index: number): BLRecord {
   const importCountry = row['Import Country (Source)'] || row['Import Country'];
-  
+
   return {
     id: String(index + 1),
     date: parseExcelDate(row.Date),
@@ -121,25 +123,25 @@ export async function loadBLDataFromExcel(): Promise<BLRecord[]> {
     if (!response.ok) {
       throw new Error(`Failed to fetch Excel file: ${response.status}`);
     }
-    
+
     const arrayBuffer = await response.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    
+
     // Get the first sheet
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    
+
     // Convert to JSON
     const rawData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet);
-    
+
     // Transform rows to BLRecord format
     const records = rawData.map((row, index) => transformRow(row, index));
-    
+
     // Set the data globally
     setBLData(records);
-    
+
     console.log(`Loaded ${records.length} B/L records from Excel`);
-    
+
     return records;
   } catch (error) {
     console.error('Error loading Excel file:', error);
@@ -149,7 +151,6 @@ export async function loadBLDataFromExcel(): Promise<BLRecord[]> {
 
 // Check if data is loaded
 export function isBLDataLoaded(): boolean {
-  // Import mockBLData here to avoid circular dependency issues
-  const { mockBLData } = require('./blMockData');
   return mockBLData.length > 0;
 }
+

@@ -31,6 +31,17 @@ export function setBLData(data: BLRecord[]) {
   mockBLData = data;
 }
 
+// Normalize text for robust keyword search (handles casing + hidden chars)
+function normalizeForSearch(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFKC')
+    // remove zero-width spaces / BOM that often appear in Excel exports
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Filter type for search parameters
 export type FilterType = 'productName' | 'hsCode' | 'importer' | 'exporter';
 
@@ -45,12 +56,12 @@ export type SearchCategoryType = 'product' | 'hscode' | 'importer' | 'exporter' 
 
 // Field-specific search function - matches keyword ONLY to the selected category field
 export function searchBLDataByCategory(
-  keyword: string, 
-  category: SearchCategoryType, 
+  keyword: string,
+  category: SearchCategoryType,
   additionalFilters: SearchFilter[] = []
 ): BLRecord[] {
-  const searchValue = keyword.toLowerCase().trim();
-  
+  const searchValue = normalizeForSearch(keyword);
+
   // If no keyword and no additional filters, return empty
   if (!searchValue && additionalFilters.every(f => !f.value.trim())) {
     return [];
@@ -60,56 +71,56 @@ export function searchBLDataByCategory(
     // First, apply the main keyword search based on category
     if (searchValue) {
       let categoryMatch = false;
-      
+
       switch (category) {
         case 'product':
           // Search ONLY in product description
-          categoryMatch = record.productName.toLowerCase().includes(searchValue);
+          categoryMatch = normalizeForSearch(record.productName).includes(searchValue);
           break;
         case 'hscode':
           // Search ONLY in HS code (partial match allowed)
-          categoryMatch = record.hsCode.toLowerCase().includes(searchValue);
+          categoryMatch = normalizeForSearch(record.hsCode).includes(searchValue);
           break;
         case 'importer':
           // Search ONLY in importer name
-          categoryMatch = record.importer.toLowerCase().includes(searchValue);
+          categoryMatch = normalizeForSearch(record.importer).includes(searchValue);
           break;
         case 'exporter':
           // Search ONLY in exporter name
-          categoryMatch = record.exporter.toLowerCase().includes(searchValue);
+          categoryMatch = normalizeForSearch(record.exporter).includes(searchValue);
           break;
         case 'bl':
           // B/L category: search across all main fields (legacy behavior)
-          categoryMatch = 
-            record.productName.toLowerCase().includes(searchValue) ||
-            record.hsCode.toLowerCase().includes(searchValue) ||
-            record.importer.toLowerCase().includes(searchValue) ||
-            record.exporter.toLowerCase().includes(searchValue);
+          categoryMatch =
+            normalizeForSearch(record.productName).includes(searchValue) ||
+            normalizeForSearch(record.hsCode).includes(searchValue) ||
+            normalizeForSearch(record.importer).includes(searchValue) ||
+            normalizeForSearch(record.exporter).includes(searchValue);
           break;
         default:
           categoryMatch = true;
       }
-      
+
       // If the main keyword doesn't match the category field, exclude this record
       if (!categoryMatch) {
         return false;
       }
     }
-    
+
     // Then, apply additional filters from the filter panel (AND logic)
     return additionalFilters.every(filter => {
-      const filterValue = filter.value.toLowerCase().trim();
+      const filterValue = normalizeForSearch(filter.value);
       if (!filterValue) return true; // Empty filter is ignored
 
       switch (filter.type) {
         case 'productName':
-          return record.productName.toLowerCase().includes(filterValue);
+          return normalizeForSearch(record.productName).includes(filterValue);
         case 'hsCode':
-          return record.hsCode.toLowerCase().includes(filterValue);
+          return normalizeForSearch(record.hsCode).includes(filterValue);
         case 'importer':
-          return record.importer.toLowerCase().includes(filterValue);
+          return normalizeForSearch(record.importer).includes(filterValue);
         case 'exporter':
-          return record.exporter.toLowerCase().includes(filterValue);
+          return normalizeForSearch(record.exporter).includes(filterValue);
         default:
           return true;
       }
@@ -127,24 +138,25 @@ export function searchBLData(filters: SearchFilter[]): BLRecord[] {
   return mockBLData.filter(record => {
     // All filters must match (AND logic)
     return filters.every(filter => {
-      const searchValue = filter.value.toLowerCase().trim();
+      const searchValue = normalizeForSearch(filter.value);
       if (!searchValue) return true; // Empty filter is ignored
 
       switch (filter.type) {
         case 'productName':
-          return record.productName.toLowerCase().includes(searchValue);
+          return normalizeForSearch(record.productName).includes(searchValue);
         case 'hsCode':
-          return record.hsCode.toLowerCase().includes(searchValue);
+          return normalizeForSearch(record.hsCode).includes(searchValue);
         case 'importer':
-          return record.importer.toLowerCase().includes(searchValue);
+          return normalizeForSearch(record.importer).includes(searchValue);
         case 'exporter':
-          return record.exporter.toLowerCase().includes(searchValue);
+          return normalizeForSearch(record.exporter).includes(searchValue);
         default:
           return true;
       }
     });
   });
 }
+
 
 // Utility function to highlight matched text
 export function highlightMatch(text: string, searchTerms: string[]): { text: string; highlighted: boolean }[] {
