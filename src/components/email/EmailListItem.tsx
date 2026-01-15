@@ -54,7 +54,7 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
   };
 
   const handleAddToCrmClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation(); (e.nativeEvent as any).stopImmediatePropagation?.();
     onAddToCrm?.();
   };
 
