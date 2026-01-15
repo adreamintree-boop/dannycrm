@@ -96,8 +96,23 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
 
   const legacyInfo = parseLegacyContent(log.content);
 
+  // Helper to format email with name: ensure "Name <email>" format
+  const ensureEmailFormat = (emailOrFormatted: string | null): string => {
+    if (!emailOrFormatted) return '-';
+    // If already in "Name <email>" format, return as-is
+    if (emailOrFormatted.includes('<') && emailOrFormatted.includes('>')) {
+      return emailOrFormatted;
+    }
+    // If it looks like just an email address, return as-is
+    if (emailOrFormatted.includes('@')) {
+      return emailOrFormatted;
+    }
+    // Otherwise it's just a name, return as-is
+    return emailOrFormatted;
+  };
+
   // Determine From/To with fallback to legacy content parsing
-  const fromEmail = emailDetails?.from_email || legacyInfo.from || '-';
+  const fromEmail = ensureEmailFormat(emailDetails?.from_email || legacyInfo.from || null);
   const toEmails = emailDetails?.to_emails && emailDetails.to_emails.length > 0 
     ? emailDetails.to_emails 
     : legacyInfo.to 
@@ -106,7 +121,7 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
 
   const formatEmails = (emails: string[] | null): string => {
     if (!emails || emails.length === 0) return '-';
-    return emails.join(', ');
+    return emails.map(e => ensureEmailFormat(e)).join(', ');
   };
 
   // For display body, if new fields are empty, extract body from content (after the date line)
