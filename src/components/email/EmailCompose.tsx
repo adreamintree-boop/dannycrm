@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
+import { convertPlainTextToEmailHtml } from '@/lib/emailHtmlConverter';
 import {
   Command,
   CommandEmpty,
@@ -481,20 +482,12 @@ export default function EmailCompose() {
               setSubject(generatedSubject);
             }
             if (generatedBody) {
-              // Convert newlines to HTML for proper formatting in rich text editor
-              // First, split by double newlines to identify paragraphs
-              // Then convert single newlines within paragraphs to <br>
-              const htmlBody = generatedBody
-                .split(/\n\n+/) // Split by double newlines for paragraphs
-                .filter(p => p.trim()) // Remove empty paragraphs
-                .map(paragraph => {
-                  // Convert single newlines to <br> within each paragraph
-                  const formattedParagraph = paragraph.trim().replace(/\n/g, '<br>');
-                  return `<p>${formattedParagraph}</p>`;
-                })
-                .join(''); // Join paragraphs directly - <p> tags provide inherent spacing
-              // Prepend to existing body with a single break for spacing
-              setBody(prev => prev ? `${htmlBody}<p><br></p>${prev}` : htmlBody);
+              // Convert plain text with newlines to proper HTML for TipTap editor
+              // This handles paragraphs, line breaks, bullet lists, and numbered lists
+              const htmlBody = convertPlainTextToEmailHtml(generatedBody);
+              
+              // Prepend to existing body with a paragraph break for spacing
+              setBody(prev => prev ? `${htmlBody}<p></p>${prev}` : htmlBody);
             }
           }}
         />
