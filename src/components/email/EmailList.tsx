@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { EmailMessage } from '@/context/EmailContext';
+import { EmailMessage, useEmailContext } from '@/context/EmailContext';
 import { NylasMessage } from '@/hooks/useNylas';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -41,6 +41,7 @@ const EmailList: React.FC<EmailListProps> = ({
 }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logEmailToCRM: logDbEmailToCrm } = useEmailContext();
   const { logEmailToCRM } = useNylasEmailContext();
   const { linkedMessages, fetchLinkedMessages, isLinked, getLink, addLink } = useCrmEmailStatus();
   
@@ -162,7 +163,7 @@ const EmailList: React.FC<EmailListProps> = ({
       });
     } else {
       messages.forEach((msg) => {
-        if (selectedIds.has(msg.id)) {
+        if (selectedIds.has(msg.id) && !msg.is_logged_to_crm) {
           selected.push({
             id: msg.id,
             subject: msg.subject,
@@ -185,29 +186,34 @@ const EmailList: React.FC<EmailListProps> = ({
 
   // Handle CRM assignment
   const handleAssign = async (buyerId: string, buyerName: string, notes?: string) => {
-    if (!useNylas) {
-      toast({
-        title: '오류',
-        description: 'Nylas 이메일만 CRM에 추가할 수 있습니다.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setAssignLoading(true);
-    
-    const emailsToAssign = Array.from(selectedIds).filter(id => !isLinked(id));
+
+    const emailsToAssign = Array.from(selectedIds).filter((id) => {
+      if (useNylas) return !isLinked(id);
+      const msg = messages.find((m) => m.id === id);
+      return !!msg && !msg.is_logged_to_crm;
+    });
+
     let successCount = 0;
     let skipCount = 0;
 
     try {
       for (const messageId of emailsToAssign) {
-        const result = await logEmailToCRM(messageId, buyerId);
-        if (result.success) {
-          addLink(messageId, buyerId, buyerName);
-          successCount++;
+        if (useNylas) {
+          const result = await logEmailToCRM(messageId, buyerId);
+          if (result.success) {
+            addLink(messageId, buyerId, buyerName);
+            successCount++;
+          } else {
+            skipCount++;
+          }
         } else {
-          skipCount++;
+          const result = await logDbEmailToCrm(messageId, buyerId, buyerName);
+          if (result.success) {
+            successCount++;
+          } else {
+            skipCount++;
+          }
         }
       }
 
@@ -335,6 +341,8 @@ const EmailList: React.FC<EmailListProps> = ({
               ? msg.to_emails[0] || '(수신자 없음)'
               : msg.from_name || msg.from_email;
 
+            const linked = msg.is_logged_to_crm;
+
             return (
               <EmailListItem
                 key={msg.id}
@@ -346,8 +354,10 @@ const EmailList: React.FC<EmailListProps> = ({
                 isUnread={!msg.is_read}
                 isSelected={selectedIds.has(msg.id)}
                 hasAttachment={false}
+                crmLinked={linked}
                 onClick={() => navigate(`/email/${msg.id}?mailbox=${mailbox}`)}
                 onSelect={(checked) => handleSelect(msg.id, checked)}
+                onAddToCrm={linked ? undefined : () => handleSingleAddToCrm(msg.id)}
               />
             );
           })
