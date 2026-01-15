@@ -6,7 +6,9 @@ import { BLRecord, setBLData } from './blMockData';
 
 interface ExcelRow {
   Date?: string | number;
+  // Support both old and new column names
   'Import Country'?: string;
+  'Import Country (Source)'?: string;
   Importer?: string;
   'Importer Address'?: string;
   Exporter?: string;
@@ -88,6 +90,9 @@ function parseUSDValue(value: string | number | undefined): number {
 
 // Transform Excel row to BLRecord
 function transformRow(row: ExcelRow, index: number): BLRecord {
+  // Handle both old and new column names for Import Country
+  const importCountry = row['Import Country (Source)'] || row['Import Country'];
+  
   return {
     id: String(index + 1),
     date: parseExcelDate(row.Date),
@@ -107,7 +112,7 @@ function transformRow(row: ExcelRow, index: number): BLRecord {
     portOfLoading: formatValue(row['Port of Loading']),
     portOfDischarge: formatValue(row['Port of Discharge']),
     incoterms: formatValue(row.Incoterms),
-    importCountry: formatValue(row['Import Country']),
+    importCountry: formatValue(importCountry),
   };
 }
 
