@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -168,6 +168,13 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
       },
     },
   });
+
+  // Sync external content changes to editor
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content, { emitUpdate: false });
+    }
+  }, [editor, content]);
 
   const handleImageUpload = useCallback(() => {
     fileInputRef.current?.click();
