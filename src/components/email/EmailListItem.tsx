@@ -119,19 +119,19 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
           </TooltipProvider>
         ) : (
           <>
-            <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">
-              Unassigned
-            </Badge>
-            {onAddToCrm && (
-              <Button
-                variant="ghost"
-                size="sm"
+            {onAddToCrm ? (
+              <Badge 
+                variant="outline" 
+                className="text-xs text-muted-foreground border-dashed cursor-pointer hover:bg-muted hover:text-foreground transition-colors"
                 onClick={handleAddToCrmClick}
-                className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <UserPlus className="w-3 h-3 mr-1" />
-                CRM
-              </Button>
+                Unassigned
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">
+                Unassigned
+              </Badge>
             )}
           </>
         )}
