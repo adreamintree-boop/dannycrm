@@ -126,11 +126,11 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
                 onClick={handleAddToCrmClick}
               >
                 <UserPlus className="w-3 h-3 mr-1" />
-                Unassigned
+                Assign
               </Badge>
             ) : (
               <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">
-                Unassigned
+                Assign
               </Badge>
             )}
           </>
