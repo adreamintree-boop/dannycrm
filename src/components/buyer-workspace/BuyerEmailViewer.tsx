@@ -72,12 +72,61 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
   }
 
   const isInbound = log.direction === 'inbound';
-  const displayBody = emailDetails?.body_html || emailDetails?.body_text || log.content || emailDetails?.snippet || '';
+  const displayBody = emailDetails?.body_html || emailDetails?.body_text || emailDetails?.snippet || '';
+
+  // Parse legacy content field for sender/recipient info if new fields are missing
+  const parseLegacyContent = (content: string | null): { from?: string; to?: string } => {
+    if (!content) return {};
+    const result: { from?: string; to?: string } = {};
+    
+    // Parse "보낸사람: xxx" pattern
+    const fromMatch = content.match(/보낸사람:\s*([^\n]+)/);
+    if (fromMatch) {
+      result.from = fromMatch[1].trim();
+    }
+    
+    // Parse "받는사람: xxx" pattern
+    const toMatch = content.match(/받는사람:\s*([^\n]+)/);
+    if (toMatch) {
+      result.to = toMatch[1].trim();
+    }
+    
+    return result;
+  };
+
+  const legacyInfo = parseLegacyContent(log.content);
+
+  // Determine From/To with fallback to legacy content parsing
+  const fromEmail = emailDetails?.from_email || legacyInfo.from || '-';
+  const toEmails = emailDetails?.to_emails && emailDetails.to_emails.length > 0 
+    ? emailDetails.to_emails 
+    : legacyInfo.to 
+      ? [legacyInfo.to] 
+      : null;
 
   const formatEmails = (emails: string[] | null): string => {
     if (!emails || emails.length === 0) return '-';
     return emails.join(', ');
   };
+
+  // For display body, if new fields are empty, extract body from content (after the date line)
+  const extractBodyFromContent = (content: string | null): string => {
+    if (!content) return '';
+    // Find the double newline after metadata and return remaining content
+    const lines = content.split('\n');
+    let foundEmptyLine = false;
+    const bodyLines: string[] = [];
+    for (const line of lines) {
+      if (foundEmptyLine) {
+        bodyLines.push(line);
+      } else if (line.trim() === '') {
+        foundEmptyLine = true;
+      }
+    }
+    return bodyLines.join('\n').trim();
+  };
+
+  const finalDisplayBody = displayBody || extractBodyFromContent(log.content) || '';
 
   return (
     <ScrollArea className="flex-1">
@@ -107,13 +156,13 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
             <div className="flex">
               <span className="w-20 text-muted-foreground shrink-0">보낸 사람</span>
               <span className="text-foreground font-medium">
-                {emailDetails?.from_email || '-'}
+                {fromEmail}
               </span>
             </div>
             <div className="flex">
               <span className="w-20 text-muted-foreground shrink-0">받는 사람</span>
               <span className="text-foreground">
-                {formatEmails(emailDetails?.to_emails)}
+                {formatEmails(toEmails)}
               </span>
             </div>
             {emailDetails?.cc_emails && emailDetails.cc_emails.length > 0 && (
@@ -132,15 +181,15 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
 
         {/* Email Body */}
         <div className="prose prose-sm max-w-none">
-          {displayBody ? (
+          {finalDisplayBody ? (
             emailDetails?.body_html ? (
               <div 
-                dangerouslySetInnerHTML={{ __html: displayBody }}
+                dangerouslySetInnerHTML={{ __html: finalDisplayBody }}
                 className="text-foreground"
               />
             ) : (
               <div className="whitespace-pre-wrap text-foreground">
-                {displayBody}
+                {finalDisplayBody}
               </div>
             )
           ) : (
