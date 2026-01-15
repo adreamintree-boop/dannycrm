@@ -229,6 +229,49 @@
     content: "";
     margin-bottom: 0.25rem;
   }
+
+  /* Email Body Display Styling (for detail view) */
+  .email-body p {
+    margin: 0 0 12px;
+    line-height: 1.6;
+  }
+  
+  .email-body p:last-child {
+    margin-bottom: 0;
+  }
+  
+  .email-body ul,
+  .email-body ol {
+    margin: 0 0 12px;
+    padding-left: 1.5rem;
+  }
+  
+  .email-body li {
+    margin-bottom: 4px;
+    line-height: 1.5;
+  }
+  
+  .email-body li:last-child {
+    margin-bottom: 0;
+  }
+  
+  .email-body blockquote {
+    border-left: 3px solid hsl(var(--border));
+    padding-left: 1rem;
+    margin: 12px 0;
+    color: hsl(var(--muted-foreground));
+  }
+  
+  .email-body a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+  
+  .email-body br {
+    display: block;
+    content: "";
+    margin-bottom: 0.25rem;
+  }
 }
 
 @layer utilities {
