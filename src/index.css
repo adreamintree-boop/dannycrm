@@ -198,6 +198,37 @@
   .nav-pill-inactive {
     @apply text-foreground hover:bg-muted;
   }
+
+  /* Email Editor Content Styling */
+  .email-editor-content p {
+    margin: 0 0 12px;
+    line-height: 1.6;
+  }
+  
+  .email-editor-content p:last-child {
+    margin-bottom: 0;
+  }
+  
+  .email-editor-content ul,
+  .email-editor-content ol {
+    margin: 0 0 12px;
+    padding-left: 1.5rem;
+  }
+  
+  .email-editor-content li {
+    margin-bottom: 4px;
+    line-height: 1.5;
+  }
+  
+  .email-editor-content li:last-child {
+    margin-bottom: 0;
+  }
+  
+  .email-editor-content br {
+    display: block;
+    content: "";
+    margin-bottom: 0.25rem;
+  }
 }
 
 @layer utilities {

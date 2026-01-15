@@ -482,12 +482,23 @@ export default function EmailCompose() {
               setSubject(generatedSubject);
             }
             if (generatedBody) {
+              // DEBUG: Log raw text with visible newlines
+              console.log('[EmailCompose] 1. rawText:', JSON.stringify(generatedBody));
+              console.log('[EmailCompose] 1b. rawText visible newlines:', generatedBody.replace(/\n/g, '⏎\n'));
+              
               // Convert plain text with newlines to proper HTML for TipTap editor
-              // This handles paragraphs, line breaks, bullet lists, and numbered lists
               const htmlBody = convertPlainTextToEmailHtml(generatedBody);
               
+              // DEBUG: Log converted HTML
+              console.log('[EmailCompose] 2. htmlBody:', htmlBody);
+              
               // Prepend to existing body with a paragraph break for spacing
-              setBody(prev => prev ? `${htmlBody}<p></p>${prev}` : htmlBody);
+              const newBody = body ? `${htmlBody}<p></p>${body}` : htmlBody;
+              
+              // DEBUG: Log final value being set
+              console.log('[EmailCompose] 3. newBody to set:', newBody);
+              
+              setBody(newBody);
             }
           }}
         />

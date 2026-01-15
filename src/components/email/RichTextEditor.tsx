@@ -163,16 +163,26 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none min-h-[350px] p-4 focus:outline-none',
+        class: 'email-editor-content prose prose-sm max-w-none min-h-[350px] p-4 focus:outline-none',
         placeholder: placeholder || '내용을 입력하세요...',
       },
     },
   });
 
-  // Sync external content changes to editor
+  // Sync external content changes to editor (using HTML insertion)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
+      // DEBUG: Log content being set to editor
+      console.log('[RichTextEditor] Setting content:', content?.substring(0, 200));
+      console.log('[RichTextEditor] Current editor HTML:', editor.getHTML()?.substring(0, 200));
+      
+      // Use setContent with proper options object for TipTap
       editor.commands.setContent(content, { emitUpdate: false });
+      
+      // DEBUG: Log editor HTML after setting
+      setTimeout(() => {
+        console.log('[RichTextEditor] After setContent:', editor.getHTML()?.substring(0, 200));
+      }, 100);
     }
   }, [editor, content]);
 
