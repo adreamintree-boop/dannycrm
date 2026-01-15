@@ -78,13 +78,13 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
     <div
       onClick={handleRowClick}
       className={cn(
-        'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-border/50 bg-white group',
+        'grid grid-cols-[28px_140px_1fr_100px_70px] items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-border/50 bg-white group',
         'hover:bg-gray-50',
         isSelected && 'bg-blue-50'
       )}
     >
-      {/* Checkbox */}
-      <div onClick={handleCheckboxClick} data-row-interactive="true">
+      {/* Checkbox - fixed width */}
+      <div onClick={handleCheckboxClick} data-row-interactive="true" className="flex items-center justify-center">
         <Checkbox
           checked={isSelected}
           onCheckedChange={(checked) => onSelect(checked as boolean)}
@@ -92,33 +92,33 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
         />
       </div>
 
-      {/* Sender name - always bold */}
-      <div className="w-36 shrink-0">
+      {/* Sender name - fixed width with truncation */}
+      <div className="min-w-0">
         <span className="text-sm font-semibold text-foreground truncate block">
           {senderName}
         </span>
       </div>
 
-      {/* Subject and snippet */}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
+      {/* Subject and snippet - flexible with truncation */}
+      <div className="min-w-0 flex items-center gap-2">
         {hasAttachment && (
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         )}
         {/* Subject - bold only when unread */}
         <span className={cn(
-          'text-sm shrink-0',
+          'text-sm truncate',
           isUnread ? 'font-semibold text-foreground' : 'font-normal text-foreground'
         )}>
           {subject}
         </span>
         {/* Snippet - always normal weight */}
-        <span className="text-sm font-normal text-muted-foreground truncate">
-          {snippet}
+        <span className="text-sm font-normal text-muted-foreground truncate hidden sm:inline">
+          — {snippet}
         </span>
       </div>
 
-      {/* CRM Status Badge */}
-      <div className="shrink-0 flex items-center gap-2">
+      {/* CRM Status Badge - fixed width, right-aligned */}
+      <div className="flex justify-end items-center">
         {crmLinked ? (
           <TooltipProvider>
             <Tooltip>
@@ -153,8 +153,8 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
         )}
       </div>
 
-      {/* Date */}
-      <div className="text-sm font-normal text-muted-foreground whitespace-nowrap shrink-0">
+      {/* Date - fixed width, right-aligned */}
+      <div className="text-sm font-normal text-muted-foreground whitespace-nowrap text-right">
         {formatDate(date)}
       </div>
     </div>

@@ -318,24 +318,8 @@ export function EmailProvider({ children }: { children: ReactNode }) {
           });
       }
 
-      // Insert simulated incoming message for testing
-      await supabase
-        .from('email_messages')
-        .insert({
-          thread_id: threadId,
-          owner_user_id: user.id,
-          mailbox: 'inbox',
-          direction: 'inbound',
-          from_email: toEmails[0] || 'demo@taas.local',
-          from_name: 'Demo Recipient',
-          to_emails: [userEmail],
-          cc_emails: [],
-          bcc_emails: [],
-          subject: `Re: ${composeData.subject}`,
-          body: `This is a simulated auto-reply to your email:\n\n---\n${composeData.body}`,
-          snippet: 'This is a simulated auto-reply...',
-          is_read: false,
-        });
+      // NOTE: Auto-reply simulation has been disabled.
+      // Only real inbound emails from connected providers should appear in Inbox.
 
       const toastMessage = composeData.buyerId && composeData.buyerName
         ? `이메일이 전송되고 ${composeData.buyerName} CRM에 기록되었습니다.`
