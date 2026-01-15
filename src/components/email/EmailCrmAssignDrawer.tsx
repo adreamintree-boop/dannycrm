@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Building2, MapPin, Check, Mail, X } from 'lucide-react';
+import { Search, Building2, MapPin, Check, Mail, FolderOpen, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -14,10 +14,22 @@ import {
   SheetFooter,
   SheetClose,
 } from '@/components/ui/sheet';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/context/AuthContext';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
+interface Project {
+  id: string;
+  project_name: string;
+}
 
 interface CrmBuyer {
   id: string;
@@ -25,6 +37,7 @@ interface CrmBuyer {
   stage: string;
   country: string | null;
   website: string | null;
+  project_id: string | null;
 }
 
 interface SelectedEmail {
@@ -59,19 +72,52 @@ const EmailCrmAssignDrawer: React.FC<EmailCrmAssignDrawerProps> = ({
 }) => {
   const { user } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [buyers, setBuyers] = useState<CrmBuyer[]>([]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
+  const [fetchingProjects, setFetchingProjects] = useState(false);
   const [fetchingBuyers, setFetchingBuyers] = useState(false);
   const [notes, setNotes] = useState('');
 
-  const fetchBuyers = useCallback(async () => {
+  // Fetch projects
+  const fetchProjects = useCallback(async () => {
     if (!user) return;
+    setFetchingProjects(true);
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, project_name')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setProjects(data || []);
+      
+      // Auto-select if only one project
+      if (data && data.length === 1) {
+        setSelectedProjectId(data[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+    } finally {
+      setFetchingProjects(false);
+    }
+  }, [user]);
+
+  // Fetch buyers for selected project
+  const fetchBuyers = useCallback(async () => {
+    if (!user || !selectedProjectId) {
+      setBuyers([]);
+      return;
+    }
     setFetchingBuyers(true);
     try {
       const { data, error } = await supabase
         .from('crm_buyers')
-        .select('id, company_name, stage, country, website')
+        .select('id, company_name, stage, country, website, project_id')
         .eq('user_id', user.id)
+        .eq('project_id', selectedProjectId)
         .order('company_name', { ascending: true });
 
       if (error) throw error;
@@ -81,16 +127,28 @@ const EmailCrmAssignDrawer: React.FC<EmailCrmAssignDrawerProps> = ({
     } finally {
       setFetchingBuyers(false);
     }
-  }, [user]);
+  }, [user, selectedProjectId]);
 
+  // Reset state when drawer opens
   useEffect(() => {
     if (open) {
-      fetchBuyers();
+      fetchProjects();
+      setSelectedProjectId(null);
       setSelectedBuyerId(null);
+      setBuyers([]);
       setSearchQuery('');
       setNotes('');
     }
-  }, [open, fetchBuyers]);
+  }, [open, fetchProjects]);
+
+  // Fetch buyers when project changes
+  useEffect(() => {
+    if (selectedProjectId) {
+      setSelectedBuyerId(null);
+      setSearchQuery('');
+      fetchBuyers();
+    }
+  }, [selectedProjectId, fetchBuyers]);
 
   const filteredBuyers = buyers.filter(buyer =>
     buyer.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -105,6 +163,7 @@ const EmailCrmAssignDrawer: React.FC<EmailCrmAssignDrawerProps> = ({
     }
   };
 
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
   const selectedBuyer = buyers.find(b => b.id === selectedBuyerId);
 
   const formatDate = (dateStr: string) => {
@@ -154,88 +213,139 @@ const EmailCrmAssignDrawer: React.FC<EmailCrmAssignDrawerProps> = ({
             </div>
           </div>
 
-          {/* Buyer selection */}
+          {/* Step 1: Project selection */}
           <div>
             <Label className="text-sm font-medium mb-2 block">
-              바이어 선택 <span className="text-destructive">*</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">1</span>
+                프로젝트 선택 <span className="text-destructive">*</span>
+              </span>
             </Label>
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="회사명, 국가, 웹사이트로 검색"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <ScrollArea className="h-56 rounded-md border">
-              {fetchingBuyers ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-                </div>
-              ) : filteredBuyers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
-                  <Building2 className="w-8 h-8 mb-2 opacity-50" />
-                  <p className="text-sm text-center">
-                    {searchQuery
-                      ? '검색 결과가 없습니다'
-                      : 'Customer Funnel에 등록된 바이어가 없습니다'}
-                  </p>
-                </div>
-              ) : (
-                <div className="p-1">
-                  {filteredBuyers.map((buyer) => {
-                    const stageInfo = stageLabels[buyer.stage] || stageLabels.list;
-                    const isSelected = selectedBuyerId === buyer.id;
-
-                    return (
-                      <button
-                        key={buyer.id}
-                        onClick={() => setSelectedBuyerId(buyer.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
-                          isSelected
-                            ? 'bg-primary/10 border border-primary'
-                            : 'hover:bg-muted border border-transparent'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground truncate">
-                              {buyer.company_name}
-                            </span>
-                            <Badge className={`${stageInfo.color} text-xs shrink-0`}>
-                              {stageInfo.label}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                            {buyer.country && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {buyer.country}
-                              </span>
-                            )}
-                            {buyer.website && (
-                              <span className="truncate">{buyer.website}</span>
-                            )}
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </ScrollArea>
+            <Select
+              value={selectedProjectId || ''}
+              onValueChange={(value) => setSelectedProjectId(value)}
+              disabled={fetchingProjects}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={fetchingProjects ? '로딩 중...' : '프로젝트를 선택하세요'} />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                      {project.project_name}
+                    </div>
+                  </SelectItem>
+                ))}
+                {projects.length === 0 && !fetchingProjects && (
+                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                    등록된 프로젝트가 없습니다
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Selected buyer info */}
-          {selectedBuyer && (
-            <div className="p-3 bg-primary/5 rounded-md border border-primary/20">
-              <p className="text-xs text-muted-foreground">선택된 바이어</p>
-              <p className="font-medium text-foreground">{selectedBuyer.company_name}</p>
+          {/* Step 2: Buyer selection (only shown after project is selected) */}
+          {selectedProjectId && (
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">2</span>
+                  바이어 선택 <span className="text-destructive">*</span>
+                </span>
+              </Label>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="회사명, 국가, 웹사이트로 검색"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <ScrollArea className="h-48 rounded-md border">
+                {fetchingBuyers ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                  </div>
+                ) : filteredBuyers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+                    <Building2 className="w-8 h-8 mb-2 opacity-50" />
+                    <p className="text-sm text-center">
+                      {searchQuery
+                        ? '검색 결과가 없습니다'
+                        : '이 프로젝트에 등록된 바이어가 없습니다'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-1">
+                    {filteredBuyers.map((buyer) => {
+                      const stageInfo = stageLabels[buyer.stage] || stageLabels.list;
+                      const isSelected = selectedBuyerId === buyer.id;
+
+                      return (
+                        <button
+                          key={buyer.id}
+                          onClick={() => setSelectedBuyerId(buyer.id)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
+                            isSelected
+                              ? 'bg-primary/10 border border-primary'
+                              : 'hover:bg-muted border border-transparent'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground truncate">
+                                {buyer.company_name}
+                              </span>
+                              <Badge className={`${stageInfo.color} text-xs shrink-0`}>
+                                {stageInfo.label}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                              {buyer.country && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {buyer.country}
+                                </span>
+                              )}
+                              {buyer.website && (
+                                <span className="truncate">{buyer.website}</span>
+                              )}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Selected summary */}
+          {(selectedProject || selectedBuyer) && (
+            <div className="p-3 bg-primary/5 rounded-md border border-primary/20 space-y-2">
+              {selectedProject && (
+                <div className="flex items-center gap-2 text-sm">
+                  <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">프로젝트:</span>
+                  <span className="font-medium">{selectedProject.project_name}</span>
+                </div>
+              )}
+              {selectedBuyer && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">바이어:</span>
+                  <span className="font-medium">{selectedBuyer.company_name}</span>
+                </div>
+              )}
             </div>
           )}
 
