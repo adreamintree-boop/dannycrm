@@ -1,9 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { EmailMessage } from '@/context/EmailContext';
 import { NylasMessage } from '@/hooks/useNylas';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { useNylasEmailContext } from '@/context/NylasEmailContext';
 import EmailListHeader from './EmailListHeader';
 import EmailListItem from './EmailListItem';
+import EmailCrmActionBar from './EmailCrmActionBar';
+import EmailCrmAssignDrawer from './EmailCrmAssignDrawer';
+import { useCrmEmailStatus } from '@/hooks/useCrmEmailStatus';
 
 interface EmailListProps {
   messages: EmailMessage[];
@@ -13,6 +18,14 @@ interface EmailListProps {
   searchQuery: string;
   nylasMessages?: NylasMessage[];
   useNylas?: boolean;
+}
+
+interface SelectedEmailInfo {
+  id: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -27,9 +40,22 @@ const EmailList: React.FC<EmailListProps> = ({
   useNylas = false,
 }) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { logEmailToCRM } = useNylasEmailContext();
+  const { linkedMessages, fetchLinkedMessages, isLinked, getLink, addLink } = useCrmEmailStatus();
+  
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [assignDrawerOpen, setAssignDrawerOpen] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
+
+  // Fetch CRM link status on mount
+  useEffect(() => {
+    if (useNylas) {
+      fetchLinkedMessages();
+    }
+  }, [useNylas, fetchLinkedMessages]);
 
   const mailboxLabels: Record<string, string> = {
     inbox: 'Inbox',
@@ -110,6 +136,114 @@ const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
+  const handleCancelSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleOpenAssignDrawer = () => {
+    setAssignDrawerOpen(true);
+  };
+
+  // Get selected email details for drawer
+  const getSelectedEmailsInfo = useCallback((): SelectedEmailInfo[] => {
+    const selected: SelectedEmailInfo[] = [];
+    
+    if (useNylas) {
+      nylasMessages.forEach((msg) => {
+        if (selectedIds.has(msg.id) && !isLinked(msg.id)) {
+          selected.push({
+            id: msg.id,
+            subject: msg.subject,
+            from: msg.from.name || msg.from.email,
+            to: msg.to[0]?.email || '',
+            date: msg.date,
+          });
+        }
+      });
+    } else {
+      messages.forEach((msg) => {
+        if (selectedIds.has(msg.id)) {
+          selected.push({
+            id: msg.id,
+            subject: msg.subject,
+            from: msg.from_name || msg.from_email,
+            to: Array.isArray(msg.to_emails) ? msg.to_emails[0] : '',
+            date: msg.created_at,
+          });
+        }
+      });
+    }
+    
+    return selected;
+  }, [useNylas, nylasMessages, messages, selectedIds, isLinked]);
+
+  // Handle single email add to CRM
+  const handleSingleAddToCrm = (emailId: string) => {
+    setSelectedIds(new Set([emailId]));
+    setAssignDrawerOpen(true);
+  };
+
+  // Handle CRM assignment
+  const handleAssign = async (buyerId: string, buyerName: string, notes?: string) => {
+    if (!useNylas) {
+      toast({
+        title: '오류',
+        description: 'Nylas 이메일만 CRM에 추가할 수 있습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setAssignLoading(true);
+    
+    const emailsToAssign = Array.from(selectedIds).filter(id => !isLinked(id));
+    let successCount = 0;
+    let skipCount = 0;
+
+    try {
+      for (const messageId of emailsToAssign) {
+        const result = await logEmailToCRM(messageId, buyerId);
+        if (result.success) {
+          addLink(messageId, buyerId, buyerName);
+          successCount++;
+        } else {
+          skipCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast({
+          title: 'CRM 추가 완료',
+          description: `${successCount}개 이메일이 ${buyerName}에 추가되었습니다.${skipCount > 0 ? ` (${skipCount}개 건너뜀)` : ''}`,
+        });
+      } else {
+        toast({
+          title: '알림',
+          description: '추가할 이메일이 없습니다. (이미 연결됨)',
+          variant: 'default',
+        });
+      }
+
+      setAssignDrawerOpen(false);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error('Failed to assign emails to CRM:', error);
+      toast({
+        title: '오류',
+        description: 'CRM 추가에 실패했습니다.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  // Count unassigned selected emails
+  const unassignedSelectedCount = useMemo(() => {
+    if (!useNylas) return selectedIds.size;
+    return Array.from(selectedIds).filter(id => !isLinked(id)).length;
+  }, [useNylas, selectedIds, isLinked]);
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col">
@@ -150,6 +284,16 @@ const EmailList: React.FC<EmailListProps> = ({
         itemsPerPage={ITEMS_PER_PAGE}
       />
 
+      {/* CRM Action Bar */}
+      {unassignedSelectedCount > 0 && useNylas && (
+        <EmailCrmActionBar
+          selectedCount={unassignedSelectedCount}
+          onAddToCrm={handleOpenAssignDrawer}
+          onCancel={handleCancelSelection}
+          loading={assignLoading}
+        />
+      )}
+
       <div className="flex-1 overflow-auto bg-white">
         {paginatedMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -162,6 +306,8 @@ const EmailList: React.FC<EmailListProps> = ({
             const displayName = isInboxView
               ? msg.from.name || msg.from.email
               : msg.to[0]?.email || '(수신자 없음)';
+            const linked = isLinked(msg.id);
+            const linkInfo = getLink(msg.id);
 
             return (
               <EmailListItem
@@ -174,8 +320,11 @@ const EmailList: React.FC<EmailListProps> = ({
                 isUnread={msg.unread}
                 isSelected={selectedIds.has(msg.id)}
                 hasAttachment={false}
+                crmLinked={linked}
+                crmBuyerName={linkInfo?.buyer_name}
                 onClick={() => navigate(`/email/${msg.id}?nylas=true&mailbox=${mailbox}`)}
                 onSelect={(checked) => handleSelect(msg.id, checked)}
+                onAddToCrm={linked ? undefined : () => handleSingleAddToCrm(msg.id)}
               />
             );
           })
@@ -204,6 +353,15 @@ const EmailList: React.FC<EmailListProps> = ({
           })
         )}
       </div>
+
+      {/* CRM Assignment Drawer */}
+      <EmailCrmAssignDrawer
+        open={assignDrawerOpen}
+        onOpenChange={setAssignDrawerOpen}
+        selectedEmails={getSelectedEmailsInfo()}
+        onAssign={handleAssign}
+        loading={assignLoading}
+      />
     </div>
   );
 };
