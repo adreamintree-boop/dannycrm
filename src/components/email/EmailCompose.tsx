@@ -475,8 +475,13 @@ export default function EmailCompose() {
               setSubject(generatedSubject);
             }
             if (generatedBody) {
+              // Convert newlines to HTML paragraphs for proper formatting in rich text editor
+              const htmlBody = generatedBody
+                .split(/\n\n+/)
+                .map(paragraph => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
+                .join('');
               // Prepend to existing body
-              setBody(prev => prev ? `${generatedBody}\n\n${prev}` : generatedBody);
+              setBody(prev => prev ? `${htmlBody}<br><br>${prev}` : htmlBody);
             }
           }}
         />
