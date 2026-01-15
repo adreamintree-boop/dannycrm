@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -21,6 +20,7 @@ import { useApp } from '@/context/AppContext';
 import { useBuyerEnrichment, EnrichedData, BuyerHints, ExistingFields } from '@/hooks/useBuyerEnrichment';
 import { toast } from '@/hooks/use-toast';
 import { getCountries, Country, findCountry } from '@/data/countryData';
+import AIRecommendationModal from './AIRecommendationModal';
 
 interface BuyerEditDrawerProps {
   isOpen: boolean;
@@ -73,11 +73,15 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
     youtubeUrl: '',
   });
   
-  const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [aiEvidence, setAIEvidence] = useState<AIEvidence[]>([]);
   const [aiUpdatedFields, setAIUpdatedFields] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
+  
+  // AI Recommendation Modal state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiEnrichedData, setAiEnrichedData] = useState<EnrichedData | null>(null);
+  const [isAILoading, setIsAILoading] = useState(false);
   
   // Initialize form data when buyer changes or drawer opens
   useEffect(() => {
@@ -98,7 +102,7 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
       });
       setAIEvidence([]);
       setAIUpdatedFields(new Set());
-      setOverwriteExisting(false);
+      setAiEnrichedData(null);
     }
   }, [isOpen, buyer]);
   
@@ -115,8 +119,14 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
     setFormData(prev => ({ ...prev, country: country?.nameKo || '' }));
   }, []);
   
+  // Open AI modal and fetch enrichment data
   const handleAIAutoFill = async () => {
     if (!buyer.id) return;
+    
+    // Open modal first (show loading state)
+    setIsAIModalOpen(true);
+    setIsAILoading(true);
+    setAiEnrichedData(null);
     
     // Prepare hints from current form state + buyer metadata
     const hints: BuyerHints = {
@@ -134,84 +144,77 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
       email: formData.email || undefined,
     };
     
-    const result = await enrichBuyer(
-      buyer.id,
-      formData.name || buyer.name,
-      formData.country || buyer.country,
-      existingFields,
-      hints
-    );
-    
-    if (result.success && result.enrichedData) {
-      applyEnrichedData(result.enrichedData);
-      toast({
-        title: 'AI 자동 채우기 완료',
-        description: 'AI가 찾은 정보를 폼에 적용했습니다.',
-      });
+    try {
+      const result = await enrichBuyer(
+        buyer.id,
+        formData.name || buyer.name,
+        formData.country || buyer.country,
+        existingFields,
+        hints
+      );
+      
+      if (result.success && result.enrichedData) {
+        setAiEnrichedData(result.enrichedData);
+      } else {
+        // Show error but keep modal open
+        toast({
+          variant: 'destructive',
+          title: 'AI 추천 실패',
+          description: result.error || 'AI 정보를 가져오지 못했습니다.',
+        });
+      }
+    } finally {
+      setIsAILoading(false);
     }
   };
   
-  const applyEnrichedData = (enrichedData: EnrichedData) => {
+  // Apply selected fields from AI modal
+  const handleApplyAIFields = (selectedFields: Record<string, string>) => {
     const updatedFields = new Set<string>();
     const evidence: AIEvidence[] = [];
     
-    const applyField = (
-      formField: keyof FormData,
-      enrichedValue: string | undefined,
-      confidenceScore?: number
-    ) => {
-      if (!enrichedValue) return;
-      
-      const currentValue = formData[formField];
-      const isEmpty = !currentValue || currentValue.trim() === '';
-      
-      // Apply if field is empty OR overwrite is enabled
-      if (isEmpty || overwriteExisting) {
-        setFormData(prev => ({ ...prev, [formField]: enrichedValue }));
-        updatedFields.add(formField);
+    Object.entries(selectedFields).forEach(([fieldKey, value]) => {
+      if (value) {
+        setFormData(prev => ({ ...prev, [fieldKey]: value }));
+        updatedFields.add(fieldKey);
         
-        // Add evidence if confidence exists
-        if (confidenceScore !== undefined) {
+        // Add to evidence for display
+        const confidence = aiEnrichedData?.confidence?.[fieldKey as keyof typeof aiEnrichedData.confidence];
+        if (typeof confidence === 'number') {
           evidence.push({
-            field: formField,
-            sources: [`신뢰도: ${Math.round(confidenceScore * 100)}%`],
+            field: fieldKey,
+            sources: [`신뢰도: ${Math.round(confidence * 100)}%`],
           });
         }
       }
-    };
+    });
     
-    // Map enriched data to form fields
-    if (enrichedData.country) {
-      applyField('country', enrichedData.country, enrichedData.confidence?.country);
-    }
-    if (enrichedData.address) {
-      applyField('address', enrichedData.address, enrichedData.confidence?.address);
-    }
-    if (enrichedData.website) {
-      applyField('websiteUrl', enrichedData.website, enrichedData.confidence?.website);
-    }
-    if (enrichedData.phone) {
-      applyField('phone', enrichedData.phone, enrichedData.confidence?.phone);
-    }
-    if (enrichedData.email) {
-      applyField('email', enrichedData.email, enrichedData.confidence?.email);
-    }
-    if (enrichedData.facebook_url) {
-      applyField('facebookUrl', enrichedData.facebook_url, enrichedData.confidence?.facebook_url);
-    }
-    if (enrichedData.linkedin_url) {
-      applyField('linkedinUrl', enrichedData.linkedin_url, enrichedData.confidence?.linkedin_url);
-    }
-    if (enrichedData.youtube_url) {
-      applyField('youtubeUrl', enrichedData.youtube_url, enrichedData.confidence?.youtube_url);
-    }
+    setAIUpdatedFields(prev => new Set([...prev, ...updatedFields]));
+    setAIEvidence(prev => [...prev, ...evidence]);
     
-    setAIUpdatedFields(updatedFields);
-    setAIEvidence(evidence);
+    // Close modal
+    setIsAIModalOpen(false);
+    setAiEnrichedData(null);
     
-    if (evidence.length > 0) {
-      setIsEvidenceOpen(true);
+    // Show toast
+    const count = Object.keys(selectedFields).length;
+    if (count > 0) {
+      toast({
+        title: 'AI 추천 적용 완료',
+        description: `${count}개 필드가 적용되었습니다.`,
+      });
+      
+      if (evidence.length > 0) {
+        setIsEvidenceOpen(true);
+      }
     }
+  };
+  
+  // Close AI modal
+  const handleCloseAIModal = () => {
+    setIsAIModalOpen(false);
+    setAiEnrichedData(null);
+    setIsAILoading(false);
   };
   
   const handleSave = async () => {
@@ -286,27 +289,15 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
               </SheetDescription>
             </div>
             <div className="flex items-center gap-3">
-              {/* Overwrite toggle */}
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="overwrite-toggle"
-                  checked={overwriteExisting}
-                  onCheckedChange={setOverwriteExisting}
-                />
-                <Label htmlFor="overwrite-toggle" className="text-sm text-muted-foreground cursor-pointer">
-                  기존 값 덮어쓰기
-                </Label>
-              </div>
-              
               {/* AI Auto-Fill button */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleAIAutoFill}
-                disabled={isEnriching || !canEnrich}
+                disabled={isEnriching || isAILoading || !canEnrich}
                 className="gap-2"
               >
-                {isEnriching ? (
+                {(isEnriching || isAILoading) ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Sparkles className="w-4 h-4" />
@@ -595,6 +586,28 @@ const BuyerEditDrawer: React.FC<BuyerEditDrawerProps> = ({
           </Button>
         </div>
       </SheetContent>
+      
+      {/* AI Recommendation Review Modal */}
+      <AIRecommendationModal
+        isOpen={isAIModalOpen}
+        onClose={handleCloseAIModal}
+        isLoading={isAILoading}
+        enrichedData={aiEnrichedData}
+        currentFormData={{
+          country: formData.country,
+          address: formData.address,
+          revenue: formData.revenue,
+          revenueCurrency: formData.revenueCurrency,
+          websiteUrl: formData.websiteUrl,
+          mainProducts: formData.mainProducts,
+          email: formData.email,
+          phone: formData.phone,
+          facebookUrl: formData.facebookUrl,
+          linkedinUrl: formData.linkedinUrl,
+          youtubeUrl: formData.youtubeUrl,
+        }}
+        onApply={handleApplyAIFields}
+      />
     </Sheet>
   );
 };
