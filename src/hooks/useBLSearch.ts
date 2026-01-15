@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
-import { BLRecord, SearchFilter, searchBLDataByCategory, FilterType } from '@/data/blMockData';
-import { SearchCategory } from '@/components/bl-search/BLSearchStrip';
+import { BLRecord, SearchFilter, searchBLDataByCategory, FilterType, SearchCategoryType } from '@/data/blMockData';
+
+// Export SearchCategoryType for external use
+export type { SearchCategoryType };
+
+// Use the internal SearchCategoryType which includes 'bl'
+type SearchCategory = SearchCategoryType;
 
 interface UseBLSearchReturn {
   // Filters (right panel)
@@ -52,7 +57,8 @@ export function useBLSearch(): UseBLSearchReturn {
   // Main keyword state (top strip - independent from filters)
   const mainKeywordRef = useRef<string>('');
   const dateRangeRef = useRef<{ start?: Date; end?: Date }>({});
-  const searchCategoryRef = useRef<SearchCategory>('bl');
+  // Default to 'product' (matches the Commodities tab which is the most common search)
+  const searchCategoryRef = useRef<SearchCategory>('product');
   
   // Search state
   const [results, setResults] = useState<BLRecord[]>([]);

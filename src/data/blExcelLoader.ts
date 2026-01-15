@@ -90,7 +90,6 @@ function parseUSDValue(value: string | number | undefined): number {
 
 // Transform Excel row to BLRecord
 function transformRow(row: ExcelRow, index: number): BLRecord {
-  // Handle both old and new column names for Import Country
   const importCountry = row['Import Country (Source)'] || row['Import Country'];
   
   return {
@@ -105,7 +104,6 @@ function transformRow(row: ExcelRow, index: number): BLRecord {
     valueUSD: parseUSDValue(row['Value (US$)']),
     originCountry: formatValue(row['Country of Origin']),
     destinationCountry: formatValue(row['Country of Destination']),
-    // Additional fields for detail view
     importerAddress: formatValue(row['Importer Address']),
     exporterAddress: formatValue(row['Exporter Address']),
     transitCountry: formatValue(row['Country of Transit']),
