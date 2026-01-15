@@ -519,11 +519,13 @@ export function EmailProvider({ children }: { children: ReactNode }) {
       const isInbound = emailData.direction === 'inbound' || emailData.mailbox === 'inbox';
       const direction = isInbound ? 'inbound' : 'outbound';
 
-      // Format content
+      // Format content (legacy - for display fallback)
       const toEmailsList = Array.isArray(emailData.to_emails) ? emailData.to_emails : [];
+      const ccEmailsList = Array.isArray(emailData.cc_emails) ? emailData.cc_emails : [];
+      const bccEmailsList = Array.isArray(emailData.bcc_emails) ? emailData.bcc_emails : [];
       const content = `보낸사람: ${emailData.from_name || emailData.from_email}\n받는사람: ${toEmailsList.join(', ')}\n날짜: ${emailData.created_at}\n\n${emailData.snippet || emailData.body?.substring(0, 200) || ''}`;
 
-      // Insert activity log with the selected buyer
+      // Insert activity log with the selected buyer - include all email fields
       const { error: insertError } = await supabase
         .from('sales_activity_logs')
         .insert({
@@ -536,6 +538,13 @@ export function EmailProvider({ children }: { children: ReactNode }) {
           email_message_id: messageId,
           occurred_at: emailData.created_at,
           created_by: user.id,
+          // Store full email details for Mail Timeline display
+          from_email: emailData.from_email,
+          to_emails: toEmailsList,
+          cc_emails: ccEmailsList,
+          bcc_emails: bccEmailsList,
+          body_text: emailData.body,
+          snippet: emailData.snippet,
         });
 
       if (insertError) throw insertError;
