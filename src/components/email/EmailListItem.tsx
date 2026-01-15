@@ -118,11 +118,11 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
             </Tooltip>
           </TooltipProvider>
         ) : (
-          <>
+          <div onClick={(e) => e.stopPropagation()}>
             {onAddToCrm ? (
               <Badge 
                 variant="outline" 
-                className="text-xs text-muted-foreground border-dashed cursor-pointer hover:bg-muted hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground border-dashed cursor-pointer hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
                 onClick={handleAddToCrmClick}
               >
                 <UserPlus className="w-3 h-3 mr-1" />
@@ -133,7 +133,7 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
                 Assign
               </Badge>
             )}
-          </>
+          </div>
         )}
       </div>
 
