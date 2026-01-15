@@ -236,11 +236,11 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    const grokApiKey = Deno.env.get('GROK_EMAIL_GENERATOR_TEST');
     
-    if (!lovableApiKey) {
-      console.error('Missing LOVABLE_API_KEY');
-      return new Response(JSON.stringify({ error: 'AI 서비스 설정이 필요합니다.' }), {
+    if (!grokApiKey) {
+      console.error('Missing GROK_EMAIL_GENERATOR_TEST');
+      return new Response(JSON.stringify({ error: 'AI 서비스 설정이 필요합니다. (GROK_EMAIL_GENERATOR_TEST)' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -408,17 +408,17 @@ serve(async (req) => {
       products: products,
     });
 
-    console.log('Calling Lovable AI Gateway...');
+    console.log('Calling Grok API...');
 
-    // Call Lovable AI Gateway
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call Grok API
+    const aiResponse = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
+        "Authorization": `Bearer ${grokApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "grok-3-fast",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: DEVELOPER_PROMPT + "\n\n" + JSON.stringify(userMessage, null, 2) },
@@ -430,7 +430,7 @@ serve(async (req) => {
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       const status = aiResponse.status;
-      console.error("AI Gateway error:", status, errorText);
+      console.error("Grok API error:", status, errorText);
       
       if (status === 429) {
         return new Response(JSON.stringify({ error: 'Rate limits exceeded, please try again later.' }), {
@@ -438,14 +438,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: 'Payment required, please add funds to your Lovable AI workspace.' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
       
-      throw new Error(`AI Gateway error (${status}): ${errorText}`);
+      throw new Error(`Grok API error (${status}): ${errorText}`);
     }
 
     const aiData = await aiResponse.json();
