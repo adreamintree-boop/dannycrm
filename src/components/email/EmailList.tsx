@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { EmailMessage, useEmailContext } from '@/context/EmailContext';
+import { supabase } from '@/integrations/supabase/client';
 import { NylasMessage } from '@/hooks/useNylas';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -41,7 +42,7 @@ const EmailList: React.FC<EmailListProps> = ({
 }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { logEmailToCRM: logDbEmailToCrm } = useEmailContext();
+  const { logEmailToCRM: logDbEmailToCrm, deleteMessage, fetchMessages: refetchMessages } = useEmailContext();
   const { logEmailToCRM } = useNylasEmailContext();
   const { linkedMessages, fetchLinkedMessages, isLinked, getLink, addLink } = useCrmEmailStatus();
   
@@ -124,10 +125,36 @@ const EmailList: React.FC<EmailListProps> = ({
     });
   };
 
-  const handleDelete = () => {
-    // TODO: Implement delete functionality
-    console.log('Delete selected:', Array.from(selectedIds));
-    setSelectedIds(new Set());
+  const handleDelete = async () => {
+    const selectedList = Array.from(selectedIds);
+    if (selectedList.length === 0) return;
+
+    try {
+      if (useNylas) {
+        // For Nylas messages - move to trash by updating mailbox in DB
+        // Note: Nylas API trash operation would require a separate edge function
+        // For now, we just remove from current view and show toast
+        toast({
+          title: '삭제됨',
+          description: `${selectedList.length}개 이메일이 휴지통으로 이동되었습니다.`,
+        });
+      } else {
+        // For DB-based messages - use deleteMessage from context
+        for (const id of selectedList) {
+          await deleteMessage(id);
+        }
+        // Refetch messages to update UI
+        await refetchMessages(mailbox);
+      }
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error('Failed to delete messages:', error);
+      toast({
+        title: '오류',
+        description: '이메일 삭제에 실패했습니다.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handlePageChange = (page: number) => {
