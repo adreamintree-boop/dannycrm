@@ -76,7 +76,7 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
 
   return (
     <div
-      onClick={onClick}
+      onClick={handleRowClick}
       className={cn(
         'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-border/50 bg-white group',
         'hover:bg-gray-50',
@@ -84,7 +84,7 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
       )}
     >
       {/* Checkbox */}
-      <div onClick={handleCheckboxClick}>
+      <div onClick={handleCheckboxClick} data-row-interactive="true">
         <Checkbox
           checked={isSelected}
           onCheckedChange={(checked) => onSelect(checked as boolean)}
@@ -134,7 +134,7 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
             </Tooltip>
           </TooltipProvider>
         ) : (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div data-row-interactive="true">
             {onAddToCrm ? (
               <Badge 
                 variant="outline" 
