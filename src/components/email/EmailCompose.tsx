@@ -37,6 +37,7 @@ interface Buyer {
   company_name: string;
   stage: string;
   country: string | null;
+  company_email: string | null;
 }
 
 const stageBadgeColors: Record<string, string> = {
@@ -98,7 +99,7 @@ export default function EmailCompose() {
 
       const { data, error } = await supabase
         .from('crm_buyers')
-        .select('id, company_name, stage, country')
+        .select('id, company_name, stage, country, company_email')
         .eq('project_id', projectData.id)
         .order('company_name', { ascending: true });
 
@@ -164,6 +165,7 @@ export default function EmailCompose() {
         company_name: buyerNameParam,
         stage: buyerStageParam || 'list',
         country: null,
+        company_email: null,
       });
       setBuyerLocked(true);
     }
@@ -361,6 +363,10 @@ export default function EmailCompose() {
                               setSelectedBuyer(buyer);
                               setBuyerOpen(false);
                               setBuyerSearch('');
+                              // Auto-fill email address if available and not in reply mode
+                              if (buyer.company_email && !searchParams.get('replyTo')) {
+                                setTo(buyer.company_email);
+                              }
                             }}
                             className="flex items-center gap-2 cursor-pointer"
                           >
@@ -479,9 +485,9 @@ export default function EmailCompose() {
               const htmlBody = generatedBody
                 .split(/\n\n+/)
                 .map(paragraph => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
-                .join('<br>'); // Add extra line break between paragraphs for better visual separation
+                .join(''); // Paragraphs have inherent spacing, no extra line break needed
               // Prepend to existing body
-              setBody(prev => prev ? `${htmlBody}<br><br>${prev}` : htmlBody);
+              setBody(prev => prev ? `${htmlBody}<br>${prev}` : htmlBody);
             }
           }}
         />
