@@ -32,6 +32,10 @@ export const BuyerTabsProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, []);
 
   const openBuyerTab = useCallback((buyerId: string, companyName: string, stage: BuyerStatus) => {
+    // Check if already active to prevent unnecessary state updates
+    const currentActive = activeBuyerId;
+    const alreadyActive = currentActive === buyerId;
+    
     // Use functional update to ensure we're working with latest state
     setOpenTabs(prev => {
       const existingIndex = prev.findIndex(t => t.buyerId === buyerId);
@@ -52,9 +56,11 @@ export const BuyerTabsProvider: React.FC<{ children: ReactNode }> = ({ children 
       }];
     });
     
-    // Always set this buyer as active
-    setActiveBuyerIdState(buyerId);
-  }, []);
+    // Only set active if not already active
+    if (!alreadyActive) {
+      setActiveBuyerIdState(buyerId);
+    }
+  }, [activeBuyerId]);
 
   const closeBuyerTab = useCallback((buyerId: string): string | null => {
     const currentTabs = openTabsRef.current;

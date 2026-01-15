@@ -44,13 +44,13 @@ const BuyerWorkspace: React.FC = () => {
   useEffect(() => {
     if (buyerId && buyers.length > 0) {
       const buyer = buyers.find(b => b.id === buyerId);
-      if (buyer) {
-        // This will either add the tab or just activate existing one
+      if (buyer && activeBuyerId !== buyerId) {
+        // Only open/activate tab if not already active
         openBuyerTab(buyer.id, buyer.name, buyer.status);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buyerId]); // Only depend on buyerId - buyers and openBuyerTab are stable enough
+  }, [buyerId, buyers.length]); // Only depend on buyerId and buyers.length
 
   // Fetch logs when active buyer changes
   useEffect(() => {
@@ -59,10 +59,14 @@ const BuyerWorkspace: React.FC = () => {
     }
   }, [activeBuyerId, fetchLogsByBuyer]);
 
-  // Update URL when active tab changes
+  // Update URL when active tab changes - debounced to prevent flickering
   useEffect(() => {
     if (activeBuyerId && activeBuyerId !== buyerId) {
-      navigate(`/buyers/${activeBuyerId}`, { replace: true });
+      // Use setTimeout to batch URL updates and prevent rapid navigation
+      const timer = setTimeout(() => {
+        navigate(`/buyers/${activeBuyerId}`, { replace: true });
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [activeBuyerId, buyerId, navigate]);
 
