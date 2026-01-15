@@ -481,13 +481,20 @@ export default function EmailCompose() {
               setSubject(generatedSubject);
             }
             if (generatedBody) {
-              // Convert newlines to HTML paragraphs with spacing for proper formatting in rich text editor
+              // Convert newlines to HTML for proper formatting in rich text editor
+              // First, split by double newlines to identify paragraphs
+              // Then convert single newlines within paragraphs to <br>
               const htmlBody = generatedBody
-                .split(/\n\n+/)
-                .map(paragraph => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
-                .join(''); // Paragraphs have inherent spacing, no extra line break needed
-              // Prepend to existing body
-              setBody(prev => prev ? `${htmlBody}<br>${prev}` : htmlBody);
+                .split(/\n\n+/) // Split by double newlines for paragraphs
+                .filter(p => p.trim()) // Remove empty paragraphs
+                .map(paragraph => {
+                  // Convert single newlines to <br> within each paragraph
+                  const formattedParagraph = paragraph.trim().replace(/\n/g, '<br>');
+                  return `<p>${formattedParagraph}</p>`;
+                })
+                .join(''); // Join paragraphs directly - <p> tags provide inherent spacing
+              // Prepend to existing body with a single break for spacing
+              setBody(prev => prev ? `${htmlBody}<p><br></p>${prev}` : htmlBody);
             }
           }}
         />
