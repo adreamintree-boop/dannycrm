@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpRight, ArrowDownLeft, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { SalesActivityLog } from '@/hooks/useSalesActivityLogs';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { sanitizeEmailHtml, plainTextToDisplayHtml } from '@/lib/emailSanitizer';
 
 interface BuyerEmailViewerProps {
   log: SalesActivityLog | null;
@@ -72,7 +73,8 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
   }
 
   const isInbound = log.direction === 'inbound';
-  const displayBody = emailDetails?.body_html || emailDetails?.body_text || emailDetails?.snippet || '';
+  const rawBodyHtml = emailDetails?.body_html || '';
+  const bodyText = emailDetails?.body_text || emailDetails?.snippet || '';
 
   // Parse legacy content field for sender/recipient info if new fields are missing
   const parseLegacyContent = (content: string | null): { from?: string; to?: string } => {
@@ -140,8 +142,13 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
     }
     return bodyLines.join('\n').trim();
   };
-
-  const finalDisplayBody = displayBody || extractBodyFromContent(log.content) || '';
+  const legacyBody = extractBodyFromContent(log.content) || '';
+  
+  // Use the same rendering logic as /email page
+  // If we have HTML content, sanitize it. Otherwise convert plain text to HTML.
+  const displayHtml = rawBodyHtml 
+    ? sanitizeEmailHtml(rawBodyHtml)
+    : plainTextToDisplayHtml(bodyText || legacyBody);
 
   return (
     <ScrollArea className="flex-1">
@@ -194,19 +201,10 @@ const BuyerEmailViewer: React.FC<BuyerEmailViewerProps> = ({ log, buyerName }) =
         {/* Divider */}
         <div className="border-t border-border" />
 
-        {/* Email Body */}
-        <div className="prose prose-sm max-w-none">
-          {finalDisplayBody ? (
-            emailDetails?.body_html ? (
-              <div 
-                dangerouslySetInnerHTML={{ __html: finalDisplayBody }}
-                className="text-foreground"
-              />
-            ) : (
-              <div className="whitespace-pre-wrap text-foreground">
-                {finalDisplayBody}
-              </div>
-            )
+        {/* Email Body - Use same rendering as /email page */}
+        <div className="email-body prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed">
+          {displayHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: displayHtml }} />
           ) : (
             <p className="text-muted-foreground italic">
               이메일 원본을 불러올 수 없습니다.
