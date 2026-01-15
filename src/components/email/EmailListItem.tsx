@@ -49,12 +49,28 @@ const EmailListItem: React.FC<EmailListItemProps> = ({
     return format(d, 'M월 d일', { locale: ko });
   };
 
-  const handleCheckboxClick = (e: React.MouseEvent) => {
+  const stopRowPropagation = (e: React.SyntheticEvent) => {
     e.stopPropagation();
+    (e.nativeEvent as any).stopImmediatePropagation?.();
+  };
+
+  const stopRowAndPrevent = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    stopRowPropagation(e);
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('[data-row-interactive="true"]')) return;
+    onClick();
+  };
+
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    stopRowPropagation(e);
   };
 
   const handleAddToCrmClick = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation(); (e.nativeEvent as any).stopImmediatePropagation?.();
+    stopRowAndPrevent(e);
     onAddToCrm?.();
   };
 
