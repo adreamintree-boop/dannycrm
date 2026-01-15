@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeEmailHtml, plainTextToDisplayHtml } from '@/lib/emailSanitizer';
 
 interface LinkedBuyer {
   id: string;
@@ -184,8 +185,16 @@ export default function EmailDetail() {
   const fromEmail = isNylas && nylasMessage ? nylasMessage.from.email : message?.from_email || '';
   const toEmails = isNylas && nylasMessage ? nylasMessage.to.map(t => `${t.name || ''} <${t.email}>`).join(', ') : message?.to_emails.join(', ') || '';
   const ccEmails = isNylas && nylasMessage ? nylasMessage.cc.map(t => t.email).join(', ') : message?.cc_emails?.join(', ') || '';
-  const bodyHtml = isNylas && nylasMessage ? nylasMessage.body_html : null;
+  
+  // Get body content - prefer HTML, fallback to text
+  const rawBodyHtml = isNylas && nylasMessage ? nylasMessage.body_html : message?.body || '';
   const bodyText = isNylas && nylasMessage ? nylasMessage.body_text : message?.body || '';
+  
+  // Prepare sanitized HTML for rendering
+  // If we have HTML content, sanitize it. Otherwise convert plain text to HTML.
+  const displayHtml = rawBodyHtml 
+    ? sanitizeEmailHtml(rawBodyHtml)
+    : plainTextToDisplayHtml(bodyText);
 
   return (
     <div className="flex-1 flex flex-col bg-white min-h-0">
@@ -254,16 +263,10 @@ export default function EmailDetail() {
 
           {/* Email body */}
           <div className="border-t border-border pt-6">
-            {bodyHtml ? (
-              <div 
-                className="prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: bodyHtml }}
-              />
-            ) : (
-              <div className="whitespace-pre-wrap text-foreground leading-relaxed text-sm">
-                {bodyText}
-              </div>
-            )}
+            <div 
+              className="email-body prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: displayHtml }}
+            />
           </div>
         </div>
       </div>
