@@ -122,101 +122,39 @@ serve(async (req) => {
 언어 규칙:
 - 출력 언어는 User Payload에 전달된 language 값을 따른다`;
 
-    // Developer Prompt - 문단형 컨설팅 보고서 형식
+    // Developer Prompt - JSON 출력 + 문단형 보고서 형식
     const developerPrompt = `너는 TradeIt SaaS의 "수출 전략 및 시장조사 전문 컨설턴트"다.
 
-너의 임무는 내부 메모, 체크리스트, 워크시트가 아니라
-정부·공공기관·대기업에 제출 가능한
-'문단형 수출 전략 및 시장조사 보고서'를 작성하는 것이다.
+[목표]
+- 너의 응답은 반드시 JSON 하나만 출력한다(설명 텍스트, 마크다운 단독 출력 금지).
+- JSON에는 두 가지 산출물을 동시에 포함한다:
+  A) report_markdown: 사용자가 읽는 '문단형 보고서'(불릿 최소화)
+  B) report_data: 내부 저장/후속 AI(Buyer Analyze) 근거로 쓰는 구조화 데이터
 
-이 보고서는 사람이 읽는 문서이며,
-모든 내용은 자연스러운 문단(paragraph) 서술로 구성되어야 한다.
+[중요: 보고서 문체]
+- report_markdown의 본문(1~7장)은 문단형으로 작성한다.
+- 본문에서 "Key Findings/Interpretation/Recommendations" 같은 워크시트 표현을 사용하지 않는다.
+- 불릿포인트는 Executive Summary와 30일 액션에만 제한적으로 허용한다.
+- 국가명은 반드시 정식 한글 명칭으로 표기한다(미국/캐나다/베트남/태국 등). ISO 코드 금지.
 
-━━━━━━━━━━━━━━━━━━
-[출력 형식 – 매우 중요]
-━━━━━━━━━━━━━━━━━━
-- 본문 전체에서 불릿포인트, 번호 나열, 리스트 사용을 전면 금지한다.
-- "Key Findings", "Interpretation", "Recommendations"라는 표현을 절대 사용하지 않는다.
-- 각 소주제(예: 1.1, 2.3 등)는 **2~4개의 문단**으로 구성한다.
-- 각 문단은 아래 논리를 문장 안에 자연스럽게 녹여야 한다:
-  ▸ 관찰된 사실(Fact)
-  ▸ 그 사실의 의미(Interpretation)
-  ▸ 전략적 판단 또는 시사점(Implication)
-- 문단은 논문이나 컨설팅 리포트처럼 서술형으로 작성한다.
+[중요: report_data 작성 규칙]
+- report_data는 "사실(Claim)–근거(Evidence)–의미(Insight)–실행(Action)"이 연결되는 구조여야 한다.
+- 임의로 숫자/인증/바이어/규제 요건을 단정하지 않는다.
+- 불확실한 항목은 status="needs_verification"으로 표기한다.
+- 모든 핵심 주장(claim)에는 최소 1개의 evidence_id를 연결한다(없으면 claim을 만들지 말고 gap으로 남긴다).
 
-━━━━━━━━━━━━━━━━━━
-[국가명 표기 규칙 – 강제]
-━━━━━━━━━━━━━━━━━━
-- 국가명은 반드시 정식 한글 명칭으로 표기한다.
-- 미국, 캐나다, 독일, 프랑스, 영국, 베트남, 태국, 싱가포르처럼 작성한다.
-- US, CA, DE, VN, TH 등의 ISO 국가 코드 사용은 절대 금지한다.
+[고정 목차]
+1. 회사 개요 및 글로벌 포지셔닝 분석 (1.1~1.5)
+2. 글로벌 시장 동향 분석 (2.1~2.4)
+3. 제품 및 기술 경쟁력 분석 (3.1~3.4)
+4. 글로벌 경쟁사 및 대체재 분석 (4.1~4.4)
+5. 수출 가능성 및 리스크 요인 분석 (5.1~5.4)
+6. 현지 유통 구조 및 잠재 바이어 분석 (6.1~6.4)
+7. 실행 로드맵 및 글로벌 수출 전략 결론 (7.1~7.4)
 
-━━━━━━━━━━━━━━━━━━
-[고정 목차 – 반드시 유지]
-━━━━━━━━━━━━━━━━━━
-1. 회사 개요 및 글로벌 포지셔닝 분석
-  1.1 기업 정체성 및 설립 배경
-  1.2 사업 구조 및 조직 역량
-  1.3 주력 제품·서비스 포트폴리오
-  1.4 생산·공급 및 운영 역량
-  1.5 글로벌 가치사슬 내 포지셔닝
-
-2. 글로벌 시장 동향 분석
-  2.1 글로벌 시장 규모 및 성장성
-  2.2 지역별 시장 구조
-  2.3 수요 구조 및 세분 시장
-  2.4 기술·소비·규제 트렌드
-
-3. 제품 및 기술 경쟁력 분석
-  3.1 핵심 기술 및 차별 요소
-  3.2 제품 성능 및 품질 경쟁력
-  3.3 가격 경쟁력 및 가치 포지션
-  3.4 적용 산업 및 확장 가능성
-
-4. 글로벌 경쟁사 및 대체재 분석
-  4.1 주요 글로벌 경쟁사 현황
-  4.2 경쟁 제품 및 가격 구조
-  4.3 대체 제품·기술 위협
-  4.4 자사 상대적 경쟁 위치
-
-5. 수출 가능성 및 리스크 요인 분석
-  5.1 국가별 인증·규제 요건
-  5.2 무역·통관·물류 리스크
-  5.3 사업·재무·운영 리스크
-  5.4 리스크 대응 및 완화 전략
-
-6. 현지 유통 구조 및 잠재 바이어 분석
-  6.1 국가별 유통 구조
-  6.2 바이어 유형 및 특성
-  6.3 바이어 요구 조건
-  6.4 타겟 바이어 및 접근 전략
-
-7. 실행 로드맵 및 글로벌 수출 전략 결론
-  7.1 전략 요약 및 핵심 시사점
-  7.2 단계별 실행 로드맵
-  7.3 우선순위 및 성과 지표
-  7.4 종합 결론 및 후속 과제
-
-━━━━━━━━━━━━━━━━━━
-[불확실성 처리 규칙]
-━━━━━━━━━━━━━━━━━━
-- 정보가 불충분할 경우,
-  "공개 자료 기준으로는 확인이 제한적이다",
-  "추가적인 자료 확인이 필요하다"
-  와 같이 **문장으로 불확실성을 명시**한다.
-- '추정', '가정'이라는 단어를 명확히 사용한다.
-
-━━━━━━━━━━━━━━━━━━
-[Executive Summary 예외]
-━━━━━━━━━━━━━━━━━━
-- Executive Summary만 문단형 + 짧은 항목 구분 허용
-- 본문(1~7장)은 전부 문단형 유지
-
-━━━━━━━━━━━━━━━━━━
-[출력 형식]
-━━━━━━━━━━━━━━━━━━
-- Markdown
-- JSON, 리스트, 배열, 워크시트 형식 절대 사용 금지`;
+[출력]
+- 반드시 지정된 Output Schema(JSON) 형태로만 출력한다.
+- 모든 필수 필드를 채운다(빈 문자열/빈 배열 남발 금지).`;
 
     // Build structured user payload
     const exportExperienceMapping: Record<string, string> = {
@@ -316,37 +254,175 @@ serve(async (req) => {
       }
     };
 
-    // Output schema for JSON response - 새로운 문단형 스키마
+    // Output schema for JSON response - v2 스키마 (report_markdown + report_data)
     const outputSchema = `{
+  "schema_version": "tradeit_export_report_v2",
   "report_meta": {
     "company_name": "",
+    "company_identifier_note": "",
     "product_summary": "",
     "target_markets": [],
     "report_date": "",
-    "confidential": true
+    "confidential": true,
+    "language": "ko-KR"
   },
-  "executive_summary": {
-    "positioning": "",
-    "opportunities": "",
-    "risks": "",
-    "priority_actions_30d": ""
-  },
-  "sections": [
-    {
-      "chapter_id": "1",
-      "chapter_title": "회사 개요 및 글로벌 포지셔닝 분석",
-      "subsections": [
+  "report_markdown": "",
+  "report_data": {
+    "executive_summary": {
+      "positioning": "",
+      "opportunities": [
         {
-          "sub_id": "1.1",
-          "title": "기업 정체성 및 설립 배경",
-          "body_text": "",
-          "confidence_note": ""
+          "text": "",
+          "market": "",
+          "evidence_ids": [],
+          "confidence": 0.0,
+          "status": "confirmed"
+        }
+      ],
+      "risks": [
+        {
+          "text": "",
+          "market": "",
+          "mitigation_hint": "",
+          "evidence_ids": [],
+          "confidence": 0.0,
+          "status": "confirmed"
+        }
+      ],
+      "priority_actions_30d": [
+        {
+          "action": "",
+          "priority": "high",
+          "owner_role": "PO",
+          "time_horizon": "0-30d",
+          "kpi": "",
+          "evidence_ids": [],
+          "confidence": 0.0,
+          "status": "confirmed"
         }
       ]
+    },
+    "sections": [
+      {
+        "chapter_id": "1",
+        "chapter_title": "회사 개요 및 글로벌 포지셔닝 분석",
+        "subsections": [
+          {
+            "sub_id": "1.1",
+            "title": "기업 정체성 및 설립 배경",
+            "narrative": "",
+            "claims": [
+              {
+                "claim_id": "C-1.1-001",
+                "text": "",
+                "claim_type": "fact",
+                "evidence_ids": [],
+                "status": "confirmed",
+                "confidence": 0.0
+              }
+            ],
+            "insights": [
+              {
+                "insight_id": "I-1.1-001",
+                "text": "",
+                "evidence_ids": [],
+                "status": "confirmed",
+                "confidence": 0.0
+              }
+            ],
+            "actions": [
+              {
+                "action_id": "A-1.1-001",
+                "text": "",
+                "priority": "high",
+                "time_horizon": "0-3m",
+                "kpi": "",
+                "dependencies": [],
+                "evidence_ids": [],
+                "status": "confirmed",
+                "confidence": 0.0
+              }
+            ],
+            "buyer_targets": [
+              {
+                "target_id": "B-1.1-001",
+                "market": "",
+                "buyer_type": "distributor",
+                "segment_description": "",
+                "qualification_signals": [],
+                "approach_notes": "",
+                "evidence_ids": [],
+                "status": "needs_verification",
+                "confidence": 0.0
+              }
+            ],
+            "risks": [
+              {
+                "risk_id": "R-1.1-001",
+                "text": "",
+                "severity": "medium",
+                "likelihood": "medium",
+                "mitigation": "",
+                "evidence_ids": [],
+                "status": "confirmed",
+                "confidence": 0.0
+              }
+            ],
+            "gaps": [
+              {
+                "gap_id": "G-1.1-001",
+                "text": "",
+                "why_it_matters": "",
+                "how_to_verify": "",
+                "priority": "high"
+              }
+            ],
+            "quality": {
+              "coverage_score": 0.0,
+              "evidence_strength": "low",
+              "notes": ""
+            }
+          }
+        ]
+      }
+    ],
+    "global_buyer_shortlist": [
+      {
+        "market": "",
+        "buyer_type": "retail_chain",
+        "name": "",
+        "rationale": "",
+        "evidence_ids": [],
+        "status": "needs_verification",
+        "confidence": 0.0
+      }
+    ],
+    "export_roadmap": [
+      {
+        "phase": "0-3m",
+        "goals": "",
+        "key_actions": [],
+        "deliverables": [],
+        "kpis": []
+      }
+    ],
+    "assumptions": [
+      {
+        "text": "",
+        "impact": "medium"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "evidence_id": "E-001",
+      "source_type": "user_input",
+      "source_name": "사용자 입력",
+      "url": "",
+      "retrieved_at": "",
+      "snippet": ""
     }
-  ],
-  "assumptions": [],
-  "glossary": []
+  ]
 }`;
 
     const userPrompt = `[USER PAYLOAD]
