@@ -296,7 +296,7 @@ const StrategyResult: React.FC = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">Grok AI 수출 적합성 분석 중...</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">AI 수출 적합성 분석 중...</h2>
             <p className="text-muted-foreground">
               잠시만 기다려주세요. 약 30초~1분 정도 소요됩니다.
             </p>
@@ -321,7 +321,7 @@ const StrategyResult: React.FC = () => {
               온보딩 서베이에 입력하신 기업 정보를 바탕으로
             </p>
             <p className="text-muted-foreground mb-6">
-              Grok AI가 귀사 제품의 수출 적합성을 분석합니다.
+              AI가 귀사 제품의 수출 적합성을 분석합니다.
             </p>
             
             <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
