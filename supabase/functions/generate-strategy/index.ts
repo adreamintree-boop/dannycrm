@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const STRATEGY_CREDIT_COST = 10;
 const MODEL_NAME = 'grok-4-1-fast-reasoning';
+const TEMPERATURE = 0.2;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,10 +26,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const grokApiKey = Deno.env.get('TaaS_CRM_Strategy_Test');
+    const grokApiKey = Deno.env.get('GROK_AI_CORE_TEST');
     
     if (!grokApiKey) {
-      console.error('Missing TaaS_CRM_Strategy_Test secret');
+      console.error('Missing GROK_AI_CORE_TEST secret');
       return new Response(JSON.stringify({ error: 'AI 서비스 설정이 필요합니다.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -105,170 +106,93 @@ serve(async (req) => {
 
     console.log(`Credits deducted for user ${userId}: -${STRATEGY_CREDIT_COST}, new balance: ${creditResult.new_balance}`);
 
-    // Build context from survey data
-    const regionMap: Record<string, string> = {
-      north_america: '북미',
-      europe: '유럽',
-      southeast_asia: '동남아시아',
-      middle_east: '중동',
-      east_asia: '동아시아',
-      others: '기타 지역',
-    };
-
-    const targetRegions = (survey_data.target_regions || [])
-      .map((r: string) => regionMap[r] || r)
-      .join(', ') || '미정';
-
-    const productList = (survey_data.products || [])
-      .filter((p: any) => p.product_name?.trim())
-      .map((p: any) => `- ${p.product_name}: ${p.product_description || '설명 없음'}`)
-      .join('\n') || '- 등록된 제품 없음';
-
-    const existingMarkets = (survey_data.existing_markets || []).join(', ') || '없음';
-    const certifications = (survey_data.certifications || []).join(', ') || '없음';
-    
-    const exportExpMap: Record<string, string> = {
-      'direct': '직접 수출 경험 있음',
-      'indirect': '간접 수출 경험 있음',
-      'no_experience': '수출 경험 없음',
-      '': '수출 경험 없음'
-    };
-    const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
-
     // System Prompt - TradeIt SaaS AI CORE (자사분석) 엔진
-    const systemPrompt = `너는 TradeIt SaaS의 AI CORE(자사분석) 엔진이다.
+    const systemPrompt = `너는 TradeIt SaaS의 AI CORE(자사분석) 분석 엔진이다.
 
-너의 정체성:
-너는 단순한 정보 요약 AI가 아니라,
-정부·공공기관·대기업 프로젝트를 수행해온
-"수출 전략 및 해외시장조사 전문 컨설턴트"다.
-
-너의 역할:
-사용자가 입력한 기업 정보, 제품 정보, 첨부 문서(회사소개서·카탈로그),
-그리고 신뢰 가능한 공개 자료를 바탕으로,
-해당 기업의 수출 가능성을 다각도로 분석하고
-의사결정에 바로 활용 가능한 수준의
-수출 시장조사 및 수출 전략 분석 리포트를 작성한다.
-
-너의 책임 범위:
-1. 단순한 사실 나열이나 교과서적 설명에 그치지 않는다.
-2. 모든 주요 정보에 대해 다음 사고 단계를 반드시 수행한다.
-   - 관찰된 사실(Fact)
-   - 그 사실이 의미하는 바(Implication)
-   - 이 기업에 미치는 영향(Impact on this company)
-   - 전략적 시사점(Strategic takeaway)
-3. "그래서 이 기업은 무엇을 해야 하는가?"에 답해야 한다.
+목표:
+사용자가 입력한 기업 정보를 기반으로 해당 기업의 수출 시장조사 및 수출 전략 분석 리포트를 생성한다.
 
 기본 원칙:
-- 근거 없는 정보 생성(환각)을 하지 않는다.
-- 확인 불가 정보는 "알 수 없음" 또는 "(추정)"으로 표기한다.
-- 존재하지 않는 기업·시장·통계·인증·규제 정보를 생성하지 않는다.
-- 최근 3년 기준 정보를 우선한다.
-- 본 분석은 전략 참고용이다.
+1. 근거 없는 정보 생성(환각) 금지
+2. 확인 불가 정보는 반드시 "알 수 없음" 또는 "(추정)"으로 명시
+3. 실제 존재하지 않는 기업, 시장, 통계, 인증, 규제 정보를 생성하지 말 것
+4. 수치, 통계, 시장 정보는 최근 3년 기준을 우선한다
+5. 본 결과는 전략 참고용 분석 자료이며 법적·재무적 효력을 갖지 않는다
 
-중요:
-이 출력물은
-경영진, 해외영업 책임자, 실무자가
-"이 보고서 하나로 다음 액션을 결정할 수 있는 수준"이어야 한다.`;
+언어 규칙:
+- 출력 언어는 User Payload에 전달된 language 값을 따른다`;
 
-    // Developer Prompt with output language rules and section structure
-    const developerPrompt = `[출력 언어 처리 규칙]
+    // Developer Prompt with 7-chapter fixed structure
+    const developerPrompt = `너는 TradeIt SaaS의 "수출 전략 및 시장조사 컨설턴트"다.
 
-1. 출력 언어는 User Payload의 context.language 값을 따른다.
-2. context.language가 "auto"인 경우 context.user_country 기준으로 결정한다.
+사용자가 입력한 회사/제품 정보와 첨부 문서, 그리고 신뢰 가능한 공개자료(웹 근거)를 바탕으로
+'수출 전략 및 시장조사 보고서'를 작성한다.
 
-언어 매핑:
-- KR → ko
-- JP → ja
-- CN → zh (간체)
-- TW → zh-TW
-- 그 외 → en
+[출력 목표]
+- 보고서는 "7개 챕터 고정 구조"를 반드시 따른다.
+- 각 소주제(1.1~7.4)는 최소 1개 이상의 핵심 인사이트를 포함해야 한다.
+- 모든 주요 문장은 Fact → Interpretation → Strategy의 3단 논리를 갖춰야 한다.
+- 근거 없는 숫자/인증/거래처/시장규모/점유율/규제 요건은 작성 금지.
+- 모르는 내용은 "확인 필요"로 표기하고, 추정은 '가정'으로 명확히 라벨링한다.
 
---------------------------------------------------
+[고정 목차(반드시 유지)]
+1. 회사 개요 및 글로벌 포지셔닝 분석
+  1.1 기업 정체성 및 설립 배경
+  1.2 사업 구조 및 조직 역량
+  1.3 주력 제품·서비스 포트폴리오
+  1.4 생산·공급 및 운영 역량
+  1.5 글로벌 가치사슬 내 포지셔닝
 
-[분석 사고 루트 강제 규칙 – 매우 중요]
+2. 글로벌 시장 동향 분석
+  2.1 글로벌 시장 규모 및 성장성
+  2.2 지역별 시장 구조
+  2.3 수요 구조 및 세분 시장
+  2.4 기술·소비·규제 트렌드
 
-모든 섹션은 내부적으로 반드시 아래 사고 단계를 거친다:
-1) Fact
-2) Implication
-3) Impact on This Company
-4) Strategic Takeaway
+3. 제품 및 기술 경쟁력 분석
+  3.1 핵심 기술 및 차별 요소
+  3.2 제품 성능 및 품질 경쟁력
+  3.3 가격 경쟁력 및 가치 포지션
+  3.4 적용 산업 및 확장 가능성
 
-※ 출력 시 단계명은 노출하지 않되,
-   문단 흐름상 자연스럽게 반영한다.
+4. 글로벌 경쟁사 및 대체재 분석
+  4.1 주요 글로벌 경쟁사 현황
+  4.2 경쟁 제품 및 가격 구조
+  4.3 대체 제품·기술 위협
+  4.4 자사 상대적 경쟁 위치
 
---------------------------------------------------
+5. 수출 가능성 및 리스크 요인 분석
+  5.1 국가별 인증·규제 요건
+  5.2 무역·통관·물류 리스크
+  5.3 사업·재무·운영 리스크
+  5.4 리스크 대응 및 완화 전략
 
-[출력 형식 규칙]
+6. 현지 유통 구조 및 잠재 바이어 분석
+  6.1 국가별 유통 구조
+  6.2 바이어 유형 및 특성
+  6.3 바이어 요구 조건
+  6.4 타겟 바이어 및 접근 전략
 
-- 전체 출력은 Markdown 기반 분석 리포트 형식
-- 섹션 제목은 ## 사용
-- 각 섹션은 2~4개 문단
-- bullet point는 보조 수단 (최대 5개)
-- 표(Table)는 문단 설명 뒤에만 위치
+7. 실행 로드맵 및 글로벌 수출 전략 결론
+  7.1 전략 요약 및 핵심 시사점
+  7.2 단계별 실행 로드맵
+  7.3 우선순위 및 성과 지표
+  7.4 종합 결론 및 후속 과제
 
---------------------------------------------------
+[각 소주제 작성 규칙]
+- "Key Findings" 3~7개 (불릿)
+- "Interpretation" 1~3개 (왜 중요한지)
+- "Recommendations" 2~5개 (실행 과제, 우선순위 포함)
+- 각 항목은 evidence를 최소 1개 이상 연결한다(문서/웹/사용자 입력).
+- evidence가 없으면 해당 항목은 "추가 조사 필요"로만 작성한다.
 
-[섹션 구성 – 순서 고정]
+[문체/표현 규칙]
+- 홍보성 표현 금지(최고, 탁월 등).
+- 단정 금지. 가능성/조건부 표현 사용.
+- 전문용어는 괄호로 쉬운 설명을 함께 제공한다.
 
-1. 기업 개요 및 제품 포지션
-2. 글로벌 시장 동향 및 수출 가능성 진단
-3. 주요 경쟁사 분석
-4. 목표 수출 시장 분석
-5. HS CODE(6자리) 및 수입 통계 분석
-6. 국가별 진입 장벽 및 리스크
-7. 유통 구조 및 잠재 바이어 유형
-8. 수출 전략 및 실행 제안 (최대 3개)
-
---------------------------------------------------
-
-[HS CODE 규칙]
-
-- 국제 공통 6자리까지만 사용
-- 불확실 시 "(추정)" 명시
-- 제품군당 1~2개 이내
-
---------------------------------------------------
-
-[첨부 문서 활용 규칙]
-
-- 회사소개서/카탈로그가 있으면 1차 근거로 사용
-- 단순 요약 금지, 전략적으로 재해석
-
---------------------------------------------------
-
-[Summary JSON – 내부용]
-
-- 반드시 생성
-- 유저에게 노출 금지
-- EP-05, EP-06 입력값으로만 사용
-- 사실 + 판단 + 전략 힌트 포함
-
-JSON structure:
-{
-  "company_profile": {
-    "name": "",
-    "main_products": [],
-    "core_strengths": [],
-    "estimated_industry": "",
-    "company_size_hint": "small | medium | large | unknown",
-    "business_type_hint": "Manufacturer | Brand | OEM/ODM | Distributor | Mixed | Unknown"
-  },
-  "target_markets": [],
-  "hs_codes_6digit": [],
-  "regulatory_risk_level": "Low | Medium | High",
-  "export_readiness": "Low | Medium | High",
-  "key_notes": []
-}
-
---------------------------------------------------
-
-[명시적 금지]
-
-- 허구 정보 생성 금지
-- HS CODE 6자리 초과 금지
-- 단순 나열형 보고서 금지
-- Summary JSON 누락 금지`;
+[출력 형식]
+- 반드시 지정된 JSON 스키마만 출력한다(설명 텍스트 금지).`;
 
     // Build structured user payload
     const exportExperienceMapping: Record<string, string> = {
@@ -290,6 +214,29 @@ JSON structure:
         current_positioning: ''
       }));
 
+    // Determine company size hint
+    const getCompanySizeHint = (employeeCount: string | undefined): string => {
+      if (!employeeCount) return 'unknown';
+      const count = parseInt(employeeCount);
+      if (isNaN(count)) return 'unknown';
+      if (count > 200) return 'large';
+      if (count > 50) return 'medium';
+      return 'small';
+    };
+
+    // Map target regions to country codes
+    const regionToCountry: Record<string, string[]> = {
+      'north_america': ['US', 'CA'],
+      'europe': ['DE', 'FR', 'GB'],
+      'southeast_asia': ['VN', 'TH', 'SG'],
+      'middle_east': ['AE', 'SA'],
+      'east_asia': ['JP', 'CN'],
+      'others': []
+    };
+
+    const targetCountries = (survey_data.target_regions || [])
+      .flatMap((r: string) => regionToCountry[r] || []);
+
     // Build user payload in the new structure
     const userPayload = {
       company: {
@@ -297,9 +244,7 @@ JSON structure:
         homepage_url: survey_data.company_website || '',
         country: 'KR',
         year_established: survey_data.year_founded || null,
-        company_size_hint: survey_data.employee_count ? 
-          (parseInt(survey_data.employee_count) > 200 ? 'large' : 
-           parseInt(survey_data.employee_count) > 50 ? 'medium' : 'small') : 'unknown',
+        company_size_hint: getCompanySizeHint(survey_data.employee_count),
         business_type_hint: 'Unknown'
       },
       products: productsArray.length > 0 ? productsArray : [{
@@ -312,17 +257,7 @@ JSON structure:
       export_context: {
         export_experience: exportExpMapped,
         current_export_countries: survey_data.existing_markets || [],
-        target_countries: (survey_data.target_regions || []).map((r: string) => {
-          const regionToCountry: Record<string, string[]> = {
-            'north_america': ['US', 'CA'],
-            'europe': ['DE', 'FR', 'GB'],
-            'southeast_asia': ['VN', 'TH', 'SG'],
-            'middle_east': ['AE', 'SA'],
-            'east_asia': ['JP', 'CN'],
-            'others': []
-          };
-          return regionToCountry[r] || [];
-        }).flat(),
+        target_countries: targetCountries,
         priority_objectives: ['long_term_market_entry'],
         time_horizon: 'mid_term'
       },
@@ -357,44 +292,82 @@ JSON structure:
       }
     };
 
-    const userPrompt = `[BEGIN USER PAYLOAD]
-
-${JSON.stringify(userPayload, null, 2)}
-
-[END USER PAYLOAD]
-
-[추가 정보]
-core_strengths: ${survey_data.core_strengths || '(미입력)'}
-certifications: ${certifications}
-catalog_file: ${survey_data.catalog_file_url || '(없음)'}
-intro_file: ${survey_data.intro_file_url || '(없음)'}
-
-[INSTRUCTIONS]
-Developer Prompt의 규칙을 철저히 따라 수출 전략 리포트를 생성하세요.
-context.language가 "auto"이고 context.user_country가 "KR"이므로 한국어로 작성하세요.
-
-You must return a JSON object with two fields:
-1. "report_markdown": 전체 분석 리포트 (마크다운 형식, 8개 섹션)
-2. "summary_json": 내부용 요약 JSON 객체 (EP-05, EP-06 연동용)
-
-Return ONLY valid JSON - no text before or after the JSON.
-
-Example output format:
-{
-  "report_markdown": "## 1. 기업 개요 및 제품 포지션\\n\\n...",
-  "summary_json": {
-    "company_profile": {...},
-    "target_markets": [...],
-    "hs_codes_6digit": [...],
-    "regulatory_risk_level": "...",
-    "export_readiness": "...",
-    "key_notes": [...]
+    // Output schema for JSON response
+    const outputSchema = `{
+  "report_meta": {
+    "company_name": "",
+    "product_summary": "",
+    "target_countries": [],
+    "report_date": "",
+    "confidential": true
+  },
+  "executive_summary": {
+    "one_line_positioning": "",
+    "top_opportunities": [],
+    "top_risks": [],
+    "next_30_days_actions": []
+  },
+  "sections": [
+    {
+      "chapter_id": "1",
+      "chapter_title": "회사 개요 및 글로벌 포지셔닝 분석",
+      "subsections": [
+        {
+          "sub_id": "1.1",
+          "title": "기업 정체성 및 설립 배경",
+          "key_findings": [
+            { "statement": "", "type": "fact", "evidence_ids": ["E1"], "confidence": 0.7 }
+          ],
+          "interpretation": [
+            { "statement": "", "evidence_ids": ["E1"], "confidence": 0.6 }
+          ],
+          "recommendations": [
+            { "statement": "", "priority": "high", "time_horizon": "0-3m", "evidence_ids": ["E1"], "confidence": 0.6 }
+          ],
+          "gaps": ["추가 확인 필요 항목"],
+          "overall_confidence": 0.6
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "E1",
+      "source_type": "user_input",
+      "source_name": "사용자 입력",
+      "url": "",
+      "quote_or_snippet": "",
+      "accessed_at": ""
+    }
+  ],
+  "appendix": {
+    "assumptions": [],
+    "glossary": []
   }
 }`;
 
+    const userPrompt = `[USER PAYLOAD]
+${JSON.stringify(userPayload, null, 2)}
+
+[추가 정보]
+core_strengths: ${survey_data.core_strengths || '(미입력)'}
+certifications: ${(survey_data.certifications || []).join(', ') || '없음'}
+catalog_file: ${survey_data.catalog_file_url || '(없음)'}
+intro_file: ${survey_data.intro_file_url || '(없음)'}
+
+[OUTPUT SCHEMA]
+다음 JSON 스키마에 맞춰 출력하세요:
+${outputSchema}
+
+[INSTRUCTIONS]
+1. Developer Prompt의 7개 챕터 고정 구조를 반드시 따르세요.
+2. 각 챕터의 모든 소주제(1.1~7.4)를 sections 배열에 포함하세요.
+3. context.language가 "auto"이고 context.user_country가 "KR"이므로 한국어로 작성하세요.
+4. 반드시 유효한 JSON만 출력하세요. 설명 텍스트나 마크다운 코드블록 없이 JSON만 출력하세요.`;
+
     console.log('Calling Grok AI for strategy generation...');
 
-    // Call Grok AI API
+    // Call Grok AI API with GROK_AI_CORE_TEST
     const aiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -408,8 +381,8 @@ Example output format:
           { role: 'system', content: developerPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3,
-        max_tokens: 12000,
+        temperature: TEMPERATURE,
+        max_tokens: 16000,
       }),
     });
 
@@ -502,7 +475,7 @@ Example output format:
             { role: 'user', content: `Convert this to valid JSON. Return ONLY the JSON, no explanations:\n\n${rawContent}` }
           ],
           temperature: 0,
-          max_tokens: 12000,
+          max_tokens: 16000,
         }),
       });
       
@@ -558,10 +531,10 @@ Example output format:
       }
     }
 
-    const reportMarkdown = parsedResponse.report_markdown || '';
-    const summaryJson = parsedResponse.summary_json || {};
+    // Generate markdown from structured JSON for backward compatibility
+    const reportMarkdown = generateMarkdownFromJson(parsedResponse);
 
-    console.log('Strategy generated successfully, markdown length:', reportMarkdown.length);
+    console.log('Strategy generated successfully, sections:', parsedResponse.sections?.length || 0);
 
     // Save the report to database with both markdown and JSON
     const { data: reportData, error: reportError } = await supabase
@@ -589,7 +562,7 @@ Example output format:
     return new Response(JSON.stringify({ 
       success: true, 
       report_markdown: reportMarkdown,
-      summary_json: summaryJson,
+      report_json: parsedResponse,
       report_id: reportData?.id,
       new_balance: creditResult.new_balance,
       deducted: STRATEGY_CREDIT_COST
@@ -605,3 +578,136 @@ Example output format:
     });
   }
 });
+
+// Helper function to generate markdown from structured JSON
+function generateMarkdownFromJson(json: any): string {
+  const lines: string[] = [];
+  
+  // Report meta
+  if (json.report_meta) {
+    lines.push(`# ${json.report_meta.company_name || '수출 전략 분석 보고서'}`);
+    lines.push('');
+    if (json.report_meta.product_summary) {
+      lines.push(`**제품 요약:** ${json.report_meta.product_summary}`);
+    }
+    if (json.report_meta.target_countries?.length > 0) {
+      lines.push(`**목표 시장:** ${json.report_meta.target_countries.join(', ')}`);
+    }
+    if (json.report_meta.report_date) {
+      lines.push(`**보고서 일자:** ${json.report_meta.report_date}`);
+    }
+    lines.push('');
+  }
+
+  // Executive summary
+  if (json.executive_summary) {
+    lines.push('## Executive Summary');
+    lines.push('');
+    if (json.executive_summary.one_line_positioning) {
+      lines.push(`**포지셔닝:** ${json.executive_summary.one_line_positioning}`);
+      lines.push('');
+    }
+    if (json.executive_summary.top_opportunities?.length > 0) {
+      lines.push('**주요 기회:**');
+      json.executive_summary.top_opportunities.forEach((opp: string) => {
+        lines.push(`- ${opp}`);
+      });
+      lines.push('');
+    }
+    if (json.executive_summary.top_risks?.length > 0) {
+      lines.push('**주요 리스크:**');
+      json.executive_summary.top_risks.forEach((risk: string) => {
+        lines.push(`- ${risk}`);
+      });
+      lines.push('');
+    }
+    if (json.executive_summary.next_30_days_actions?.length > 0) {
+      lines.push('**30일 내 우선 과제:**');
+      json.executive_summary.next_30_days_actions.forEach((action: string) => {
+        lines.push(`- ${action}`);
+      });
+      lines.push('');
+    }
+  }
+
+  // Sections
+  if (json.sections?.length > 0) {
+    json.sections.forEach((section: any) => {
+      lines.push(`## ${section.chapter_id}. ${section.chapter_title}`);
+      lines.push('');
+      
+      if (section.subsections?.length > 0) {
+        section.subsections.forEach((sub: any) => {
+          lines.push(`### ${sub.sub_id} ${sub.title}`);
+          lines.push('');
+          
+          // Key findings
+          if (sub.key_findings?.length > 0) {
+            lines.push('**Key Findings:**');
+            sub.key_findings.forEach((finding: any) => {
+              const statement = typeof finding === 'string' ? finding : finding.statement;
+              if (statement) lines.push(`- ${statement}`);
+            });
+            lines.push('');
+          }
+          
+          // Interpretation
+          if (sub.interpretation?.length > 0) {
+            lines.push('**Interpretation:**');
+            sub.interpretation.forEach((interp: any) => {
+              const statement = typeof interp === 'string' ? interp : interp.statement;
+              if (statement) lines.push(`- ${statement}`);
+            });
+            lines.push('');
+          }
+          
+          // Recommendations
+          if (sub.recommendations?.length > 0) {
+            lines.push('**Recommendations:**');
+            sub.recommendations.forEach((rec: any) => {
+              const statement = typeof rec === 'string' ? rec : rec.statement;
+              const priority = rec.priority ? ` [${rec.priority}]` : '';
+              if (statement) lines.push(`- ${statement}${priority}`);
+            });
+            lines.push('');
+          }
+          
+          // Gaps
+          if (sub.gaps?.length > 0) {
+            lines.push('**추가 조사 필요:**');
+            sub.gaps.forEach((gap: string) => {
+              lines.push(`- ${gap}`);
+            });
+            lines.push('');
+          }
+        });
+      }
+    });
+  }
+
+  // Appendix
+  if (json.appendix) {
+    if (json.appendix.assumptions?.length > 0) {
+      lines.push('## 부록: 가정 사항');
+      lines.push('');
+      json.appendix.assumptions.forEach((assumption: string) => {
+        lines.push(`- ${assumption}`);
+      });
+      lines.push('');
+    }
+    if (json.appendix.glossary?.length > 0) {
+      lines.push('## 부록: 용어 정리');
+      lines.push('');
+      json.appendix.glossary.forEach((term: any) => {
+        if (typeof term === 'string') {
+          lines.push(`- ${term}`);
+        } else if (term.term && term.definition) {
+          lines.push(`- **${term.term}:** ${term.definition}`);
+        }
+      });
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
