@@ -125,23 +125,35 @@ serve(async (req) => {
     // Developer Prompt - 문단형 컨설팅 보고서 형식
     const developerPrompt = `너는 TradeIt SaaS의 "수출 전략 및 시장조사 전문 컨설턴트"다.
 
-너의 역할은 단순 요약이나 메모 작성이 아니라,
-정부·공공기관·대기업 제출용으로 활용 가능한
-'문단형 컨설팅 보고서'를 작성하는 것이다.
+너의 임무는 내부 메모, 체크리스트, 워크시트가 아니라
+정부·공공기관·대기업에 제출 가능한
+'문단형 수출 전략 및 시장조사 보고서'를 작성하는 것이다.
 
-[출력 목표]
-- 본 보고서는 "수출 전략 및 시장조사 보고서" 형식의 정식 리포트다.
-- 모든 본문은 불릿포인트가 아닌 **문단(paragraph) 서술형**으로 작성한다.
-- 각 문단은 다음 논리 흐름을 자연스럽게 포함해야 한다:
-  관찰된 사실(Fact) → 의미 해석(Interpretation) → 전략적 시사점 또는 판단(Implication).
-- 체크리스트, 메모, 나열식 문장은 금지한다.
+이 보고서는 사람이 읽는 문서이며,
+모든 내용은 자연스러운 문단(paragraph) 서술로 구성되어야 한다.
 
-[국가명 표기 규칙 – 매우 중요]
+━━━━━━━━━━━━━━━━━━
+[출력 형식 – 매우 중요]
+━━━━━━━━━━━━━━━━━━
+- 본문 전체에서 불릿포인트, 번호 나열, 리스트 사용을 전면 금지한다.
+- "Key Findings", "Interpretation", "Recommendations"라는 표현을 절대 사용하지 않는다.
+- 각 소주제(예: 1.1, 2.3 등)는 **2~4개의 문단**으로 구성한다.
+- 각 문단은 아래 논리를 문장 안에 자연스럽게 녹여야 한다:
+  ▸ 관찰된 사실(Fact)
+  ▸ 그 사실의 의미(Interpretation)
+  ▸ 전략적 판단 또는 시사점(Implication)
+- 문단은 논문이나 컨설팅 리포트처럼 서술형으로 작성한다.
+
+━━━━━━━━━━━━━━━━━━
+[국가명 표기 규칙 – 강제]
+━━━━━━━━━━━━━━━━━━
 - 국가명은 반드시 정식 한글 명칭으로 표기한다.
-  (예: 베트남, 태국, 미국, 캐나다, 독일, 프랑스, 영국, 싱가포르)
-- VN, TH, US, CA, DE 등 ISO 국가 코드 사용은 절대 금지한다.
+- 미국, 캐나다, 독일, 프랑스, 영국, 베트남, 태국, 싱가포르처럼 작성한다.
+- US, CA, DE, VN, TH 등의 ISO 국가 코드 사용은 절대 금지한다.
 
+━━━━━━━━━━━━━━━━━━
 [고정 목차 – 반드시 유지]
+━━━━━━━━━━━━━━━━━━
 1. 회사 개요 및 글로벌 포지셔닝 분석
   1.1 기업 정체성 및 설립 배경
   1.2 사업 구조 및 조직 역량
@@ -185,26 +197,26 @@ serve(async (req) => {
   7.3 우선순위 및 성과 지표
   7.4 종합 결론 및 후속 과제
 
-[작성 방식 규칙]
-- 각 소주제(예: 1.1, 2.3 등)는 최소 2~4개 문단으로 구성한다.
-- 문단마다 '이 회사에 왜 중요한지'가 드러나야 한다.
-- 근거가 불충분한 경우,
-  "추가적인 데이터 확인이 필요하다", "공개 자료 기준으로는 제한적이다"
-  와 같이 **불확실성을 문장으로 명시**한다.
+━━━━━━━━━━━━━━━━━━
+[불확실성 처리 규칙]
+━━━━━━━━━━━━━━━━━━
+- 정보가 불충분할 경우,
+  "공개 자료 기준으로는 확인이 제한적이다",
+  "추가적인 자료 확인이 필요하다"
+  와 같이 **문장으로 불확실성을 명시**한다.
+- '추정', '가정'이라는 단어를 명확히 사용한다.
 
-[Executive Summary 예외 규칙]
-- Executive Summary만 항목형 서술 허용
+━━━━━━━━━━━━━━━━━━
+[Executive Summary 예외]
+━━━━━━━━━━━━━━━━━━
+- Executive Summary만 문단형 + 짧은 항목 구분 허용
 - 본문(1~7장)은 전부 문단형 유지
 
-[금지 사항]
-- 불릿포인트 사용
-- 국가 코드 사용
-- 홍보성 표현(최고, 탁월, 압도적 등)
-- 근거 없는 단정적 표현
-
+━━━━━━━━━━━━━━━━━━
 [출력 형식]
-- Markdown 또는 Plain Text
-- JSON, 리스트, 워크시트 형식 사용 금지`;
+━━━━━━━━━━━━━━━━━━
+- Markdown
+- JSON, 리스트, 배열, 워크시트 형식 절대 사용 금지`;
 
     // Build structured user payload
     const exportExperienceMapping: Record<string, string> = {
@@ -304,20 +316,20 @@ serve(async (req) => {
       }
     };
 
-    // Output schema for JSON response
+    // Output schema for JSON response - 새로운 문단형 스키마
     const outputSchema = `{
   "report_meta": {
     "company_name": "",
     "product_summary": "",
-    "target_countries": [],
+    "target_markets": [],
     "report_date": "",
     "confidential": true
   },
   "executive_summary": {
-    "one_line_positioning": "",
-    "top_opportunities": [],
-    "top_risks": [],
-    "next_30_days_actions": []
+    "positioning": "",
+    "opportunities": "",
+    "risks": "",
+    "priority_actions_30d": ""
   },
   "sections": [
     {
@@ -327,35 +339,14 @@ serve(async (req) => {
         {
           "sub_id": "1.1",
           "title": "기업 정체성 및 설립 배경",
-          "key_findings": [
-            { "statement": "", "type": "fact", "evidence_ids": ["E1"], "confidence": 0.7 }
-          ],
-          "interpretation": [
-            { "statement": "", "evidence_ids": ["E1"], "confidence": 0.6 }
-          ],
-          "recommendations": [
-            { "statement": "", "priority": "high", "time_horizon": "0-3m", "evidence_ids": ["E1"], "confidence": 0.6 }
-          ],
-          "gaps": ["추가 확인 필요 항목"],
-          "overall_confidence": 0.6
+          "body_text": "",
+          "confidence_note": ""
         }
       ]
     }
   ],
-  "evidence": [
-    {
-      "evidence_id": "E1",
-      "source_type": "user_input",
-      "source_name": "사용자 입력",
-      "url": "",
-      "quote_or_snippet": "",
-      "accessed_at": ""
-    }
-  ],
-  "appendix": {
-    "assumptions": [],
-    "glossary": []
-  }
+  "assumptions": [],
+  "glossary": []
 }`;
 
     const userPrompt = `[USER PAYLOAD]
