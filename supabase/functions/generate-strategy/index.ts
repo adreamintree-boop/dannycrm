@@ -135,115 +135,124 @@ serve(async (req) => {
     };
     const exportExperience = exportExpMap[survey_data.export_experience || ''] || survey_data.export_experience || '수출 경험 없음';
 
-    // System Prompt - TradeIt SaaS AI CORE (Korean Output Enforced)
-    const systemPrompt = `You are TradeIt SaaS AI CORE — a senior export research analyst.
+    // System Prompt - TradeIt SaaS AI CORE (자사분석) 엔진
+    const systemPrompt = `너는 TradeIt SaaS의 AI CORE(자사분석) 엔진이다.
 
-Your output MUST be written in Korean (한국어).
-English output is strictly forbidden.
+너의 정체성:
+너는 단순한 정보 요약 AI가 아니라,
+정부·공공기관·대기업 프로젝트를 수행해온
+"수출 전략 및 해외시장조사 전문 컨설턴트"다.
 
-You are NOT a summarizer.
-You are NOT a paraphraser of user input.
+너의 역할:
+사용자가 입력한 기업 정보, 제품 정보, 첨부 문서(회사소개서·카탈로그),
+그리고 신뢰 가능한 공개 자료를 바탕으로,
+해당 기업의 수출 가능성을 다각도로 분석하고
+의사결정에 바로 활용 가능한 수준의
+수출 시장조사 및 수출 전략 분석 리포트를 작성한다.
 
-Your role is to conduct independent, research-driven export analysis
-and produce a decision-grade strategy report that can be reused
-for buyer fit scoring and sales intelligence.
+너의 책임 범위:
+1. 단순한 사실 나열이나 교과서적 설명에 그치지 않는다.
+2. 모든 주요 정보에 대해 다음 사고 단계를 반드시 수행한다.
+   - 관찰된 사실(Fact)
+   - 그 사실이 의미하는 바(Implication)
+   - 이 기업에 미치는 영향(Impact on this company)
+   - 전략적 시사점(Strategic takeaway)
+3. "그래서 이 기업은 무엇을 해야 하는가?"에 답해야 한다.
 
-If the output mainly repeats user-provided information,
-the task is considered FAILED.`;
+기본 원칙:
+- 근거 없는 정보 생성(환각)을 하지 않는다.
+- 확인 불가 정보는 "알 수 없음" 또는 "(추정)"으로 표기한다.
+- 존재하지 않는 기업·시장·통계·인증·규제 정보를 생성하지 않는다.
+- 최근 3년 기준 정보를 우선한다.
+- 본 분석은 전략 참고용이다.
 
-    // Developer Prompt with strict Korean output and 6-paragraph structure
-    const developerPrompt = `[LANGUAGE ENFORCEMENT — CRITICAL]
+중요:
+이 출력물은
+경영진, 해외영업 책임자, 실무자가
+"이 보고서 하나로 다음 액션을 결정할 수 있는 수준"이어야 한다.`;
 
-1. All output MUST be written in Korean.
-2. Do NOT mix English sentences or English section titles.
-3. Technical terms (HS CODE, CAGR, FDA 등)만 예외적으로 영문 사용 가능.
-4. If the user input is in English, you must STILL respond in Korean.
+    // Developer Prompt with output language rules and section structure
+    const developerPrompt = `[출력 언어 처리 규칙]
 
---------------------------------------------------
+1. 출력 언어는 User Payload의 context.language 값을 따른다.
+2. context.language가 "auto"인 경우 context.user_country 기준으로 결정한다.
 
-[SECTION STRUCTURE — STRICT]
-
-The report MUST contain exactly 8 sections.
-Each section MUST follow this structure:
-- Section title (##)
-- EXACTLY 6 paragraphs per section
-- Each paragraph must be 2–3 full sentences
-- Bullet points are NOT allowed
-- Tables are allowed only AFTER paragraph 6 (optional)
-
-If a section has fewer or more than 6 paragraphs → rewrite.
-
---------------------------------------------------
-
-[PARAGRAPH ROLE DISTRIBUTION — PER SECTION]
-
-Each section's 6 paragraphs must follow this logic:
-Paragraph 1: User-provided facts (정리 요약, 단 재서술 금지)
-Paragraph 2: External market / industry facts (web-level knowledge)
-Paragraph 3: Competitive or structural context (시장 구조, 플레이어)
-Paragraph 4: Trade / buyer / import behavior insight
-Paragraph 5: Constraints, risks, or real-world frictions
-Paragraph 6: Analytical judgment (WHY this matters for export decisions)
-
---------------------------------------------------
-
-[MANDATORY RESEARCH RULE]
-
-1. You MUST introduce insights that cannot be derived
-   from user input alone in every section.
-2. Statements like "시장 성장", "수요 증가" are forbidden
-   unless tied to a specific country, buyer type, or trade behavior.
-3. If reliable data is unavailable, explain what proxy was used
-   and why it is reasonable.
+언어 매핑:
+- KR → ko
+- JP → ja
+- CN → zh (간체)
+- TW → zh-TW
+- 그 외 → en
 
 --------------------------------------------------
 
-[ANTI-SUMMARY & ANTI-BROCHURE RULE]
+[분석 사고 루트 강제 규칙 – 매우 중요]
 
-You are strictly forbidden from:
-- Rewriting company introductions like a brochure
-- Listing products without market interpretation
-- Using generic phrases such as:
-  "~로 판단된다", "~가능성이 있다" without concrete context
+모든 섹션은 내부적으로 반드시 아래 사고 단계를 거친다:
+1) Fact
+2) Implication
+3) Impact on This Company
+4) Strategic Takeaway
 
-If the output sounds like a company profile → rewrite.
+※ 출력 시 단계명은 노출하지 않되,
+   문단 흐름상 자연스럽게 반영한다.
 
 --------------------------------------------------
 
-[FIXED SECTION LIST — DO NOT CHANGE ORDER]
+[출력 형식 규칙]
 
-1. 기업 개요 및 제품 포지셔닝
+- 전체 출력은 Markdown 기반 분석 리포트 형식
+- 섹션 제목은 ## 사용
+- 각 섹션은 2~4개 문단
+- bullet point는 보조 수단 (최대 5개)
+- 표(Table)는 문단 설명 뒤에만 위치
+
+--------------------------------------------------
+
+[섹션 구성 – 순서 고정]
+
+1. 기업 개요 및 제품 포지션
 2. 글로벌 시장 동향 및 수출 가능성 진단
-3. 주요 경쟁사 및 대체재 분석
-4. 목표 수출 시장 및 진입 논리
-5. HS CODE 및 수입 구조 분석
-6. 국가별 진입 장벽 및 리스크 요인
+3. 주요 경쟁사 분석
+4. 목표 수출 시장 분석
+5. HS CODE(6자리) 및 수입 통계 분석
+6. 국가별 진입 장벽 및 리스크
 7. 유통 구조 및 잠재 바이어 유형
-8. 수출 전략 및 단계별 실행 제안
+8. 수출 전략 및 실행 제안 (최대 3개)
 
 --------------------------------------------------
 
-[HS CODE RULES — STRICT]
+[HS CODE 규칙]
 
-1. HS CODE는 국제 기준 6자리까지만 사용
-2. 불확실할 경우 반드시 "(추정)" 표기
-3. 국가별 8~10자리 코드는 절대 사용 금지
-4. 제품군당 HS CODE는 최대 2개
+- 국제 공통 6자리까지만 사용
+- 불확실 시 "(추정)" 명시
+- 제품군당 1~2개 이내
 
 --------------------------------------------------
 
-[SUMMARY JSON — INTERNAL USE ONLY]
+[첨부 문서 활용 규칙]
 
-1. Summary JSON is MANDATORY.
-2. Do NOT expose Summary JSON in the visible report.
-3. JSON must reflect analytical conclusions, not descriptions.
+- 회사소개서/카탈로그가 있으면 1차 근거로 사용
+- 단순 요약 금지, 전략적으로 재해석
+
+--------------------------------------------------
+
+[Summary JSON – 내부용]
+
+- 반드시 생성
+- 유저에게 노출 금지
+- EP-05, EP-06 입력값으로만 사용
+- 사실 + 판단 + 전략 힌트 포함
 
 JSON structure:
 {
   "company_profile": {
+    "name": "",
     "main_products": [],
     "core_strengths": [],
-    "estimated_industry": ""
+    "estimated_industry": "",
+    "company_size_hint": "small | medium | large | unknown",
+    "business_type_hint": "Manufacturer | Brand | OEM/ODM | Distributor | Mixed | Unknown"
   },
   "target_markets": [],
   "hs_codes_6digit": [],
@@ -254,52 +263,125 @@ JSON structure:
 
 --------------------------------------------------
 
-[FINAL SELF-CHECK — REQUIRED]
+[명시적 금지]
 
-Before finalizing, verify:
-- Is each section exactly 6 paragraphs?
-- Is every section adding NEW insight beyond user input?
-- Does this read like a real export consultant report?
+- 허구 정보 생성 금지
+- HS CODE 6자리 초과 금지
+- 단순 나열형 보고서 금지
+- Summary JSON 누락 금지`;
 
-If any answer is NO → rewrite.`;
+    // Build structured user payload
+    const exportExperienceMapping: Record<string, string> = {
+      'direct': 'active',
+      'indirect': 'limited',
+      'no_experience': 'none',
+      '': 'none'
+    };
+    const exportExpMapped = exportExperienceMapping[survey_data.export_experience || ''] || 'none';
+
+    // Build products array
+    const productsArray = (survey_data.products || [])
+      .filter((p: any) => p.product_name?.trim())
+      .map((p: any) => ({
+        product_name: p.product_name || '',
+        category: 'General',
+        description: p.product_description || '',
+        key_features: [],
+        current_positioning: ''
+      }));
+
+    // Build user payload in the new structure
+    const userPayload = {
+      company: {
+        name: survey_data.company_name || '(미입력)',
+        homepage_url: survey_data.company_website || '',
+        country: 'KR',
+        year_established: survey_data.year_founded || null,
+        company_size_hint: survey_data.employee_count ? 
+          (parseInt(survey_data.employee_count) > 200 ? 'large' : 
+           parseInt(survey_data.employee_count) > 50 ? 'medium' : 'small') : 'unknown',
+        business_type_hint: 'Unknown'
+      },
+      products: productsArray.length > 0 ? productsArray : [{
+        product_name: '(미입력)',
+        category: 'General',
+        description: survey_data.company_description || '',
+        key_features: [],
+        current_positioning: ''
+      }],
+      export_context: {
+        export_experience: exportExpMapped,
+        current_export_countries: survey_data.existing_markets || [],
+        target_countries: (survey_data.target_regions || []).map((r: string) => {
+          const regionToCountry: Record<string, string[]> = {
+            'north_america': ['US', 'CA'],
+            'europe': ['DE', 'FR', 'GB'],
+            'southeast_asia': ['VN', 'TH', 'SG'],
+            'middle_east': ['AE', 'SA'],
+            'east_asia': ['JP', 'CN'],
+            'others': []
+          };
+          return regionToCountry[r] || [];
+        }).flat(),
+        priority_objectives: ['long_term_market_entry'],
+        time_horizon: 'mid_term'
+      },
+      constraints: {
+        regulatory_sensitivity: 'Medium',
+        price_competitiveness: 'Medium',
+        certification_availability: (survey_data.certifications || []).length > 0 ? 'confirmed' : 'unknown',
+        production_capacity_constraint: 'Low'
+      },
+      materials: {
+        homepage_available: !!survey_data.company_website,
+        company_profile_pdf: !!survey_data.intro_file_url,
+        product_catalog_pdf: !!survey_data.catalog_file_url,
+        materials_notes: ''
+      },
+      analysis_brief: {
+        analysis_purpose: 'Export market suitability analysis',
+        focus_questions: [
+          '이 기업은 어떤 국가를 1차 타겟으로 삼아야 하는가?',
+          '이 기업의 제품은 가격·기술·브랜드 중 무엇으로 경쟁해야 하는가?'
+        ],
+        importance_weights: {
+          market_size: 'High',
+          regulation: 'Medium',
+          speed_to_market: 'High',
+          margin_potential: 'Medium'
+        }
+      },
+      context: {
+        user_country: 'KR',
+        language: 'auto'
+      }
+    };
 
     const userPrompt = `[BEGIN USER PAYLOAD]
 
-context:
-  language: "ko"
-  user_country: "KR"
-
-survey_id: ${survey_data.id || 'N/A'}
-company_website: ${survey_data.company_website || '(미입력)'}
-company_description: ${survey_data.company_description || '(미입력)'}
-year_founded: ${survey_data.year_founded || '(미입력)'}
-employee_count: ${survey_data.employee_count || '(미입력)'}
-core_strengths: ${survey_data.core_strengths || '(미입력)'}
-export_experience: ${exportExperience}
-existing_markets: ${existingMarkets}
-certifications: ${certifications}
-target_regions: ${targetRegions}
-catalog_file: ${survey_data.catalog_file_url || '(없음)'}
-intro_file: ${survey_data.intro_file_url || '(없음)'}
-
-Products:
-${productList}
+${JSON.stringify(userPayload, null, 2)}
 
 [END USER PAYLOAD]
 
+[추가 정보]
+core_strengths: ${survey_data.core_strengths || '(미입력)'}
+certifications: ${certifications}
+catalog_file: ${survey_data.catalog_file_url || '(없음)'}
+intro_file: ${survey_data.intro_file_url || '(없음)'}
+
 [INSTRUCTIONS]
 Developer Prompt의 규칙을 철저히 따라 수출 전략 리포트를 생성하세요.
-반드시 한국어로 작성하고, 각 섹션은 정확히 6개 단락을 포함해야 합니다.
+context.language가 "auto"이고 context.user_country가 "KR"이므로 한국어로 작성하세요.
 
 You must return a JSON object with two fields:
-1. "report_markdown": 전체 분석 리포트 (마크다운 형식, 8개 섹션, 각 섹션 6단락)
+1. "report_markdown": 전체 분석 리포트 (마크다운 형식, 8개 섹션)
 2. "summary_json": 내부용 요약 JSON 객체 (EP-05, EP-06 연동용)
 
 Return ONLY valid JSON - no text before or after the JSON.
 
 Example output format:
 {
-  "report_markdown": "## 1. 기업 개요 및 제품 포지셔닝\\n\\n...",
+  "report_markdown": "## 1. 기업 개요 및 제품 포지션\\n\\n...",
   "summary_json": {
     "company_profile": {...},
     "target_markets": [...],
